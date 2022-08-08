@@ -1,3 +1,4 @@
+from io import BytesIO
 import mimetypes
 import os
 from pathlib import Path
@@ -9,9 +10,7 @@ from googleapiclient import discovery
 from googleapiclient._apis.drive.v3.resources import (
     DriveResource,
     File,
-    FileHttpRequest,
 )
-from typing_extensions import reveal_type
 
 from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath
 
@@ -31,19 +30,19 @@ class Drive(APIBase):
         self.service: DriveResource = discovery.build(
             "drive", VERSION, credentials=self.creds
         )
-        self.service = cast(DriveResource, self.service)
         self.files = self.service.files()
 
-    def read(self, file_id: str) -> Tuple[File, bytes]:
+    def get(self, file_id: str) -> tuple[File, bytes]:
         metadata = self.files.get(fileId=file_id).execute()
         media = self.files.get_media(fileId=file_id).execute()
 
         return (metadata, media)
 
-    def read_file_from_url(self, url: str) -> Tuple[File, bytes]:
-        return self.read(file_id=self.get_id_from_url(url))
+    def get_file_from_url(self, url: str) -> tuple[File, bytes]:
+        return self.get(file_id=self.get_id_from_url(url))
 
-    def download(self, out_filepath: str, file_id: str, mime_type: str):
+    def download(self, out_filepath: str, file_id: str, mime_type: str) -> Path:
+        out_filepath = Path(out_filepath)
         request = self.files.export_media(fileId=file_id, mimeType=mime_type)
 
         with open(out_filepath, "wb") as out_file:
@@ -71,7 +70,7 @@ class Drive(APIBase):
     def update_from_url(self, url: str, filepath: FilePath) -> File:
         return self.update(filepath=filepath, file_id=self.get_id_from_url(url))
 
-    def list_files(self, query: str) -> Iterable[File]:
+    def list(self, query: str) -> Iterable[File]:
         page_token = None
         while True:
             response = self.files.list(q=query, pageToken=page_token).execute()
@@ -84,8 +83,22 @@ class Drive(APIBase):
             if page_token is None:
                 break
 
-    def list_files_in_folder(self, folder_id: str) -> Iterable[File]:
-        return self.list_files(query=f"'{folder_id}' in parents")
+    def list_children(self, parent_id: str) -> Iterable[File]:
+        return self.list(query=f"'{parent_id}' in parents")
+
+    def _upload_body_kwargs(
+        self,
+        google_mime_type: str,
+        kwargs: Optional[dict] = None,
+    ) -> dict:
+        if kwargs is None:
+            kwargs = {}
+
+        kwargs["body"] = {
+            "mimeType": self.create_google_mime_type(google_mime_type),
+            **kwargs.get("body", {}),
+        }
+        return kwargs
 
     def create_drive_file_object(
         self,
@@ -93,17 +106,13 @@ class Drive(APIBase):
         google_mime_type: str,
         kwargs: Optional[dict] = None,
     ) -> File:
-        if kwargs is None:
-            kwargs = {}
-
-        kwargs["body"] = {
-            "name": filepath,
-            "mimeType": APIBase.create_google_mime_type(google_mime_type),
-            **kwargs.get("body", {}),
-        }
+        kwargs = self._upload_body_kwargs(
+            google_mime_type=google_mime_type, kwargs=kwargs
+        )
+        kwargs["body"]["name"] = filepath
         return self.files.create(**kwargs).execute()
 
-    def upload_file_object(
+    def upload_file(
         self,
         filepath: FilePath,
         google_mime_type: str,
@@ -112,14 +121,10 @@ class Drive(APIBase):
     ) -> File:
         filepath = Path(filepath)
 
-        if kwargs is None:
-            kwargs = {}
-
-        kwargs["body"] = {
-            "name": str(filepath),
-            "mimeType": APIBase.create_google_mime_type(google_mime_type),
-            **kwargs.get("body", {}),
-        }
+        kwargs = self._upload_body_kwargs(
+            google_mime_type=google_mime_type, kwargs=kwargs
+        )
+        kwargs["body"]["name"] = filepath
 
         if google_mime_type == "folder":
             dirs = str(os.path.normpath(filepath)).split(os.sep)
@@ -131,7 +136,7 @@ class Drive(APIBase):
                     if parent_id != "":
                         kwargs["body"]["parents"] = [parent_id]
 
-                    parent_req = self.upload_file_object(
+                    parent_req = self.upload_file(
                         dirname, google_mime_type, mime_type, kwargs
                     )
                     parent_id = parent_req.get("id", "")
@@ -141,7 +146,6 @@ class Drive(APIBase):
 
         else:
             # Else, we need to upload the file via a MediaFileUpload POST.
-            kwargs["body"]["name"] = filepath.name
             mime_type = (
                 mimetypes.guess_type(filepath)[0] if mime_type is None else mime_type
             )
@@ -151,12 +155,32 @@ class Drive(APIBase):
             kwargs["media_body"] = media
         return self.files.create(**kwargs).execute()
 
+    def upload(
+        self,
+        data: bytes,
+        filename: str,
+        google_mime_type: str,
+        mime_type: Optional[str] = None,
+        kwargs: Optional[dict] = None,
+    ) -> File:
+        kwargs = self._upload_body_kwargs(
+            google_mime_type=google_mime_type, kwargs=kwargs
+        )
+        kwargs["body"]["name"] = filename
+
+        with BytesIO(data) as tio:
+            media = googleapiclient.http.MediaIoBaseUpload(
+                tio, mimetype=mime_type, resumable=True
+            )
+            kwargs["media_body"] = media
+            return self.files.create(**kwargs).execute()
+
     def create_folders_if_not_exists(
         self,
         folder_names: List[str],
         parent_id: str,
     ) -> Dict[str, File]:
-        folder_dict = {i["name"]: i for i in self.list_files_in_folder(parent_id)}
+        folder_dict = {i["name"]: i for i in self.list_children(parent_id)}
 
         for name in folder_names:
             folder = folder_dict.get(name)
@@ -173,4 +197,3 @@ class Drive(APIBase):
 
 if __name__ == "__main__":
     pass
-
