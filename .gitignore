@@ -1,0 +1,14 @@
+.DS_Store
+
+.vscode/
+vendor/
+.mypy_cache/
+.env
+bootstrap/
+storage/
+auth/
+
+data/
+__pycache__/
+log/
+_*
