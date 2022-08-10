@@ -1,16 +1,22 @@
+from __future__ import annotations
+
 from io import BytesIO
 import mimetypes
 import os
 from pathlib import Path
 from typing import *
 
+
 import googleapiclient
 import googleapiclient.http
 from googleapiclient import discovery
-from googleapiclient._apis.drive.v3.resources import (
-    DriveResource,
-    File,
-)
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import (
+        DriveResource,
+        File,
+    )
+
 
 from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath
 
@@ -41,7 +47,7 @@ class Drive(APIBase):
     def get_file_from_url(self, url: str) -> tuple[File, bytes]:
         return self.get(file_id=self.get_id_from_url(url))
 
-    def download(self, out_filepath: str, file_id: str, mime_type: str) -> Path:
+    def download(self, out_filepath: FilePath, file_id: str, mime_type: str) -> Path:
         out_filepath = Path(out_filepath)
         request = self.files.export_media(fileId=file_id, mimeType=mime_type)
 
@@ -50,6 +56,8 @@ class Drive(APIBase):
             done = False
             while done is False:
                 status, done = downloader.next_chunk()
+
+        return out_filepath
 
     def copy(
         self,
@@ -124,7 +132,7 @@ class Drive(APIBase):
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = filepath
+        kwargs["body"]["name"] = str(filepath)
 
         if google_mime_type == "folder":
             dirs = str(os.path.normpath(filepath)).split(os.sep)
@@ -186,8 +194,8 @@ class Drive(APIBase):
             folder = folder_dict.get(name)
             if folder is None:
                 folder = self.create_drive_file_object(
-                    name,
-                    "folder",
+                    filepath=name,
+                    google_mime_type="folder",
                     kwargs={"body": {"parents": [parent_id]}},
                 )
                 folder_dict[name] = folder
@@ -196,4 +204,23 @@ class Drive(APIBase):
 
 
 if __name__ == "__main__":
-    pass
+    name = Path("friday-institute-reports")
+    dir = Path("auth")
+
+    token_path = dir.joinpath(name.with_suffix(".token.pickle"))
+    creds_path = dir.joinpath(name.with_suffix(".credentials.json"))
+
+    drive = Drive(token_path=token_path, creds_path=creds_path, is_service_account=True)
+
+    id = drive.get_id_from_url(
+        "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"
+    )
+    # id = drive.get_id_from_url(
+    #     "https://docs.google.com/spreadsheets/d/1jrYwFsMrV2E6Ev6ZOUYo-5j2rXPfNpiB8VB_rgl3SmM/edit?usp=sharing"
+    # )
+
+    files = drive.list_children(parent_id=id)
+    for file in files:
+        print(file)
+
+    print(drive)

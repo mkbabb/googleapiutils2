@@ -119,5 +119,25 @@ class APIBase:
         return f"application/vnd.google-apps.{google_mime_type}"
 
     @staticmethod
-    def get_id_from_url(url: str) -> str:
-        return url_components(url)["id"][0]
+    def get_id_from_url(url: str) -> Optional[str]:
+
+        url_obj = urllib.parse.urlparse(url)
+        path = url_obj.path
+        paths = path.split("/")
+
+        get_adjacent = (
+            lambda x: paths[t_ix]
+            if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
+            else None
+        )
+
+        id = get_adjacent("folders") or get_adjacent("d")
+
+        if id is not None:
+            return id
+        else:
+            comps = url_components(url)
+            if (ids := comps.get("id")) is not None:
+                return ids[0]
+            else:
+                return None
