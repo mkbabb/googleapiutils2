@@ -10,6 +10,7 @@ from typing import *
 import googleapiclient
 import googleapiclient.http
 from googleapiclient import discovery
+from .utils import GoogleCredentials, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -18,24 +19,24 @@ if TYPE_CHECKING:
     )
 
 
-from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath, GoogleMimeTypes
+from utils import (
+    CREDS_PATH,
+    SCOPES,
+    TOKEN_PATH,
+    FilePath,
+    GoogleMimeTypes,
+    get_id_from_url,
+)
 
 
 VERSION = "v3"
 
 
-class Drive(APIBase):
-    def __init__(
-        self,
-        token_path: FilePath = TOKEN_PATH,
-        creds_path: FilePath = CREDS_PATH,
-        is_service_account: bool = False,
-        scopes: List[str] = SCOPES,
-    ):
-        super().__init__(token_path, creds_path, is_service_account, scopes)
-
+class Drive:
+    def __init__(self, google_creds: GoogleCredentials):
+        self.google_creds = google_creds
         self.service: DriveResource = discovery.build(
-            "drive", VERSION, credentials=self.creds
+            "drive", VERSION, credentials=self.google_creds.creds
         )
         self.files = self.service.files()
 
@@ -44,9 +45,6 @@ class Drive(APIBase):
         media = self.files.get_media(fileId=file_id).execute()
 
         return (metadata, media)
-
-    def get_file_from_url(self, url: str) -> tuple[File, bytes]:
-        return self.get(file_id=self.get_id_from_url(url))
 
     def download(self, out_filepath: FilePath, file_id: str, mime_type: str) -> Path:
         out_filepath = Path(out_filepath)
@@ -73,11 +71,9 @@ class Drive(APIBase):
             return None
 
     def update(self, file_id: str, filepath: FilePath) -> File:
+        file_id = parse_file_id(file_id)
         filepath = Path(filepath)
         return self.files.update(fileId=file_id, media_body=filepath).execute()
-
-    def update_from_url(self, url: str, filepath: FilePath) -> File:
-        return self.update(filepath=filepath, file_id=self.get_id_from_url(url))
 
     def list(self, query: str) -> Iterable[File]:
         page_token = None
@@ -203,14 +199,14 @@ class Drive(APIBase):
 
         return folder_dict
 
-
-class Permission(APIBase):
-    def create(
+    def permissions_create(
         self,
         file_id: str,
         email_address: str,
         permission: Optional[dict] = None,
     ):
+        file_id = parse_file_id(file_id)
+
         user_permission = {
             "type": "user",
             "role": "reader",
@@ -237,7 +233,11 @@ if __name__ == "__main__":
     token_path = dir.joinpath(name.with_suffix(".token.pickle"))
     creds_path = dir.joinpath(name.with_suffix(".credentials.json"))
 
-    drive = Drive(token_path=token_path, creds_path=creds_path, is_service_account=True)
+    google_creds = GoogleCredentials(
+        token_path=token_path, creds_path=creds_path, is_service_account=True
+    )
+
+    drive = Drive(google_creds=google_creds)
 
     id = drive.get_id_from_url(
         "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"

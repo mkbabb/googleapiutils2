@@ -82,7 +82,7 @@ TOKEN_PATH = "auth/token.pickle"
 CREDS_PATH = "auth/credentials.json"
 
 
-class APIBase:
+class GoogleCredentials:
     def __init__(
         self,
         token_path: FilePath = TOKEN_PATH,
@@ -95,7 +95,7 @@ class APIBase:
         self.is_service_account = is_service_account
         self.scopes = scopes
 
-        self.creds = APIBase.get_oauth2_creds(
+        self.creds = self.get_oauth2_creds(
             token_path=self.token_path,
             creds_path=self.creds_path,
             is_service_account=self.is_service_account,
@@ -139,30 +139,36 @@ class APIBase:
 
             return None
 
-    @staticmethod
-    def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
-        return f"application/vnd.google-apps.{google_mime_type}"
 
-    @staticmethod
-    def get_id_from_url(url: str) -> Optional[str]:
+def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
+    return f"application/vnd.google-apps.{google_mime_type}"
 
-        url_obj = urllib.parse.urlparse(url)
-        path = url_obj.path
-        paths = path.split("/")
 
-        get_adjacent = (
-            lambda x: paths[t_ix]
-            if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
-            else None
-        )
+def get_id_from_url(url: str) -> Optional[str]:
+    url_obj = urllib.parse.urlparse(url)
+    path = url_obj.path
+    paths = path.split("/")
 
-        id = get_adjacent("folders") or get_adjacent("d")
+    get_adjacent = (
+        lambda x: paths[t_ix]
+        if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
+        else None
+    )
 
-        if id is not None:
-            return id
+    id = get_adjacent("folders") or get_adjacent("d")
+
+    if id is not None:
+        return id
+    else:
+        comps = url_components(url)
+        if (ids := comps.get("id")) is not None:
+            return ids[0]
         else:
-            comps = url_components(url)
-            if (ids := comps.get("id")) is not None:
-                return ids[0]
-            else:
-                return None
+            return None
+
+
+def parse_file_id(file_id: str) -> Optional[str]:
+    if file_id.find("http") != -1:
+        return get_id_from_url(file_id)
+    else:
+        return file_id
