@@ -12,6 +12,27 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 FilePath = str | Path
 
+GoogleMimeTypes = Literal[
+    "audio",
+    "document",
+    "drive-sdk",
+    "drawing",
+    "file",
+    "folder",
+    "form",
+    "fusiontable",
+    "jam",
+    "map",
+    "photo",
+    "presentation",
+    "script",
+    "shortcut",
+    "site",
+    "spreadsheet",
+    "unknown",
+    "video",
+]
+
 
 def url_components(url: str) -> Dict[str, List[str]]:
     return urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
@@ -45,10 +66,14 @@ SCOPES = [
 
 
 MIME_TYPES = {
-    "Documents": {"Plain text": "text/plain"},
-    "Spreadsheets": {
-        "MS Excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "CSV (first sheet only)": "text/csv",
+    "docs": {"text": "text/plain"},
+    "sheets": {
+        "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv": "text/csv",
+        "pdf": "application/pdf",
+        "tsv": "text/tab-separated-values",
+        "zip": "application/zip",
+        "sheets": "application/vnd.google-apps.spreadsheet",
     },
 }
 
@@ -115,7 +140,7 @@ class APIBase:
             return None
 
     @staticmethod
-    def create_google_mime_type(google_mime_type: str) -> str:
+    def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
         return f"application/vnd.google-apps.{google_mime_type}"
 
     @staticmethod

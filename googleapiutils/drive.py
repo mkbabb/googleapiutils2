@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     )
 
 
-from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath
+from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath, GoogleMimeTypes
+
 
 VERSION = "v3"
 
@@ -96,7 +97,7 @@ class Drive(APIBase):
 
     def _upload_body_kwargs(
         self,
-        google_mime_type: str,
+        google_mime_type: GoogleMimeTypes,
         kwargs: Optional[dict] = None,
     ) -> dict:
         if kwargs is None:
@@ -111,7 +112,7 @@ class Drive(APIBase):
     def create_drive_file_object(
         self,
         filepath: str,
-        google_mime_type: str,
+        google_mime_type: GoogleMimeTypes,
         kwargs: Optional[dict] = None,
     ) -> File:
         kwargs = self._upload_body_kwargs(
@@ -123,7 +124,7 @@ class Drive(APIBase):
     def upload_file(
         self,
         filepath: FilePath,
-        google_mime_type: str,
+        google_mime_type: GoogleMimeTypes,
         mime_type: Optional[str] = None,
         kwargs: Optional[dict] = None,
     ) -> File:
@@ -167,7 +168,7 @@ class Drive(APIBase):
         self,
         data: bytes,
         filename: str,
-        google_mime_type: str,
+        google_mime_type: GoogleMimeTypes,
         mime_type: Optional[str] = None,
         kwargs: Optional[dict] = None,
     ) -> File:
@@ -203,6 +204,32 @@ class Drive(APIBase):
         return folder_dict
 
 
+class Permission(APIBase):
+    def create(
+        self,
+        file_id: str,
+        email_address: str,
+        permission: Optional[dict] = None,
+    ):
+        user_permission = {
+            "type": "user",
+            "role": "reader",
+            "emailAddress": email_address,
+        }
+        if permission is not None:
+            user_permission.update(permission)
+
+        return (
+            self.service.permissions()
+            .create(
+                fileId=file_id,
+                body=user_permission,
+                fields="id",
+            )
+            .execute()
+        )
+
+
 if __name__ == "__main__":
     name = Path("friday-institute-reports")
     dir = Path("auth")
@@ -222,5 +249,7 @@ if __name__ == "__main__":
     files = drive.list_children(parent_id=id)
     for file in files:
         print(file)
+
+    # drive.upload(b"", "ff";;)
 
     print(drive)
