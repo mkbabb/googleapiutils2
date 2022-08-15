@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from io import BytesIO
 import mimetypes
 import os
+from io import BytesIO
 from pathlib import Path
 from typing import *
-
 
 import googleapiclient
 import googleapiclient.http
 from googleapiclient import discovery
-from .utils import GoogleCredentials, parse_file_id
+
+from utils import GoogleCredentials, create_google_mime_type, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -18,16 +18,7 @@ if TYPE_CHECKING:
         File,
     )
 
-
-from utils import (
-    CREDS_PATH,
-    SCOPES,
-    TOKEN_PATH,
-    FilePath,
-    GoogleMimeTypes,
-    get_id_from_url,
-)
-
+from utils import FilePath, GoogleMimeTypes, create_google_mime_type
 
 VERSION = "v3"
 
@@ -64,6 +55,9 @@ class Drive:
         filename: Optional[str],
         folder_id: Optional[str],
     ) -> Optional[File]:
+        file_id = parse_file_id(file_id)
+        folder_id = parse_file_id(folder_id)
+
         body = {"name": filename, "parents": [folder_id]}
         try:
             return self.files.copy(fileId=file_id, body=body).execute()
@@ -89,6 +83,7 @@ class Drive:
                 break
 
     def list_children(self, parent_id: str) -> Iterable[File]:
+        parent_id = parse_file_id(parent_id)
         return self.list(query=f"'{parent_id}' in parents")
 
     def _upload_body_kwargs(
@@ -100,7 +95,7 @@ class Drive:
             kwargs = {}
 
         kwargs["body"] = {
-            "mimeType": self.create_google_mime_type(google_mime_type),
+            "mimeType": create_google_mime_type(google_mime_type),
             **kwargs.get("body", {}),
         }
         return kwargs
@@ -185,6 +180,8 @@ class Drive:
         folder_names: List[str],
         parent_id: str,
     ) -> Dict[str, File]:
+
+        parent_id = parse_file_id(parent_id)
         folder_dict = {i["name"]: i for i in self.list_children(parent_id)}
 
         for name in folder_names:
@@ -239,17 +236,17 @@ if __name__ == "__main__":
 
     drive = Drive(google_creds=google_creds)
 
-    id = drive.get_id_from_url(
-        "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"
-    )
+    # id = drive(
+    #     "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"
+    # )
     # id = drive.get_id_from_url(
     #     "https://docs.google.com/spreadsheets/d/1jrYwFsMrV2E6Ev6ZOUYo-5j2rXPfNpiB8VB_rgl3SmM/edit?usp=sharing"
     # )
 
-    files = drive.list_children(parent_id=id)
+    swain_url = (
+        "https://drive.google.com/drive/u/0/folders/1N5kVZ5vJtaOcAZg0jsdYXvu5EUtFjlYc"
+    )
+
+    files = drive.list_children(parent_id=swain_url)
     for file in files:
         print(file)
-
-    # drive.upload(b"", "ff";;)
-
-    print(drive)

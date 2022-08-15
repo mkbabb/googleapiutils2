@@ -167,8 +167,24 @@ def get_id_from_url(url: str) -> Optional[str]:
             return None
 
 
-def parse_file_id(file_id: str) -> Optional[str]:
-    if file_id.find("http") != -1:
-        return get_id_from_url(file_id)
-    else:
-        return file_id
+def _parse_file_id() -> Callable[..., Optional[str]]:
+    parsed: dict[str, Optional[str]] = {}
+
+    def inner(file_id: str) -> Optional[str]:
+        def get() -> Optional[str]:
+            if file_id in parsed:
+                return parsed[file_id]
+
+            if file_id.find("http") != -1:
+                return get_id_from_url(file_id)
+            else:
+                return file_id
+
+        t_id = get()
+        parsed[file_id] = t_id
+        return t_id
+
+    return inner
+
+
+parse_file_id = _parse_file_id()
