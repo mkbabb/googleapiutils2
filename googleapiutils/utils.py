@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import pickle
 import urllib.parse
@@ -162,4 +164,4 @@ def _parse_file_id() -> Callable[..., Optional[str]]:
     return inner
 
 
-parse_file_id = _parse_file_id()
+parse_file_id: Callable[[str], Optional[str]] = _parse_file_id()

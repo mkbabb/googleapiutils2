@@ -225,10 +225,10 @@ if __name__ == "__main__":
     dir = Path("auth")
 
     token_path = dir.joinpath(name.with_suffix(".token.pickle"))
-    CONFIG_PATH = dir.joinpath(name.with_suffix(".credentials.json"))
+    config_path = dir.joinpath(name.with_suffix(".credentials.json"))
 
     creds = get_oauth2_creds(
-        token_path=token_path, client_config=CONFIG_PATH, is_service_account=True
+        token_path=token_path, client_config=config_path, is_service_account=True
     )
 
     drive = Drive(creds=creds)
