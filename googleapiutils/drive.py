@@ -8,26 +8,23 @@ from typing import *
 
 import googleapiclient
 import googleapiclient.http
+from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from utils import GoogleCredentials, create_google_mime_type, parse_file_id
+from utils import create_google_mime_type, get_oauth2_creds, parse_file_id
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import (
-        DriveResource,
-        File,
-    )
+    from googleapiclient._apis.drive.v3.resources import DriveResource, File
 
-from utils import FilePath, GoogleMimeTypes, create_google_mime_type
 
 VERSION = "v3"
 
 
 class Drive:
-    def __init__(self, google_creds: GoogleCredentials):
-        self.google_creds = google_creds
+    def __init__(self, creds: Credentials):
+        self.creds = creds
         self.service: DriveResource = discovery.build(
-            "drive", VERSION, credentials=self.google_creds.creds
+            "drive", VERSION, credentials=self.creds
         )
         self.files = self.service.files()
 
@@ -228,13 +225,13 @@ if __name__ == "__main__":
     dir = Path("auth")
 
     token_path = dir.joinpath(name.with_suffix(".token.pickle"))
-    creds_path = dir.joinpath(name.with_suffix(".credentials.json"))
+    CONFIG_PATH = dir.joinpath(name.with_suffix(".credentials.json"))
 
-    google_creds = GoogleCredentials(
-        token_path=token_path, creds_path=creds_path, is_service_account=True
+    creds = get_oauth2_creds(
+        token_path=token_path, client_config=CONFIG_PATH, is_service_account=True
     )
 
-    drive = Drive(google_creds=google_creds)
+    drive = Drive(creds=creds)
 
     # id = drive(
     #     "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"

@@ -11,6 +11,7 @@ google-auth-httplib2 = "^0.1.0"
 google-auth-oauthlib = "^0.5.1"
 google-api-python-client = "^2.47.0"
 google-api-python-client-stubs = "^1.11.0"
+pandas = "^1.4.3"
 
 [tool.poetry.dev-dependencies]
 black = "^22.6.0"

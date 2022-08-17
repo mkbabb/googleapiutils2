@@ -1,7 +1,15 @@
 from __future__ import annotations
+
+import string
+from enum import Enum, auto
+from pathlib import Path
 from typing import *
 
+import pandas as pd
+from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
+
+from utils import FilePath, get_oauth2_creds, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -10,15 +18,7 @@ if TYPE_CHECKING:
         ValueRange,
     )
 
-
-import string
-from enum import Enum, auto
-
-from utils import CREDS_PATH, SCOPES, TOKEN_PATH, APIBase, FilePath
-
 VERSION = "v4"
-
-from pathlib import Path
 
 
 class ValueInputOption(Enum):
@@ -26,32 +26,38 @@ class ValueInputOption(Enum):
     USER_ENTERED = auto()
 
 
-class Sheets(APIBase):
-    def __init__(
-        self,
-        token_path: FilePath = TOKEN_PATH,
-        creds_path: FilePath = CREDS_PATH,
-        is_service_account: bool = False,
-        scopes: List[str] = SCOPES,
-    ):
-        super().__init__(token_path, creds_path, is_service_account, scopes)
-
+class Sheets:
+    def __init__(self, creds: Credentials):
+        self.creds = creds
         self.service: SheetsResource = discovery.build(
             "sheets", VERSION, credentials=self.creds
         )
         self.sheets = self.service.spreadsheets()
 
-        self.sheets.create()
-
     @staticmethod
-    def number_to_A1(row: int, col: int, sheet_name: Optional[str] = None):
-        letter = ""
+    def number_to_A1(row: int, col: int, sheet_name: Optional[str] = None) -> str:
+        t_col = "".join(
+            map(
+                lambda x: string.ascii_letters[x - 1],
+                to_base(col, base=26),
+            )
+        )
+        key = f"{t_col}{row}"
+
+        if sheet_name is not None:
+            return f"'{sheet_name}'!{key}"
+        else:
+            return key
+
+    def create(self):
+        self.sheets.create()
 
     def get(
         self,
         spreadsheet_id: str,
         range_name: str,
     ) -> ValueRange:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
         return (
             self.sheets.values()
             .get(spreadsheetId=spreadsheet_id, range=range_name)
@@ -65,6 +71,7 @@ class Sheets(APIBase):
         values: list[list[Any]],
         value_input_option: Optional[ValueInputOption] = ValueInputOption.USER_ENTERED,
     ) -> UpdateValuesResponse:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
         body = {"values": values}
 
         return (
@@ -83,19 +90,22 @@ class Sheets(APIBase):
         spreadsheet_id: str,
         range_name: str,
     ):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
         return self.sheets.values().clear(
             spreadsheetId=spreadsheet_id, range=range_name
         )
 
 
-def to_base(x: str | int, base: int, from_base: int = 10):
+def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
     if isinstance(x, str):
         x = int(x, base=from_base)
 
     y = []
-    while x > 1:
-        y.append(str(x := x % base))
-    return "".join(reversed(y))
+    while x != 0:
+        y.append(x % base)
+        x //= base
+
+    return y[::-1]
 
 
 if __name__ == "__main__":
@@ -103,15 +113,17 @@ if __name__ == "__main__":
     dir = Path("auth")
 
     token_path = dir.joinpath(name.with_suffix(".token.pickle"))
-    creds_path = dir.joinpath(name.with_suffix(".credentials.json"))
+    CONFIG_PATH = dir.joinpath(name.with_suffix(".credentials.json"))
 
-    sheets = Sheets(
-        token_path=token_path, creds_path=creds_path, is_service_account=True
+    google_creds = get_oauth2_creds(
+        token_path=token_path, client_config=CONFIG_PATH, is_service_account=True
     )
 
-    id = sheets.get_id_from_url(
-        "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"
-    )
+    sheets = Sheets(google_creds)
 
-    t = to_base(123, 26)
-    print(t)
+    url = "https://docs.google.com/spreadsheets/d/11hX5E0V-OwRI9wBvVRIh98mlBlN_NwVivaXhk0NTKlI/edit#gid=150061767"
+
+    t = sheets.get(url, "Config")
+    df = pd.DataFrame(t["values"])
+    df = df.rename(columns=df.iloc[0]).drop(df.index[0])
+    print(df)

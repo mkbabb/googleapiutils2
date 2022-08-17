@@ -10,8 +10,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 
-FilePath = str | Path
-
 GoogleMimeTypes = Literal[
     "audio",
     "document",
@@ -79,65 +77,42 @@ MIME_TYPES = {
 
 
 TOKEN_PATH = "auth/token.pickle"
-CREDS_PATH = "auth/credentials.json"
+CONFIG_PATH = "auth/credentials.json"
+
+FilePath = str | Path
 
 
-class GoogleCredentials:
-    def __init__(
-        self,
-        token_path: FilePath = TOKEN_PATH,
-        creds_path: FilePath = CREDS_PATH,
-        is_service_account: bool = False,
-        scopes: List[str] = SCOPES,
-    ):
-        self.token_path = token_path
-        self.creds_path = creds_path
-        self.is_service_account = is_service_account
-        self.scopes = scopes
+def get_oauth2_creds(
+    token_path: FilePath = TOKEN_PATH,
+    client_config: FilePath | dict = CONFIG_PATH,
+    is_service_account: bool = False,
+    scopes: List[str] = SCOPES,
+) -> Optional[Credentials]:
+    token_path = Path(token_path)
 
-        self.creds = self.get_oauth2_creds(
-            token_path=self.token_path,
-            creds_path=self.creds_path,
-            is_service_account=self.is_service_account,
-            scopes=self.scopes,
+    if not isinstance(client_config, dict):
+        path = Path(client_config)
+        client_config = json.loads(path.read_bytes())
+
+    if not is_service_account:
+        creds: Credentials = None
+
+        if token_path.exists():
+            creds = pickle.loads(token_path.read_bytes())
+
+        if creds is not None and not creds.valid:
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+
+        elif creds is None:
+            flow = InstalledAppFlow.from_client_config(client_config, scopes)
+            creds = flow.run_local_server(port=0)
+            token_path.write_bytes(pickle.dumps(creds))
+        return creds
+    else:
+        return service_account.Credentials.from_service_account_info(
+            client_config, scopes=scopes
         )
-
-    @staticmethod
-    def get_oauth2_creds(
-        token_path: FilePath = TOKEN_PATH,
-        creds_path: FilePath = CREDS_PATH,
-        is_service_account: bool = False,
-        scopes: List[str] = SCOPES,
-    ) -> Optional[Credentials]:
-
-        token_path = Path(token_path)
-        creds_path = Path(creds_path)
-
-        if not is_service_account:
-            creds: Credentials = None
-
-            if token_path.exists():
-                creds = pickle.loads(token_path.read_bytes())
-
-            if creds is not None and not creds.valid:
-                if creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-
-            elif creds is None:
-                flow = InstalledAppFlow.from_client_secrets_file(creds_path, scopes)
-                creds = flow.run_local_server(port=0)
-
-                token_path.write_bytes(pickle.dumps(creds))
-            return creds
-        else:
-            if creds_path.exists():
-                service_account_info = json.loads(creds_path.read_text())
-
-                return service_account.Credentials.from_service_account_info(
-                    service_account_info, scopes=scopes
-                )
-
-            return None
 
 
 def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
