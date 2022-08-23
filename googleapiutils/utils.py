@@ -11,7 +11,6 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-
 GoogleMimeTypes = Literal[
     "audio",
     "document",
@@ -165,3 +164,15 @@ def _parse_file_id() -> Callable[..., Optional[str]]:
 
 
 parse_file_id: Callable[[str], Optional[str]] = _parse_file_id()
+
+
+def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
+    if isinstance(x, str):
+        x = int(x, base=from_base)
+
+    y = []
+    while x != 0:
+        y.append(x % base)
+        x //= base
+
+    return y[::-1]

@@ -9,7 +9,7 @@ import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from utils import get_oauth2_creds, parse_file_id
+from .utils import get_oauth2_creds, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -50,7 +50,7 @@ class Sheets:
             return key
 
     def create(self):
-        self.sheets.create()
+        return self.sheets.create()
 
     def get(
         self,

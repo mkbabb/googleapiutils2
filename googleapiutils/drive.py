@@ -11,7 +11,8 @@ import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from utils import create_google_mime_type, get_oauth2_creds, parse_file_id
+from .utils import (FilePath, GoogleMimeTypes, create_google_mime_type,
+                    get_oauth2_creds, parse_file_id)
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import DriveResource, File
