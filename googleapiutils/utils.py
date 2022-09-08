@@ -120,7 +120,7 @@ def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
     return f"application/vnd.google-apps.{google_mime_type}"
 
 
-def get_id_from_url(url: str) -> Optional[str]:
+def get_id_from_url(url: str) -> str:
     url_obj = urllib.parse.urlparse(url)
     path = url_obj.path
     paths = path.split("/")
@@ -140,14 +140,14 @@ def get_id_from_url(url: str) -> Optional[str]:
         if (ids := comps.get("id")) is not None:
             return ids[0]
         else:
-            return None
+            raise ValueError(f"Could not parse file URL of {url}")
 
 
-def _parse_file_id() -> Callable[..., Optional[str]]:
-    parsed: dict[str, Optional[str]] = {}
+def _parse_file_id() -> Callable[..., str]:
+    parsed: dict[str, str] = {}
 
-    def inner(file_id: str) -> Optional[str]:
-        def get() -> Optional[str]:
+    def inner(file_id: str) -> str:
+        def get() -> str:
             if file_id in parsed:
                 return parsed[file_id]
 
@@ -163,7 +163,7 @@ def _parse_file_id() -> Callable[..., Optional[str]]:
     return inner
 
 
-parse_file_id: Callable[[str], Optional[str]] = _parse_file_id()
+parse_file_id: Callable[[str], str] = _parse_file_id()
 
 
 def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:

@@ -11,8 +11,13 @@ import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from .utils import (FilePath, GoogleMimeTypes, create_google_mime_type,
-                    get_oauth2_creds, parse_file_id)
+from .utils import (
+    FilePath,
+    GoogleMimeTypes,
+    create_google_mime_type,
+    get_oauth2_creds,
+    parse_file_id,
+)
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import DriveResource, File
@@ -50,8 +55,8 @@ class Drive:
     def copy(
         self,
         file_id: str,
-        filename: Optional[str],
-        folder_id: Optional[str],
+        filename: str,
+        folder_id: str,
     ) -> Optional[File]:
         file_id = parse_file_id(file_id)
         folder_id = parse_file_id(folder_id)

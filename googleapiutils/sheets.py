@@ -21,9 +21,7 @@ if TYPE_CHECKING:
 VERSION = "v4"
 
 
-class ValueInputOption(Enum):
-    RAW = auto()
-    USER_ENTERED = auto()
+ValueInputOption = Literal["INPUT_VALUE_OPTION_UNSPECIFIED", "RAW", "USER_ENTERED"]
 
 
 class Sheets:
@@ -69,7 +67,7 @@ class Sheets:
         spreadsheet_id: str,
         range_name: str,
         values: list[list[Any]],
-        value_input_option: Optional[ValueInputOption] = ValueInputOption.USER_ENTERED,
+        value_input_option: ValueInputOption = "USER_ENTERED",
     ) -> UpdateValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         body = {"values": values}
@@ -80,7 +78,7 @@ class Sheets:
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 body=body,
-                valueInputOption=str(value_input_option),
+                valueInputOption=value_input_option,
             )
             .execute()
         )
