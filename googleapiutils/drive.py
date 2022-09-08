@@ -159,10 +159,12 @@ class Drive:
         else:
             # Else, we need to upload the file via a MediaFileUpload POST.
             mime_type = (
-                mimetypes.guess_type(filepath)[0] if mime_type is None else mime_type
+                mimetypes.guess_type(str(filepath))[0]
+                if mime_type is None
+                else mime_type
             )
             media = googleapiclient.http.MediaFileUpload(
-                filepath, mimetype=mime_type, resumable=True
+                str(filepath), mimetype=mime_type, resumable=True
             )
             kwargs["media_body"] = media
         return self.files.create(**kwargs).execute()
