@@ -4,7 +4,7 @@ from typing import *
 
 import requests
 
-from .types.geocode import *
+from ._types.geocode import *
 from .utils import update_url_params
 
 if TYPE_CHECKING:

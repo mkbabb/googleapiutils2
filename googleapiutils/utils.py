@@ -11,6 +11,8 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+from functools import cache
+
 GoogleMimeTypes = Literal[
     "audio",
     "document",
@@ -143,27 +145,12 @@ def get_id_from_url(url: str) -> str:
             raise ValueError(f"Could not parse file URL of {url}")
 
 
-def _parse_file_id() -> Callable[..., str]:
-    parsed: dict[str, str] = {}
-
-    def inner(file_id: str) -> str:
-        def get() -> str:
-            if file_id in parsed:
-                return parsed[file_id]
-
-            if file_id.find("http") != -1:
-                return get_id_from_url(file_id)
-            else:
-                return file_id
-
-        t_id = get()
-        parsed[file_id] = t_id
-        return t_id
-
-    return inner
-
-
-parse_file_id: Callable[[str], str] = _parse_file_id()
+@cache
+def parse_file_id(file_id: str) -> str:
+    if file_id.find("http") != -1:
+        return get_id_from_url(file_id)
+    else:
+        return file_id
 
 
 def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
