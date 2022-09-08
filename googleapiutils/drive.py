@@ -4,6 +4,7 @@ import mimetypes
 import os
 from io import BytesIO
 from pathlib import Path
+import pathlib
 from typing import *
 
 import googleapiclient
@@ -11,13 +12,7 @@ import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from .utils import (
-    FilePath,
-    GoogleMimeTypes,
-    create_google_mime_type,
-    get_oauth2_creds,
-    parse_file_id,
-)
+from .utils import FilePath, GoogleMimeTypes, create_google_mime_type, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import DriveResource, File, Permission
@@ -60,13 +55,13 @@ class Drive:
     def copy(
         self,
         file_id: str,
-        filename: FilePath,
+        filename: str,
         folder_id: str,
     ) -> Optional[File]:
         file_id = parse_file_id(file_id)
         folder_id = parse_file_id(folder_id)
 
-        body = {"name": str(filename), "parents": [folder_id]}
+        body = {"name": filename, "parents": [folder_id]}
 
         try:
             return self.files.copy(fileId=file_id, body=body).execute()
@@ -118,10 +113,11 @@ class Drive:
         google_mime_type: GoogleMimeTypes,
         kwargs: Optional[dict] = None,
     ) -> File:
+        filepath = Path(filepath)
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = str(filepath)
+        kwargs["body"]["name"] = filepath.name
         return self.files.create(**kwargs).execute()
 
     def upload_file(
@@ -136,7 +132,7 @@ class Drive:
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = str(filepath)
+        kwargs["body"]["name"] = filepath.name
 
         if google_mime_type == "folder":
             dirs = str(os.path.normpath(filepath)).split(os.sep)
@@ -169,10 +165,10 @@ class Drive:
             kwargs["media_body"] = media
         return self.files.create(**kwargs).execute()
 
-    def upload(
+    def upload_data(
         self,
         data: bytes,
-        filename: FilePath,
+        filename: str,
         google_mime_type: GoogleMimeTypes,
         mime_type: Optional[str] = None,
         kwargs: Optional[dict] = None,
@@ -180,7 +176,7 @@ class Drive:
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = str(filename)
+        kwargs["body"]["name"] = filename
 
         with BytesIO(data) as tio:
             media = googleapiclient.http.MediaIoBaseUpload(
@@ -191,7 +187,7 @@ class Drive:
 
     def create_folders_if_not_exists(
         self,
-        folder_names: List[FilePath],
+        folder_names: List[str],
         parent_id: str,
     ) -> Dict[str, File]:
         parent_id = parse_file_id(parent_id)
@@ -199,8 +195,6 @@ class Drive:
         folder_dict = {i["name"]: i for i in self.list_children(parent_id)}
 
         for name in folder_names:
-            name = str(name)
-
             folder = folder_dict.get(name)
             if folder is None:
                 folder = self.create_drive_file_object(
@@ -237,31 +231,3 @@ class Drive:
             )
             .execute()
         )
-
-
-if __name__ == "__main__":
-    name = Path("friday-institute-reports")
-    dir = Path("auth")
-
-    token_path = dir.joinpath(name.with_suffix(".token.pickle"))
-    config_path = dir.joinpath(name.with_suffix(".credentials.json"))
-
-    creds = get_oauth2_creds(
-        token_path=token_path, client_config=config_path, is_service_account=True
-    )
-
-    drive = Drive(creds=creds)
-
-    # id = drive(
-    #     "https://drive.google.com/drive/folders/1fyQNBMxpytjHtgjYQJIjY9dczzZgKBxJ?usp=sharing"
-    # )
-    # id = drive.get_id_from_url(
-    #     "https://docs.google.com/spreadsheets/d/1jrYwFsMrV2E6Ev6ZOUYo-5j2rXPfNpiB8VB_rgl3SmM/edit?usp=sharing"
-    # )
-    swain_url = (
-        "https://drive.google.com/drive/u/0/folders/1N5kVZ5vJtaOcAZg0jsdYXvu5EUtFjlYc"
-    )
-
-    files = drive.list_children(parent_id=swain_url)
-    for file in files:
-        print(file)
