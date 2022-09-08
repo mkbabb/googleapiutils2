@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pickle
 import urllib.parse
+from functools import cache
 from pathlib import Path
 from typing import *
 
@@ -10,8 +11,6 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-
-from functools import cache
 
 GoogleMimeTypes = Literal[
     "audio",

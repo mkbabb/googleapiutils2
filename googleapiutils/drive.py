@@ -20,7 +20,7 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import DriveResource, File
+    from googleapiclient._apis.drive.v3.resources import DriveResource, File, Permission
 
 
 VERSION = "v3"
@@ -35,13 +35,18 @@ class Drive:
         self.files = self.service.files()
 
     def get(self, file_id: str) -> tuple[File, bytes]:
+        file_id = parse_file_id(file_id)
+
         metadata = self.files.get(fileId=file_id).execute()
         media = self.files.get_media(fileId=file_id).execute()
 
         return (metadata, media)
 
     def download(self, out_filepath: FilePath, file_id: str, mime_type: str) -> Path:
+        file_id = parse_file_id(file_id)
+
         out_filepath = Path(out_filepath)
+
         request = self.files.export_media(fileId=file_id, mimeType=mime_type)
 
         with open(out_filepath, "wb") as out_file:
@@ -55,13 +60,14 @@ class Drive:
     def copy(
         self,
         file_id: str,
-        filename: str,
+        filename: FilePath,
         folder_id: str,
     ) -> Optional[File]:
         file_id = parse_file_id(file_id)
         folder_id = parse_file_id(folder_id)
 
-        body = {"name": filename, "parents": [folder_id]}
+        body = {"name": str(filename), "parents": [folder_id]}
+
         try:
             return self.files.copy(fileId=file_id, body=body).execute()
         except:
@@ -69,7 +75,9 @@ class Drive:
 
     def update(self, file_id: str, filepath: FilePath) -> File:
         file_id = parse_file_id(file_id)
+
         filepath = Path(filepath)
+
         return self.files.update(fileId=file_id, media_body=filepath).execute()
 
     def list(self, query: str) -> Iterable[File]:
@@ -87,6 +95,7 @@ class Drive:
 
     def list_children(self, parent_id: str) -> Iterable[File]:
         parent_id = parse_file_id(parent_id)
+
         return self.list(query=f"'{parent_id}' in parents")
 
     def _upload_body_kwargs(
@@ -105,14 +114,14 @@ class Drive:
 
     def create_drive_file_object(
         self,
-        filepath: str,
+        filepath: FilePath,
         google_mime_type: GoogleMimeTypes,
         kwargs: Optional[dict] = None,
     ) -> File:
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = filepath
+        kwargs["body"]["name"] = str(filepath)
         return self.files.create(**kwargs).execute()
 
     def upload_file(
@@ -161,7 +170,7 @@ class Drive:
     def upload(
         self,
         data: bytes,
-        filename: str,
+        filename: FilePath,
         google_mime_type: GoogleMimeTypes,
         mime_type: Optional[str] = None,
         kwargs: Optional[dict] = None,
@@ -169,7 +178,7 @@ class Drive:
         kwargs = self._upload_body_kwargs(
             google_mime_type=google_mime_type, kwargs=kwargs
         )
-        kwargs["body"]["name"] = filename
+        kwargs["body"]["name"] = str(filename)
 
         with BytesIO(data) as tio:
             media = googleapiclient.http.MediaIoBaseUpload(
@@ -180,14 +189,16 @@ class Drive:
 
     def create_folders_if_not_exists(
         self,
-        folder_names: List[str],
+        folder_names: List[FilePath],
         parent_id: str,
     ) -> Dict[str, File]:
-
         parent_id = parse_file_id(parent_id)
+
         folder_dict = {i["name"]: i for i in self.list_children(parent_id)}
 
         for name in folder_names:
+            name = str(name)
+
             folder = folder_dict.get(name)
             if folder is None:
                 folder = self.create_drive_file_object(
@@ -203,11 +214,11 @@ class Drive:
         self,
         file_id: str,
         email_address: str,
-        permission: Optional[dict] = None,
+        permission: Optional[Permission] = None,
     ):
         file_id = parse_file_id(file_id)
 
-        user_permission = {
+        user_permission: Permission = {
             "type": "user",
             "role": "reader",
             "emailAddress": email_address,

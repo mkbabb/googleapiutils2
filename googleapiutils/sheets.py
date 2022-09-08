@@ -98,6 +98,7 @@ class Sheets:
         value_input_option: ValueInputOption = DEFAULT_VALUE_INPUT_OPTION,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
+
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option,
             "data": data,
@@ -120,6 +121,7 @@ class Sheets:
         auto_batch: bool = False,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
+
         body: ValueRange = {"values": values}
 
         if auto_batch and len(values) > UPDATE_CHUNK_SIZE:
@@ -150,6 +152,7 @@ class Sheets:
         range_name: str,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
+        
         return self.sheets.values().clear(
             spreadsheetId=spreadsheet_id, range=range_name
         )
