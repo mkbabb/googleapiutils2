@@ -102,7 +102,7 @@ class Drive:
             kwargs = {}
 
         kwargs["body"] = {
-            "mimeType": create_google_mime_type(google_mime_type),
+            # "mimeType": create_google_mime_type(google_mime_type),
             **kwargs.get("body", {}),
         }
         return kwargs
