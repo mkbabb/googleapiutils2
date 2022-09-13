@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils"
-version = "0.1.9"
+version = "0.1.10"
 description = ""
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
