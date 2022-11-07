@@ -31,15 +31,12 @@ class Drive:
 
     def get(self, file_id: str) -> tuple[File, bytes]:
         file_id = parse_file_id(file_id)
-
         metadata = self.files.get(fileId=file_id).execute()
         media = self.files.get_media(fileId=file_id).execute()
-
         return (metadata, media)
 
     def download(self, out_filepath: FilePath, file_id: str, mime_type: str) -> Path:
         file_id = parse_file_id(file_id)
-
         out_filepath = Path(out_filepath)
 
         request = self.files.export_media(fileId=file_id, mimeType=mime_type)
@@ -70,9 +67,7 @@ class Drive:
 
     def update(self, file_id: str, filepath: FilePath) -> File:
         file_id = parse_file_id(file_id)
-
         filepath = Path(filepath)
-
         return self.files.update(fileId=file_id, media_body=filepath).execute()
 
     def list(self, query: str) -> Iterable[File]:
@@ -90,19 +85,18 @@ class Drive:
 
     def list_children(self, parent_id: str) -> Iterable[File]:
         parent_id = parse_file_id(parent_id)
-
         return self.list(query=f"'{parent_id}' in parents")
 
     def _upload_body_kwargs(
         self,
-        google_mime_type: GoogleMimeTypes,
+        parents: List[str],
+        mimeType: GoogleMimeTypes,
         kwargs: Optional[dict] = None,
     ) -> dict:
         if kwargs is None:
             kwargs = {}
 
         kwargs["body"] = {
-            # "mimeType": create_google_mime_type(google_mime_type),
             **kwargs.get("body", {}),
         }
         return kwargs
@@ -120,21 +114,38 @@ class Drive:
         kwargs["body"]["name"] = filepath.name
         return self.files.create(**kwargs).execute()
 
+    @staticmethod
+    def upload_file_body(
+        name: str,
+        parents: list[str] | None = None,
+        body: File | None = None,
+        kwargs: dict = None) -> dict[str, File]:
+
+        kwargs = kwargs if kwargs is not None else {}
+
+        kwargs["body"] = body if body is not None else {}
+
+        if parents is not None:
+            kwargs["body"].setdefault("parents", parents)
+
+        kwargs["body"].setdefault("name", name)
+
+        return kwargs
+        
+
     def upload_file(
         self,
         filepath: FilePath,
         google_mime_type: GoogleMimeTypes,
-        mime_type: Optional[str] = None,
-        kwargs: Optional[dict] = None,
+        parents: list[str] | None = None,
+        body: File | None = None,
     ) -> File:
         filepath = Path(filepath)
 
-        kwargs = self._upload_body_kwargs(
-            google_mime_type=google_mime_type, kwargs=kwargs
-        )
-        kwargs["body"]["name"] = filepath.name
+        kwargs = self.upload_file_body(name=filepath.name, parents=parents, )
+       
 
-        if google_mime_type == "folder":
+        if filepath.is_dir() or google_mime_type == "folder":
             dirs = str(os.path.normpath(filepath)).split(os.sep)
             # The case of creating a nested folder set.
             # Recurse until we hit the end of the path.
@@ -145,7 +156,7 @@ class Drive:
                         kwargs["body"]["parents"] = [parent_id]
 
                     parent_req = self.upload_file(
-                        dirname, google_mime_type, mime_type, kwargs
+                        filepath=dirname,google_mime_type= google_mime_type, mime_type, kwargs
                     )
                     parent_id = parent_req.get("id", "")
 
@@ -154,11 +165,8 @@ class Drive:
 
         else:
             # Else, we need to upload the file via a MediaFileUpload POST.
-            mime_type = (
-                mimetypes.guess_type(str(filepath))[0]
-                if mime_type is None
-                else mime_type
-            )
+            mime_type = mimetypes.guess_type(str(filepath))[0]
+
             media = googleapiclient.http.MediaFileUpload(
                 str(filepath), mimetype=mime_type, resumable=True
             )
