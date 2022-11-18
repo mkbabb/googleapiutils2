@@ -44,8 +44,6 @@ responses_df["emails"] = responses_df["emails"].map(
 )
 
 
-print(responses_df)
-
 wifi_folders = ["1OCweN3_HDyXL4Gpowz4MaHb01LukSbpv"]
 
 shodan_folders = [
