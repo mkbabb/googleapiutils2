@@ -12,29 +12,8 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-GoogleMimeTypes = Literal[
-    "audio",
-    "document",
-    "drive-sdk",
-    "drawing",
-    "file",
-    "folder",
-    "form",
-    "fusiontable",
-    "jam",
-    "map",
-    "photo",
-    "presentation",
-    "script",
-    "shortcut",
-    "site",
-    "spreadsheet",
-    "unknown",
-    "video",
-]
 
-
-def url_components(url: str) -> Dict[str, List[str]]:
+def url_components(url: str) -> dict[str, List[str]]:
     return urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
 
@@ -65,19 +44,6 @@ SCOPES = [
 ]
 
 
-MIME_TYPES = {
-    "docs": {"text": "text/plain"},
-    "sheets": {
-        "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "csv": "text/csv",
-        "pdf": "application/pdf",
-        "tsv": "text/tab-separated-values",
-        "zip": "application/zip",
-        "sheets": "application/vnd.google-apps.spreadsheet",
-    },
-}
-
-
 TOKEN_PATH = "auth/token.pickle"
 CONFIG_PATH = "auth/credentials.json"
 
@@ -85,9 +51,8 @@ FilePath = str | Path
 
 
 def get_oauth2_creds(
-    token_path: FilePath = TOKEN_PATH,
     client_config: FilePath | dict = CONFIG_PATH,
-    is_service_account: bool = False,
+    token_path: FilePath = TOKEN_PATH,
     scopes: List[str] = SCOPES,
 ) -> Optional[Credentials]:
     token_path = Path(token_path)
@@ -95,6 +60,8 @@ def get_oauth2_creds(
     if not isinstance(client_config, dict):
         path = Path(client_config)
         client_config = json.loads(path.read_bytes())
+
+    is_service_account = client_config.get("type", "") == "service_account"
 
     if not is_service_account:
         creds: Credentials = None
@@ -110,15 +77,12 @@ def get_oauth2_creds(
             flow = InstalledAppFlow.from_client_config(client_config, scopes)
             creds = flow.run_local_server(port=0)
             token_path.write_bytes(pickle.dumps(creds))
+
         return creds
     else:
         return service_account.Credentials.from_service_account_info(
             client_config, scopes=scopes
         )
-
-
-def create_google_mime_type(google_mime_type: GoogleMimeTypes) -> str:
-    return f"application/vnd.google-apps.{google_mime_type}"
 
 
 def get_id_from_url(url: str) -> str:
@@ -144,12 +108,20 @@ def get_id_from_url(url: str) -> str:
             raise ValueError(f"Could not parse file URL of {url}")
 
 
-@cache
-def parse_file_id(file_id: str) -> str:
-    if file_id.find("http") != -1:
-        return get_id_from_url(file_id)
+def parse_file_id(file_id: str | Iterable[str] | None):
+    @cache
+    def inner(file_id: str) -> str:
+        if file_id.find("http") != -1:
+            return get_id_from_url(file_id)
+        else:
+            return file_id
+
+    if isinstance(file_id, str):
+        return inner(file_id)
+    elif isinstance(file_id, Iterable):
+        return list(map(inner, file_id))
     else:
-        return file_id
+        return None
 
 
 def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
@@ -162,3 +134,19 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
         x //= base
 
     return y[::-1]
+
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+
+def take_annotation_from(
+    this: Callable[P, Optional[T]]
+) -> Callable[[Callable], Callable[P, Optional[T]]]:
+    def decorator(real_function: Callable) -> Callable[P, Optional[T]]:
+        def new_function(*args: P.args, **kwargs: P.kwargs) -> Optional[T]:
+            return real_function(*args, **kwargs)
+
+        return new_function
+
+    return decorator

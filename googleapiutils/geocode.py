@@ -7,13 +7,6 @@ import requests
 from ._types.geocode import *
 from .utils import update_url_params
 
-if TYPE_CHECKING:
-    from googleapiclient._apis.sheets.v4.resources import (
-        SheetsResource,
-        UpdateValuesResponse,
-        ValueRange,
-    )
-
 
 class Geocode:
     URL = "https://maps.googleapis.com/maps/api/geocode/json"

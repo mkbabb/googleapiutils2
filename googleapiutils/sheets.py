@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import string
-from pathlib import Path
+from enum import Enum
 from typing import *
 
-import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
@@ -21,8 +20,11 @@ if TYPE_CHECKING:
 VERSION: Final = "v4"
 
 
-ValueInputOption = Literal["INPUT_VALUE_OPTION_UNSPECIFIED", "RAW", "USER_ENTERED"]
-DEFAULT_VALUE_INPUT_OPTION: Final = "USER_ENTERED"
+class ValueInputOption(Enum):
+    unspecified = "INPUT_VALUE_OPTION_UNSPECIFIED"
+    raw = "RAW"
+    user_entered = "USER_ENTERED"
+
 
 UPDATE_CHUNK_SIZE: Final = 100
 
@@ -33,10 +35,10 @@ class Sheets:
         self.service: SheetsResource = discovery.build(
             "sheets", VERSION, credentials=self.creds
         )
-        self.sheets = self.service.spreadsheets()
+        self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
 
     @staticmethod
-    def number_to_A1(row: int, col: int, sheet_name: Optional[str] = None) -> str:
+    def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
         t_col = "".join(
             map(
                 lambda x: string.ascii_letters[x - 1].upper(),
@@ -51,17 +53,18 @@ class Sheets:
             return key
 
     def create(self):
-        return self.sheets.create()
+        return self.sheets.create().execute()
 
     def get(
         self,
         spreadsheet_id: str,
         range_name: str,
+        **kwargs: Any,
     ) -> ValueRange:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         return (
             self.sheets.values()
-            .get(spreadsheetId=spreadsheet_id, range=range_name)
+            .get(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
             .execute()
         )
 
@@ -95,12 +98,13 @@ class Sheets:
         self,
         spreadsheet_id: str,
         data: list[ValueRange],
-        value_input_option: ValueInputOption = DEFAULT_VALUE_INPUT_OPTION,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         body: BatchUpdateValuesRequest = {
-            "valueInputOption": value_input_option,
+            "valueInputOption": value_input_option.value,
             "data": data,
         }
         return (
@@ -108,6 +112,7 @@ class Sheets:
             .batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body,
+                **kwargs,
             )
             .execute()
         )
@@ -117,7 +122,7 @@ class Sheets:
         spreadsheet_id: str,
         range_name: str,
         values: list[list[Any]],
-        value_input_option: ValueInputOption = DEFAULT_VALUE_INPUT_OPTION,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch: bool = False,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -141,18 +146,16 @@ class Sheets:
                     spreadsheetId=spreadsheet_id,
                     range=range_name,
                     body=body,
-                    valueInputOption=value_input_option,
+                    valueInputOption=value_input_option.value,
                 )
                 .execute()
             )
 
-    def clear(
-        self,
-        spreadsheet_id: str,
-        range_name: str,
-    ):
+    def clear(self, spreadsheet_id: str, range_name: str, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        return self.sheets.values().clear(
-            spreadsheetId=spreadsheet_id, range=range_name
+        return (
+            self.sheets.values()
+            .clear(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
+            .execute()
         )
