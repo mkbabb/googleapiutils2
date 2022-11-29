@@ -124,6 +124,7 @@ class Sheets:
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch: bool = False,
+        **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -137,6 +138,7 @@ class Sheets:
                     spreadsheet_id=spreadsheet_id,
                     range_name=t_range_name,
                     values=t_values,
+                    **kwargs,
                 )
             return None
         else:
@@ -147,6 +149,7 @@ class Sheets:
                     range=range_name,
                     body=body,
                     valueInputOption=value_input_option.value,
+                    **kwargs,
                 )
                 .execute()
             )

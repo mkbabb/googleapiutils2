@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils.drive import Drive
+from googleapiutils.drive.drive import Drive
 from googleapiutils.utils import get_oauth2_creds
 
 dir = Path("auth")

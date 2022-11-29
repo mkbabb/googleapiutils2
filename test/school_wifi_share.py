@@ -6,8 +6,8 @@ from typing import *
 
 import pandas as pd
 
-from googleapiutils.drive import Drive
-from googleapiutils.sheets import Sheets
+from googleapiutils.drive.drive import Drive
+from googleapiutils.sheets.sheets import Sheets
 from googleapiutils.utils import get_oauth2_creds
 
 PSU_ID_RE = re.compile("\[(.*)\]")

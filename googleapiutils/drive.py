@@ -65,11 +65,11 @@ class Drive:
 
         return (metadata, media)
 
-    def download(self, out_filepath: FilePath, file_id: str, mime_type: str) -> Path:
+    def download(self, out_filepath: FilePath, file_id: str, mime_type: GoogleMimeTypes) -> Path:
         file_id = parse_file_id(file_id)
         out_filepath = Path(out_filepath)
 
-        request = self.files.export_media(fileId=file_id, mimeType=mime_type)
+        request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
 
         with open(out_filepath, "wb") as out_file:
             downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
@@ -79,16 +79,48 @@ class Drive:
 
         return out_filepath
 
+    @staticmethod
+    def upload_file_body(
+        name: str,
+        parents: List[str] | None = None,
+        body: File | None = None,
+        **kwargs: Any,
+    ) -> dict[str, File | Any]:
+        body = body if body is not None else {}
+        kwargs = {
+            "body": {
+                "name": name,
+                **body,
+                **kwargs,
+            }
+        }
+
+        if parents is not None:
+            kwargs["body"].setdefault("parents", parents)
+
+        return kwargs
+
     def copy(
-        self, file_id: str, filename: str, folder_id: str, **kwargs: Any
+        self,
+        file_id: str,
+        to_filename: str,
+        to_folder_id: str,
+        body: File | None = None,
+        **kwargs: Any,
     ) -> Optional[File]:
         file_id = parse_file_id(file_id)
-        folder_id = parse_file_id(folder_id)
+        to_folder_id = parse_file_id(to_folder_id)
 
-        body: File = {"name": filename, "parents": [folder_id]}
+        kwargs = {
+            "fileId": file_id,
+            **self.upload_file_body(
+                name=to_filename, parents=[to_folder_id], body=body
+            ),
+            **kwargs,
+        }
 
         try:
-            return self.files.copy(fileId=file_id, body=body, **kwargs).execute()
+            return self.files.copy(**kwargs).execute()
         except:
             return None
 
@@ -158,27 +190,6 @@ class Drive:
         else:
             return None
 
-    @staticmethod
-    def upload_file_body(
-        name: str,
-        parents: List[str] | None = None,
-        body: File | None = None,
-        **kwargs: Any,
-    ) -> dict[str, File | Any]:
-        body = body if body is not None else {}
-        kwargs = {
-            "body": {
-                "name": name,
-                **body,
-                **kwargs,
-            }
-        }
-
-        if parents is not None:
-            kwargs["body"].setdefault("parents", parents)
-
-        return kwargs
-
     def create_drive_file_object(
         self,
         filepath: FilePath,
@@ -214,11 +225,15 @@ class Drive:
         parents: List[str] | None = None,
         body: File | None = None,
         replace_if_exists: bool = True,
+        **kwargs,
     ) -> File:
         filepath = Path(filepath)
         parents = parse_file_id(parents)
 
-        kwargs = self.upload_file_body(name=filepath.name, parents=parents, body=body)
+        kwargs = {
+            **self.upload_file_body(name=filepath.name, parents=parents, body=body),
+            **kwargs,
+        }
 
         if replace_if_exists:
             if (
@@ -284,7 +299,7 @@ class Drive:
             if folder is None:
                 folder = self.create_drive_file_object(
                     filepath=name,
-                    google_mime_type="folder",
+                    mime_type=GoogleMimeTypes.folder,
                     parents=[parent_id],
                 )
                 folder_dict[name] = folder
@@ -338,10 +353,7 @@ class Drive:
 
         if replace_if_exists:
             for p in self.permissions_list(file_id):
-                if (
-                    p["emailAddress"].strip().lower()
-                    == user_permission["emailAddress"]
-                ):
+                if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
                     return p
         return (
             self.service.permissions()
