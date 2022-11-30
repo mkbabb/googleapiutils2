@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils.drive.drive import Drive, GoogleMimeTypes
+from googleapiutils.drive import Drive, GoogleMimeTypes
 from googleapiutils.utils import get_oauth2_creds
 
 dir = Path("auth")
@@ -28,3 +28,7 @@ perms = drive.permissions_list(folder)
 
 for p in perms:
     print(p)
+
+download_folder = "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
+
+drive.download("heyy", download_folder, GoogleMimeTypes.folder, True)

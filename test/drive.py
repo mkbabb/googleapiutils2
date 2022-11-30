@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils.drive.drive import Drive
+from googleapiutils.drive import Drive
 from googleapiutils.utils import get_oauth2_creds
 
 dir = Path("auth")
@@ -20,7 +20,7 @@ for file in files:
     print(file)
 
 
-perms = drive.permissions_list(folder)
+perms = drive.permissions_list(test_folder)
 
 for p in perms:
     print(p)

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from googleapiutils.sheets.sheets import Sheets
+from googleapiutils.sheets import Sheets
 from googleapiutils.utils import get_oauth2_creds
 
 dir = Path("auth")

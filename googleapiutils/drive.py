@@ -15,7 +15,14 @@ from googleapiclient import discovery
 from .utils import FilePath, parse_file_id
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import DriveResource, File, Permission
+    from googleapiclient._apis.drive.v3.resources import (
+        DriveResource,
+        File,
+        Permission,
+        FileList,
+        PermissionList,
+        DriveList,
+    )
 
 
 class GoogleMimeTypes(Enum):
@@ -45,6 +52,7 @@ class GoogleMimeTypes(Enum):
     htm = "text/html"
     default = "application/octet-stream"
     folder = "application/vnd.google-apps.folder"
+    sheets = "application/vnd.google-apps.spreadsheet"
 
 
 VERSION: Final = "v3"
@@ -65,22 +73,47 @@ class Drive:
 
         return (metadata, media)
 
-    def download(self, out_filepath: FilePath, file_id: str, mime_type: GoogleMimeTypes) -> Path:
+    def download(
+        self,
+        out_filepath: FilePath,
+        file_id: str,
+        mime_type: GoogleMimeTypes,
+        recursive: bool = False,
+    ) -> Path:
         file_id = parse_file_id(file_id)
         out_filepath = Path(out_filepath)
 
-        request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
+        if recursive and mime_type == GoogleMimeTypes.folder:
+            for file in self.list_children(file_id):
+                t_name, t_id, t_mime_type = (
+                    file["name"],
+                    file["id"],
+                    GoogleMimeTypes(file["mimeType"]),
+                )
 
-        with open(out_filepath, "wb") as out_file:
-            downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
-            done = False
-            while done is False:
-                status, done = downloader.next_chunk()
+                t_path = out_filepath.joinpath(t_name)
+
+                self.download(
+                    out_filepath=t_path,
+                    file_id=t_id,
+                    mime_type=t_mime_type,
+                    recursive=recursive,
+                )
+        else:
+            request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
+
+            out_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+            with out_filepath.open("wb") as out_file:
+                downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
 
         return out_filepath
 
     @staticmethod
-    def upload_file_body(
+    def _upload_file_body(
         name: str,
         parents: List[str] | None = None,
         body: File | None = None,
@@ -113,7 +146,7 @@ class Drive:
 
         kwargs = {
             "fileId": file_id,
-            **self.upload_file_body(
+            **self._upload_file_body(
                 name=to_filename, parents=[to_folder_id], body=body
             ),
             **kwargs,
@@ -142,7 +175,9 @@ class Drive:
         ).execute()
 
     @staticmethod
-    def _list(list_func: Any):
+    def _list(
+        list_func: Callable[[str | None], FileList | PermissionList]
+    ) -> Iterable[FileList | PermissionList]:
         page_token = None
         while True:
             response = list_func(page_token)
@@ -167,28 +202,53 @@ class Drive:
                 yield file
 
     def list_children(
-        self, parent_id: str, fields: str = "*", **kwargs
+        self, parent_id: str, fields: str = "*", **kwargs: Any
     ) -> Iterable[File]:
         parent_id = parse_file_id(parent_id)
 
         return self.list(query=f"'{parent_id}' in parents", fields=fields, **kwargs)
 
-    def _replace_if_exists(
+    def _update_if_exists(
         self,
         name: str,
         filepath: FilePath,
         parents: List[str] | None = None,
+        team_drives: bool = True,
     ) -> File | None:
         if parents is None:
             return None
 
-        query = f"name = '{name}' and '{parents[0]}' in parents"
-        files = self.list(query)
+        name = Path(name)
+
+        parents_list = " or ".join((f"'{parent}' in parents" for parent in parents))
+        names_list = " or ".join((f"name = '{name}'", f"name = '{name.stem}'"))
+
+        queries = [parents_list, names_list, "trashed = false"]
+
+        query = " and ".join((f"({i})" for i in queries))
+
+        kwargs = (
+            dict(supportsAllDrives=True, includeItemsFromAllDrives=True)
+            if team_drives
+            else {}
+        )
+
+        files = self.list(query=query, **kwargs)
 
         for file in files:
-            return self.update(file["id"], filepath)
+            return self.update(file["id"], filepath, supportsAllDrives=team_drives)
         else:
             return None
+
+    def _create_nested_folders(self, filepath: Path, parents: List[str] | None) -> None:
+        dirs = str(os.path.normpath(filepath)).split(os.sep)
+
+        for dirname in dirs[:-1]:
+            t_kwargs = self._upload_file_body(
+                name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
+            )
+            file = self.files.create(**t_kwargs).execute()
+            parents = [file["id"]]
 
     def create_drive_file_object(
         self,
@@ -196,48 +256,15 @@ class Drive:
         mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | None = None,
         create_folders: bool = False,
+        update: bool = False,
         **kwargs: Any,
     ) -> File:
         filepath = Path(filepath)
         parents = parse_file_id(parents)
 
-        if create_folders:
-            dirs = str(os.path.normpath(filepath)).split(os.sep)
-
-            for dirname in dirs[:-1]:
-                t_kwargs = self.upload_file_body(
-                    name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
-                )
-                file = self.files.create(**t_kwargs).execute()
-                parents = [file["id"]]
-
-        if mime_type is not None:
-            kwargs["mimeType"] = mime_type.value
-
-            kwargs = self.upload_file_body(
-                name=filepath.name, parents=parents, **kwargs
-            )
-            return self.files.create(**kwargs).execute()
-
-    def upload_file(
-        self,
-        filepath: FilePath,
-        parents: List[str] | None = None,
-        body: File | None = None,
-        replace_if_exists: bool = True,
-        **kwargs,
-    ) -> File:
-        filepath = Path(filepath)
-        parents = parse_file_id(parents)
-
-        kwargs = {
-            **self.upload_file_body(name=filepath.name, parents=parents, body=body),
-            **kwargs,
-        }
-
-        if replace_if_exists:
+        if update:
             if (
-                file := self._replace_if_exists(
+                file := self._update_if_exists(
                     name=filepath.name,
                     filepath=filepath,
                     parents=parents,
@@ -245,45 +272,103 @@ class Drive:
             ) is not None:
                 return file
 
-        mime_type = mimetypes.guess_type(str(filepath))[0]
-        media = googleapiclient.http.MediaFileUpload(
-            str(filepath), mimetype=mime_type, resumable=True
-        )
-        kwargs["media_body"] = media
+        if create_folders:
+            self._create_nested_folders(filepath=filepath, parents=parents)
+
+        if mime_type is not None:
+            kwargs = {
+                **self._upload_file_body(
+                    name=filepath.name, parents=parents, mimeType=mime_type
+                ),
+                **kwargs,
+            }
+            return self.files.create(**kwargs).execute()
+
+    def _upload(
+        self,
+        uploader: Callable,
+        name: str,
+        filepath: FilePath,
+        mime_type: GoogleMimeTypes | None = None,
+        parents: List[str] | None = None,
+        body: File | None = None,
+        update: bool = True,
+        **kwargs,
+    ) -> File:
+        filepath = Path(filepath)
+        parents = parse_file_id(parents)
+
+        if update:
+            if (
+                file := self._update_if_exists(
+                    name=name,
+                    filepath=filepath,
+                    parents=parents,
+                )
+            ) is not None:
+                return file
+
+        kwargs = {
+            **self._upload_file_body(
+                name=name, parents=parents, body=body, mimeType=mime_type
+            ),
+            **kwargs,
+        }
+
+        kwargs["media_body"] = uploader()
 
         return self.files.create(**kwargs).execute()
+
+    def upload_file(
+        self,
+        filepath: FilePath,
+        mime_type: GoogleMimeTypes | None = None,
+        parents: List[str] | None = None,
+        body: File | None = None,
+        update: bool = True,
+        **kwargs: Any,
+    ) -> File:
+        filepath = Path(filepath)
+
+        def uploader():
+            return googleapiclient.http.MediaFileUpload(str(filepath), resumable=True)
+
+        return self._upload(
+            uploader=uploader,
+            name=filepath.name,
+            filepath=filepath,
+            mime_type=mime_type,
+            parents=parents,
+            body=body,
+            update=update,
+            **kwargs,
+        )
 
     def upload_data(
         self,
         data: bytes,
-        filename: str,
+        name: str,
+        mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | None = None,
         body: File | None = None,
-        replace_if_exists: bool = True,
+        update: bool = True,
         **kwargs: Any,
     ) -> File:
-        parents = parse_file_id(parents)
-
-        kwargs = self.upload_file_body(
-            name=filename, parents=parents, body=body, **kwargs
-        )
-
         with BytesIO(data) as tio:
-            if replace_if_exists:
-                if (
-                    file := self._replace_if_exists(
-                        name=filename, filepath=tio.name, parents=parents
-                    )
-                ) is not None:
-                    return file
 
-            mime_type = mimetypes.guess_type(tio.name)[0]
-            media = googleapiclient.http.MediaIoBaseUpload(
-                tio, mimetype=mime_type, resumable=True
+            def uploader():
+                return googleapiclient.http.MediaIoBaseUpload(tio, resumable=True)
+
+            return self._upload(
+                uploader=uploader,
+                name=name,
+                filepath=tio.name,
+                mime_type=mime_type,
+                parents=parents,
+                body=body,
+                update=update,
+                **kwargs,
             )
-            kwargs["media_body"] = media
-
-            return self.files.create(**kwargs).execute()
 
     def create_folders_if_not_exists(
         self,
@@ -338,9 +423,9 @@ class Drive:
         email_address: str,
         permission: Permission | None = None,
         sendNotificationEmail: bool = True,
-        replace_if_exists: bool = True,
+        update: bool = True,
         **kwargs: Any,
-    ):
+    ) -> Permission:
         file_id = parse_file_id(file_id)
 
         user_permission: Permission = {
@@ -351,7 +436,7 @@ class Drive:
         if permission is not None:
             user_permission.update(permission)
 
-        if replace_if_exists:
+        if update:
             for p in self.permissions_list(file_id):
                 if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
                     return p
