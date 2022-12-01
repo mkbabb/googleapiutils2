@@ -30,4 +30,4 @@ ECF_FOLDER = (
 )
 filepath = "/Users/mkbabb/Programming/ecf-dedup/data/ECF Deduped.csv"
 
-t_file = drive.upload_file(filepath=filepath, parents=[ECF_FOLDER])
+t_file = drive.upload_file(filepath=filepath, parents=[ECF_FOLDER], update=True)

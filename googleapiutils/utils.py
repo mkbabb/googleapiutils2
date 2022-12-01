@@ -8,6 +8,7 @@ from functools import cache
 from pathlib import Path
 from typing import *
 
+import googleapiclient.http
 import requests
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -57,7 +58,7 @@ class GoogleMimeTypes(Enum):
     default = "application/octet-stream"
 
     folder = "application/vnd.google-apps.folder"
-    
+
     docs = "application/vnd.google-apps.document"
     sheets = "application/vnd.google-apps.spreadsheet"
     slides = "application/vnd.google-apps.presentation"
@@ -143,7 +144,9 @@ def get_id_from_url(url: str) -> str:
             raise ValueError(f"Could not parse file URL of {url}")
 
 
-def download_large_file(url: str, filepath: FilePath, chunk_size=8192):
+def download_large_file(
+    url: str, filepath: FilePath, chunk_size=googleapiclient.http.DEFAULT_CHUNK_SIZE
+):
     filepath = Path(filepath)
 
     with requests.get(url, stream=True) as r:

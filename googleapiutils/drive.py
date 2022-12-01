@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx"),
     GoogleMimeTypes.docs: (GoogleMimeTypes.doc, ".docx"),
-    GoogleMimeTypes.slids: (GoogleMimeTypes.pdf, ".pdf"),
+    GoogleMimeTypes.slides: (GoogleMimeTypes.pdf, ".pdf"),
 }
 
 DOWNLOAD_LIMIT = 4e6
