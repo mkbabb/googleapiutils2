@@ -17,7 +17,7 @@ if TYPE_CHECKING:
         ValueRange,
     )
 
-VERSION: Final = "v4"
+VERSION = "v4"
 
 
 class ValueInputOption(Enum):
@@ -26,7 +26,7 @@ class ValueInputOption(Enum):
     user_entered = "USER_ENTERED"
 
 
-UPDATE_CHUNK_SIZE: Final = 100
+UPDATE_CHUNK_SIZE = 100
 
 
 class Sheets:

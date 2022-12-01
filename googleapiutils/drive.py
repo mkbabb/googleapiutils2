@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import os
 from enum import Enum
 from io import BytesIO
@@ -9,12 +8,11 @@ from typing import *
 
 import googleapiclient
 import googleapiclient.http
+import requests
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
-import requests
 
-
-from .utils import FilePath, parse_file_id
+from .utils import FilePath, GoogleMimeTypes, download_large_file, parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -27,54 +25,13 @@ if TYPE_CHECKING:
     )
 
 
-class GoogleMimeTypes(Enum):
-    xls = "application/vnd.ms-excel"
-    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    xml = "text/xml"
-    ods = "application/vnd.oasis.opendocument.spreadsheet"
-    csv = "text/plain"
-    tmpl = "text/plain"
-    pdf = "application/pdf"
-    php = "application/x-httpd-php"
-    jpg = "image/jpeg"
-    png = "image/png"
-    gif = "image/gif"
-    bmp = "image/bmp"
-    txt = "text/plain"
-    doc = "application/msword"
-    js = "text/js"
-    swf = "application/x-shockwave-flash"
-    mp3 = "audio/mpeg"
-    zip = "application/zip"
-    rar = "application/rar"
-    tar = "application/tar"
-    arj = "application/arj"
-    cab = "application/cab"
-    html = "text/html"
-    htm = "text/html"
-    default = "application/octet-stream"
-    folder = "application/vnd.google-apps.folder"
-    sheets = "application/vnd.google-apps.spreadsheet"
-
-
 DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx")
 }
 
 DOWNLOAD_LIMIT = 4e6
 
-VERSION: Final = "v3"
-
-
-def download_large_file(url: str, filepath: FilePath, chunk_size=8192):
-    filepath = Path(filepath)
-
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-
-        with open(filepath, "wb") as f:
-            for chunk in r.iter_content(chunk_size=chunk_size):
-                f.write(chunk)
+VERSION = "v3"
 
 
 class Drive:
@@ -210,6 +167,18 @@ class Drive:
         ).execute()
 
     @staticmethod
+    def _list_fields(fields: str) -> str:
+        if "*" in fields:
+            return fields
+
+        REQUIRED_FIELDS = ["nextPageToken", "kind"]
+
+        for r in REQUIRED_FIELDS:
+            if r not in fields:
+                fields += f",{r}"
+        return fields
+
+    @staticmethod
     def _list(
         list_func: Callable[[str | None], FileList | PermissionList]
     ) -> Iterable[FileList | PermissionList]:
@@ -229,7 +198,11 @@ class Drive:
         **kwargs: Any,
     ) -> Iterable[File]:
         list_func = lambda x: self.files.list(
-            q=query, pageToken=x, fields=fields, orderBy=order_by, **kwargs
+            q=query,
+            pageToken=x,
+            fields=self._list_fields(fields),
+            orderBy=order_by,
+            **kwargs,
         ).execute()
 
         for response in self._list(list_func):
@@ -438,7 +411,9 @@ class Drive:
 
         list_func = (
             lambda x: self.service.permissions()
-            .list(fileId=file_id, pageToken=x, fields=fields, **kwargs)
+            .list(
+                fileId=file_id, pageToken=x, fields=self._list_fields(fields), **kwargs
+            )
             .execute()
         )
 

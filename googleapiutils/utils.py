@@ -3,14 +3,60 @@ from __future__ import annotations
 import json
 import pickle
 import urllib.parse
+from enum import Enum
 from functools import cache
 from pathlib import Path
 from typing import *
 
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+
+FilePath = str | Path
+
+GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
+]
+
+
+TOKEN_PATH = "auth/token.pickle"
+CONFIG_PATH = "auth/credentials.json"
+
+
+class GoogleMimeTypes(Enum):
+    xls = "application/vnd.ms-excel"
+    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    xml = "text/xml"
+    ods = "application/vnd.oasis.opendocument.spreadsheet"
+    csv = "text/plain"
+    tmpl = "text/plain"
+    pdf = "application/pdf"
+    php = "application/x-httpd-php"
+    jpg = "image/jpeg"
+    png = "image/png"
+    gif = "image/gif"
+    bmp = "image/bmp"
+    txt = "text/plain"
+    doc = "application/msword"
+    js = "text/js"
+    swf = "application/x-shockwave-flash"
+    mp3 = "audio/mpeg"
+    zip = "application/zip"
+    rar = "application/rar"
+    tar = "application/tar"
+    arj = "application/arj"
+    cab = "application/cab"
+    html = "text/html"
+    htm = "text/html"
+    default = "application/octet-stream"
+    folder = "application/vnd.google-apps.folder"
+    sheets = "application/vnd.google-apps.spreadsheet"
 
 
 def url_components(url: str) -> dict[str, List[str]]:
@@ -33,21 +79,6 @@ def update_url_params(url: str, params: dict) -> str:
     )
 
     return url_obj.geturl()
-
-
-GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/drive",
-]
-
-
-TOKEN_PATH = "auth/token.pickle"
-CONFIG_PATH = "auth/credentials.json"
-
-FilePath = str | Path
 
 
 def get_oauth2_creds(
@@ -106,6 +137,17 @@ def get_id_from_url(url: str) -> str:
             return ids[0]
         else:
             raise ValueError(f"Could not parse file URL of {url}")
+
+
+def download_large_file(url: str, filepath: FilePath, chunk_size=8192):
+    filepath = Path(filepath)
+
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+
+        with open(filepath, "wb") as f:
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                f.write(chunk)
 
 
 def parse_file_id(file_id: str | Iterable[str] | None):

@@ -22,6 +22,7 @@ creds = get_oauth2_creds(client_config=config_path)
 drive = Drive(creds=creds)
 sheets = Sheets(creds=creds)
 
+
 psu_col, email_col = (
     "What is your PSU name and ID?  Select the dropdown and then start typing the name to jump ahead in the list.",
     "What are the email addresses you'd like to grant access to the report? Please separate each email address by a comma.",
@@ -53,7 +54,7 @@ shodan_folders = [
 
 list_func = lambda x: list(drive.list_children(x, fields="files(name,id)"))
 
-all_folders = chain(wifi_folders, shodan_folders)
+all_folders = chain(shodan_folders)
 all_folders = list(chain.from_iterable((list_func(x) for x in all_folders)))
 
 
