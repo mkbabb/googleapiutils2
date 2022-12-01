@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import os
-from enum import Enum
 from io import BytesIO
 from pathlib import Path
 from typing import *
 
 import googleapiclient
 import googleapiclient.http
-import requests
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
@@ -26,7 +24,9 @@ if TYPE_CHECKING:
 
 
 DEFAULT_DOWNLOAD_CONVERSION_MAP = {
-    GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx")
+    GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx"),
+    GoogleMimeTypes.docs: (GoogleMimeTypes.doc, ".docx"),
+    GoogleMimeTypes.slids: (GoogleMimeTypes.pdf, ".pdf"),
 }
 
 DOWNLOAD_LIMIT = 4e6
@@ -37,15 +37,10 @@ VERSION = "v3"
 class Drive:
     def __init__(self, creds: Credentials):
         self.creds = creds
-        self.open()
-
-    def open(self):
         self.service: DriveResource = discovery.build(
             "drive", VERSION, credentials=self.creds
         )
         self.files: DriveResource.FilesResource = self.service.files()
-
-        return self
 
     def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
         file_id = parse_file_id(file_id)

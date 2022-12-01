@@ -55,8 +55,12 @@ class GoogleMimeTypes(Enum):
     html = "text/html"
     htm = "text/html"
     default = "application/octet-stream"
+
     folder = "application/vnd.google-apps.folder"
+    
+    docs = "application/vnd.google-apps.document"
     sheets = "application/vnd.google-apps.spreadsheet"
+    slides = "application/vnd.google-apps.presentation"
 
 
 def url_components(url: str) -> dict[str, List[str]]:
