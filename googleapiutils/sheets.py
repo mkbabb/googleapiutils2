@@ -4,6 +4,7 @@ import string
 from enum import Enum
 from typing import *
 
+import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
@@ -11,11 +12,8 @@ from .utils import parse_file_id, to_base
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
-        BatchUpdateValuesRequest,
-        SheetsResource,
-        UpdateValuesResponse,
-        ValueRange,
-    )
+        BatchUpdateValuesRequest, SheetsResource, UpdateValuesResponse,
+        ValueRange)
 
 VERSION = "v4"
 
@@ -162,3 +160,15 @@ class Sheets:
             .clear(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
             .execute()
         )
+
+    @staticmethod
+    def to_frame(values: ValueRange) -> pd.DataFrame:
+        df = pd.DataFrame(values["values"])
+        df = df.rename(columns=df.iloc[0]).drop(df.index[0])
+        return df
+    
+    @staticmethod
+    def from_frame(df: pd.DataFrame) -> list[list[Any]]:
+        data: list = df.fillna("").values.tolist()
+        data.insert(0, list(df.columns))
+        return data
