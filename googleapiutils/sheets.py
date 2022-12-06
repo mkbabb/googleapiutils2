@@ -183,6 +183,9 @@ class Sheets:
 
     @staticmethod
     def from_frame(df: pd.DataFrame) -> list[list[Any]]:
-        data: list = df.fillna("").values.tolist()
+        df = df.fillna("")
+        df = df.astype(str)
+
+        data: list = df.values.tolist()
         data.insert(0, list(df.columns))
         return data

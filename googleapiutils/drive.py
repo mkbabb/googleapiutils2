@@ -213,7 +213,7 @@ class Drive:
                 yield file
 
     def list_children(
-        self, parent_id: str, fields: str = "*", **kwargs: Any
+        self, parent_id: FileId, fields: str = "*", **kwargs: Any
     ) -> Iterable[File]:
         parent_id = parse_file_id(parent_id)
 
@@ -280,13 +280,13 @@ class Drive:
                 t_kwargs = self._upload_file_body(
                     name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
                 )
-                folder = self.files.create(**t_kwargs).execute()
+                folder = self.create_drive_file_object(**t_kwargs)
 
             parents = [folder["id"]]
 
         return parents
 
-    def create_drive_file_object(
+    def create(
         self,
         filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
@@ -317,7 +317,9 @@ class Drive:
                 ),
                 **kwargs,
             }
-            return self.files.create(**kwargs).execute()
+            file = self.files.create(**kwargs).execute()
+
+            return self.get(file_id=file["id"])
 
     def _upload(
         self,
@@ -348,7 +350,8 @@ class Drive:
 
         kwargs["media_body"] = uploader()
 
-        return self.files.create(**kwargs).execute()
+        file = self.files.create(**kwargs).execute()
+        return self.get(file_id=file["id"])
 
     def upload_file(
         self,
@@ -400,27 +403,6 @@ class Drive:
                 update=update,
                 **kwargs,
             )
-
-    def create_folders_if_not_exists(
-        self,
-        folder_names: List[str],
-        parent_id: str,
-    ) -> dict[str, File]:
-        parent_id = parse_file_id(parent_id)
-
-        folder_dict = {i["name"]: i for i in self.list_children(parent_id)}
-
-        for name in folder_names:
-            folder = folder_dict.get(name)
-            if folder is None:
-                folder = self.create_drive_file_object(
-                    filepath=name,
-                    mime_type=GoogleMimeTypes.folder,
-                    parents=[parent_id],
-                )
-                folder_dict[name] = folder
-
-        return folder_dict
 
     def permissions_get(
         self, file_id: FileId, permission_id: str, **kwargs: Any
