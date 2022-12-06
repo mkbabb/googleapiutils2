@@ -224,6 +224,7 @@ class Drive:
         )
 
     def _query_children(self, name: str, parents: List[FileId], q: str | None = None):
+        # TODO! Fix team drive support
         filename = Path(name)
 
         parents_list = " or ".join(
