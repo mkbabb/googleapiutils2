@@ -17,6 +17,17 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 FilePath = str | Path
 
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import (
+        File,
+    )
+    from googleapiclient._apis.sheets.v4.resources import (
+        Spreadsheet,
+    )
+
+    FileId = str | File | Spreadsheet
+
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 SCOPES = [
@@ -162,13 +173,29 @@ def download_large_file(
                 f.write(chunk)
 
 
-def parse_file_id(file_id: str | Iterable[str] | None):
+def parse_file_id(
+    file_id: FileId | Iterable[FileId] | None,
+) -> str | Iterable[str] | None:
+    def obj_to_id(file: str | File | Spreadsheet):
+        if isinstance(file, str):
+            return file
+        elif isinstance(file, dict):
+            return file.get("id", file.get("spreadsheetId"))
+        else:
+            return None
+
     @cache
-    def inner(file_id: str) -> str:
+    def parse(file_id: str) -> str:
         if file_id.find("http") != -1:
             return get_id_from_url(file_id)
         else:
             return file_id
+
+    def inner(file_id: FileId) -> str:
+        if (id := obj_to_id(file_id)) is not None:
+            return parse(id)
+        else:
+            return None
 
     if isinstance(file_id, str):
         return inner(file_id)

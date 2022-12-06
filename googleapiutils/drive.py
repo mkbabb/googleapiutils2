@@ -5,7 +5,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import *
 
-
 import googleapiclient
 import googleapiclient.http
 from google.oauth2.credentials import Credentials
@@ -20,6 +19,8 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
+    from .utils import FileId
+
     from googleapiclient._apis.drive.v3.resources import (
         DriveList,
         DriveResource,
@@ -49,14 +50,14 @@ class Drive:
         )
         self.files: DriveResource.FilesResource = self.service.files()
 
-    def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
+    def get(self, file_id: FileId, fields: str = "*", **kwargs: Any) -> File:
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
 
     def download(
         self,
         out_filepath: FilePath,
-        file_id: str,
+        file_id: FileId,
         mime_type: GoogleMimeTypes,
         recursive: bool = False,
         conversion_map: dict[
@@ -109,7 +110,7 @@ class Drive:
     @staticmethod
     def _upload_file_body(
         name: str,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         body: File | None = None,
         **kwargs: Any,
     ) -> dict[str, File | Any]:
@@ -129,7 +130,7 @@ class Drive:
 
     def copy(
         self,
-        file_id: str,
+        file_id: FileId,
         to_filename: str,
         to_folder_id: str,
         body: File | None = None,
@@ -153,7 +154,7 @@ class Drive:
 
     def update(
         self,
-        file_id: str,
+        file_id: FileId,
         filepath: FilePath,
         body: File | None = None,
         **kwargs: Any,
@@ -220,7 +221,7 @@ class Drive:
             query=f"{q_escape(parent_id)} in parents", fields=fields, **kwargs
         )
 
-    def _query_children(self, name: str, parents: List[str], q: str | None = None):
+    def _query_children(self, name: str, parents: List[FileId], q: str | None = None):
         filename = Path(name)
 
         parents_list = " or ".join(
@@ -245,7 +246,7 @@ class Drive:
         self,
         name: str,
         filepath: FilePath,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         team_drives: bool = True,
     ) -> File | None:
 
@@ -260,7 +261,7 @@ class Drive:
             return None
 
     def _create_nested_folders(
-        self, filepath: Path, parents: List[str] | None, update: bool = True
+        self, filepath: Path, parents: List[FileId] | None, update: bool = True
     ) -> None:
         dirs = str(os.path.normpath(filepath)).split(os.sep)
 
@@ -289,7 +290,7 @@ class Drive:
         self,
         filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         create_folders: bool = False,
         update: bool = False,
         **kwargs: Any,
@@ -324,7 +325,7 @@ class Drive:
         name: str,
         filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         body: File | None = None,
         update: bool = True,
         **kwargs,
@@ -353,7 +354,7 @@ class Drive:
         self,
         filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         body: File | None = None,
         update: bool = True,
         **kwargs: Any,
@@ -379,7 +380,7 @@ class Drive:
         data: bytes,
         name: str,
         mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | None = None,
+        parents: List[FileId] | None = None,
         body: File | None = None,
         update: bool = True,
         **kwargs: Any,
@@ -422,7 +423,7 @@ class Drive:
         return folder_dict
 
     def permissions_get(
-        self, file_id: str, permission_id: str, **kwargs: Any
+        self, file_id: FileId, permission_id: str, **kwargs: Any
     ) -> Permission:
         file_id = parse_file_id(file_id)
 
@@ -433,7 +434,7 @@ class Drive:
         )
 
     def permissions_list(
-        self, file_id: str, fields: str = "*", **kwargs: Any
+        self, file_id: FileId, fields: str = "*", **kwargs: Any
     ) -> Iterable[Permission]:
         file_id = parse_file_id(file_id)
 
@@ -450,7 +451,7 @@ class Drive:
                 yield file
 
     def _permission_update_if_exists(
-        self, file_id: str, user_permission: Permission
+        self, file_id: FileId, user_permission: Permission
     ) -> Permission | None:
         for p in self.permissions_list(file_id):
             if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
@@ -460,7 +461,7 @@ class Drive:
 
     def permissions_create(
         self,
-        file_id: str,
+        file_id: FileId,
         email_address: str,
         permission: Permission | None = None,
         sendNotificationEmail: bool = True,
@@ -497,7 +498,7 @@ class Drive:
             .execute()
         )
 
-    def permissions_delete(self, file_id: str, permission_id: str, **kwargs: Any):
+    def permissions_delete(self, file_id: FileId, permission_id: str, **kwargs: Any):
         file_id = parse_file_id(file_id)
 
         return (

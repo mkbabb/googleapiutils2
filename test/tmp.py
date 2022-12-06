@@ -20,20 +20,30 @@ drive = Drive(creds=creds)
 
 folder = "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
 
+filepath = "googleapiutils"
+parent_folder = drive.create_drive_file_object(
+    filepath=filepath,
+    create_folders=True,
+    parents=[folder],
+    mime_type=GoogleMimeTypes.folder,
+    update=True,
+)
+
 filepath = "googleapiutils/hey/what"
 t_file = drive.create_drive_file_object(
     filepath=filepath,
     create_folders=True,
-    parents=[folder],
+    parents=[parent_folder],
     mime_type=GoogleMimeTypes.sheets,
     update=True,
 )
+
 
 filepath = "googleapiutils/hey/what/who!!!!/a's a really cool thing"
 t_file = drive.create_drive_file_object(
     filepath=filepath,
     create_folders=True,
-    parents=[folder],
+    parents=[parent_folder],
     mime_type=GoogleMimeTypes.sheets,
     update=True,
 )

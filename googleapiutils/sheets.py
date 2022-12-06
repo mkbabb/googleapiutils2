@@ -11,6 +11,8 @@ from googleapiclient import discovery
 from .utils import parse_file_id, to_base
 
 if TYPE_CHECKING:
+    from .utils import FileId
+
     from googleapiclient._apis.sheets.v4.resources import (
         BatchUpdateValuesRequest,
         SheetsResource,
@@ -59,7 +61,7 @@ class Sheets:
 
     def get(
         self,
-        spreadsheet_id: str,
+        spreadsheet_id: FileId,
         **kwargs: Any,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -67,7 +69,7 @@ class Sheets:
 
     def values(
         self,
-        spreadsheet_id: str,
+        spreadsheet_id: FileId,
         range_name: str,
         **kwargs: Any,
     ) -> ValueRange:
@@ -106,7 +108,7 @@ class Sheets:
 
     def batchUpdate(
         self,
-        spreadsheet_id: str,
+        spreadsheet_id: FileId,
         data: list[ValueRange],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
@@ -129,7 +131,7 @@ class Sheets:
 
     def update(
         self,
-        spreadsheet_id: str,
+        spreadsheet_id: FileId,
         range_name: str,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
@@ -164,7 +166,7 @@ class Sheets:
                 .execute()
             )
 
-    def clear(self, spreadsheet_id: str, range_name: str, **kwargs: Any):
+    def clear(self, spreadsheet_id: FileId, range_name: str, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         return (
