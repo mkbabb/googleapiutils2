@@ -21,7 +21,7 @@ drive = Drive(creds=creds)
 folder = "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
 
 filepath = "googleapiutils"
-parent_folder = drive.create_drive_file_object(
+parent_folder = drive.create(
     filepath=filepath,
     create_folders=True,
     parents=[folder],
@@ -30,7 +30,7 @@ parent_folder = drive.create_drive_file_object(
 )
 
 filepath = "googleapiutils/hey/what"
-t_file = drive.create_drive_file_object(
+t_file = drive.create(
     filepath=filepath,
     create_folders=True,
     parents=[parent_folder],
@@ -39,8 +39,8 @@ t_file = drive.create_drive_file_object(
 )
 
 
-filepath = "googleapiutils/hey/what/who!!!!/a's a really cool thing"
-t_file = drive.create_drive_file_object(
+filepath = "googleapiutils/hey/what/who!!!!/b's a really cool thing"
+t_file = drive.create(
     filepath=filepath,
     create_folders=True,
     parents=[parent_folder],

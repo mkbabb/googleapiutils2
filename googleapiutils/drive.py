@@ -280,7 +280,7 @@ class Drive:
                 t_kwargs = self._upload_file_body(
                     name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
                 )
-                folder = self.create_drive_file_object(**t_kwargs)
+                folder = self.create(**t_kwargs)
 
             parents = [folder["id"]]
 
@@ -293,6 +293,7 @@ class Drive:
         parents: List[FileId] | None = None,
         create_folders: bool = False,
         update: bool = False,
+        fields: str = "*",
         **kwargs: Any,
     ) -> File:
         filepath = Path(filepath)
@@ -319,7 +320,7 @@ class Drive:
             }
             file = self.files.create(**kwargs).execute()
 
-            return self.get(file_id=file["id"])
+            return self.get(file_id=file["id"], fields=fields)
 
     def _upload(
         self,
@@ -330,6 +331,7 @@ class Drive:
         parents: List[FileId] | None = None,
         body: File | None = None,
         update: bool = True,
+        fields: str = "*",
         **kwargs,
     ) -> File:
         filepath = Path(filepath)
@@ -351,7 +353,7 @@ class Drive:
         kwargs["media_body"] = uploader()
 
         file = self.files.create(**kwargs).execute()
-        return self.get(file_id=file["id"])
+        return self.get(file_id=file["id"], fields=fields)
 
     def upload_file(
         self,
