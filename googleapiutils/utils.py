@@ -86,6 +86,11 @@ def update_url_params(url: str, params: dict) -> str:
     return url_obj.geturl()
 
 
+def q_escape(s: str) -> str:
+    s = s.replace("'", r"\'")
+    return f"'{s}'"
+
+
 def get_oauth2_creds(
     client_config: FilePath | dict = CONFIG_PATH,
     token_path: FilePath = TOKEN_PATH,

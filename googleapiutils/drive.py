@@ -5,12 +5,19 @@ from io import BytesIO
 from pathlib import Path
 from typing import *
 
+
 import googleapiclient
 import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from .utils import FilePath, GoogleMimeTypes, download_large_file, parse_file_id
+from .utils import (
+    FilePath,
+    GoogleMimeTypes,
+    download_large_file,
+    parse_file_id,
+    q_escape,
+)
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -209,13 +216,22 @@ class Drive:
     ) -> Iterable[File]:
         parent_id = parse_file_id(parent_id)
 
-        return self.list(query=f"'{parent_id}' in parents", fields=fields, **kwargs)
+        return self.list(
+            query=f"{q_escape(parent_id)} in parents", fields=fields, **kwargs
+        )
 
     def _query_children(self, name: str, parents: List[str], q: str | None = None):
         filename = Path(name)
 
-        parents_list = " or ".join((f"'{parent}' in parents" for parent in parents))
-        names_list = " or ".join((f"name = '{filename}'", f"name = '{filename.stem}'"))
+        parents_list = " or ".join(
+            (f"{q_escape(parent)} in parents" for parent in parents)
+        )
+        names_list = " or ".join(
+            (
+                f"name = {q_escape(str(filename))}",
+                f"name = {q_escape(filename.stem)}",
+            )
+        )
 
         queries = [parents_list, names_list, "trashed = false"]
         if q is not None:
