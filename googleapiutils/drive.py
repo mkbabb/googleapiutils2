@@ -287,7 +287,7 @@ class Drive:
                         parents=parents,
                         mimeType=GoogleMimeTypes.folder.value,
                     )
-                )
+                ).execute()
 
         for dirname in filepath.parts[:-1]:
             folder = create_or_get_if_exists(dirname, parents)
