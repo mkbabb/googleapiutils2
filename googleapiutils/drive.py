@@ -281,7 +281,7 @@ class Drive:
             if update and (folder := next(folders, None)) is not None:
                 return folder
             else:
-                return self.create(
+                return self.files.create(
                     **self._upload_file_body(
                         name=dirname,
                         parents=parents,
