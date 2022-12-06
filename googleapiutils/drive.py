@@ -353,9 +353,7 @@ class Drive:
         }
 
         kwargs["media_body"] = uploader()
-
-        file = self.files.create(**kwargs).execute()
-        return self.get(file_id=file["id"], fields=fields)
+        return self.files.create(**kwargs).execute()
 
     def upload_file(
         self,
