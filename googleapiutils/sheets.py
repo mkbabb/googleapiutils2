@@ -11,15 +11,15 @@ from googleapiclient import discovery
 from .utils import parse_file_id, to_base
 
 if TYPE_CHECKING:
-    from .utils import FileId
-
     from googleapiclient._apis.sheets.v4.resources import (
         BatchUpdateValuesRequest,
         SheetsResource,
+        Spreadsheet,
         UpdateValuesResponse,
         ValueRange,
-        Spreadsheet,
     )
+
+    from .utils import FileId
 
 VERSION = "v4"
 

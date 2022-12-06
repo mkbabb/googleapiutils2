@@ -19,8 +19,6 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from .utils import FileId
-
     from googleapiclient._apis.drive.v3.resources import (
         DriveList,
         DriveResource,
@@ -29,6 +27,8 @@ if TYPE_CHECKING:
         Permission,
         PermissionList,
     )
+
+    from .utils import FileId
 
 
 DEFAULT_DOWNLOAD_CONVERSION_MAP = {
