@@ -279,7 +279,7 @@ class Drive:
         if mime_type is not None:
             kwargs = {
                 **self._upload_file_body(
-                    name=filepath.name, parents=parents, mimeType=mime_type
+                    name=filepath.name, parents=parents, mimeType=mime_type.value
                 ),
                 **kwargs,
             }
@@ -307,7 +307,7 @@ class Drive:
 
         kwargs = {
             **self._upload_file_body(
-                name=name, parents=parents, body=body, mimeType=mime_type
+                name=name, parents=parents, body=body, mimeType=mime_type.value
             ),
             **kwargs,
         }
