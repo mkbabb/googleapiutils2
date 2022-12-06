@@ -12,8 +12,12 @@ from .utils import parse_file_id, to_base
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
-        BatchUpdateValuesRequest, SheetsResource, UpdateValuesResponse,
-        ValueRange)
+        BatchUpdateValuesRequest,
+        SheetsResource,
+        UpdateValuesResponse,
+        ValueRange,
+        Spreadsheet,
+    )
 
 VERSION = "v4"
 
@@ -50,10 +54,18 @@ class Sheets:
         else:
             return key
 
-    def create(self):
+    def create(self) -> Spreadsheet:
         return self.sheets.create().execute()
 
     def get(
+        self,
+        spreadsheet_id: str,
+        **kwargs: Any,
+    ) -> Spreadsheet:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()
+
+    def values(
         self,
         spreadsheet_id: str,
         range_name: str,
@@ -166,7 +178,7 @@ class Sheets:
         df = pd.DataFrame(values["values"])
         df = df.rename(columns=df.iloc[0]).drop(df.index[0])
         return df
-    
+
     @staticmethod
     def from_frame(df: pd.DataFrame) -> list[list[Any]]:
         data: list = df.fillna("").values.tolist()
