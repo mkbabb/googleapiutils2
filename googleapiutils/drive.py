@@ -365,7 +365,7 @@ class Drive:
     def upload_file(
         self,
         filepath: FilePath,
-        name: str | None,
+        name: str | None = None,
         mime_type: GoogleMimeTypes | None = None,
         parents: List[FileId] | None = None,
         body: File | None = None,
