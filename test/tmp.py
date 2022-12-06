@@ -12,15 +12,24 @@ creds = get_oauth2_creds(client_config=config_path)
 drive = Drive(creds=creds)
 
 
-download_folder = (
-    "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
-)
+# download_folder = (
+#     "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
+# )
 
-drive.download("heyy", download_folder, GoogleMimeTypes.folder, True)
+# drive.download("heyy", download_folder, GoogleMimeTypes.folder, True)
 
 folder = "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
 
 filepath = "googleapiutils/hey/what"
+t_file = drive.create_drive_file_object(
+    filepath=filepath,
+    create_folders=True,
+    parents=[folder],
+    mime_type=GoogleMimeTypes.sheets,
+    update=True,
+)
+
+filepath = "googleapiutils/hey/what/who!!!!/a"
 t_file = drive.create_drive_file_object(
     filepath=filepath,
     create_folders=True,

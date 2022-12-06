@@ -211,6 +211,20 @@ class Drive:
 
         return self.list(query=f"'{parent_id}' in parents", fields=fields, **kwargs)
 
+    def _query_children(self, name: str, parents: List[str], q: str | None = None):
+        filename = Path(name)
+
+        parents_list = " or ".join((f"'{parent}' in parents" for parent in parents))
+        names_list = " or ".join((f"name = '{filename}'", f"name = '{filename.stem}'"))
+
+        queries = [parents_list, names_list, "trashed = false"]
+        if q is not None:
+            queries.append(q)
+
+        query = " and ".join((f"({i})" for i in queries))
+
+        return self.list(query=query)
+
     def _update_if_exists(
         self,
         name: str,
@@ -222,37 +236,38 @@ class Drive:
         if parents is None:
             return None
 
-        filename = Path(name)
-
-        parents_list = " or ".join((f"'{parent}' in parents" for parent in parents))
-        names_list = " or ".join((f"name = '{filename}'", f"name = '{filename.stem}'"))
-
-        queries = [parents_list, names_list, "trashed = false"]
-
-        query = " and ".join((f"({i})" for i in queries))
-
-        kwargs = (
-            dict(supportsAllDrives=True, includeItemsFromAllDrives=True)
-            if team_drives
-            else {}
-        )
-
-        files = self.list(query=query, **kwargs)
+        files = self._query_children(name=name, parents=parents)
 
         for file in files:
             return self.update(file["id"], filepath, supportsAllDrives=team_drives)
         else:
             return None
 
-    def _create_nested_folders(self, filepath: Path, parents: List[str] | None) -> None:
+    def _create_nested_folders(
+        self, filepath: Path, parents: List[str] | None, update: bool = True
+    ) -> None:
         dirs = str(os.path.normpath(filepath)).split(os.sep)
 
         for dirname in dirs[:-1]:
-            t_kwargs = self._upload_file_body(
-                name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
-            )
-            file = self.files.create(**t_kwargs).execute()
-            parents = [file["id"]]
+            folder = None
+
+            if update:
+                folders = self._query_children(
+                    name=dirname,
+                    parents=parents,
+                    q=f"mimeType = '{GoogleMimeTypes.folder.value}'",
+                )
+                folder = next(folders, None)
+
+            if folder is None:
+                t_kwargs = self._upload_file_body(
+                    name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
+                )
+                folder = self.files.create(**t_kwargs).execute()
+
+            parents = [folder["id"]]
+
+        return parents
 
     def create_drive_file_object(
         self,
@@ -266,15 +281,17 @@ class Drive:
         filepath = Path(filepath)
         parents = parse_file_id(parents)
 
+        if create_folders:
+            parents = self._create_nested_folders(
+                filepath=filepath, parents=parents, update=update
+            )
+
         if (
             update
-            and (file := self._update_if_exists(filepath.name, filepath, parents))
+            and (file := next(self._query_children(filepath.name, parents), None))
             is not None
         ):
             return file
-
-        if create_folders:
-            self._create_nested_folders(filepath=filepath, parents=parents)
 
         if mime_type is not None:
             kwargs = {
