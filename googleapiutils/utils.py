@@ -19,12 +19,8 @@ FilePath = str | Path
 
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import (
-        File,
-    )
-    from googleapiclient._apis.sheets.v4.resources import (
-        Spreadsheet,
-    )
+    from googleapiclient._apis.drive.v3.resources import File
+    from googleapiclient._apis.sheets.v4.resources import Spreadsheet
 
     FileId = str | File | Spreadsheet
 

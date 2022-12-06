@@ -200,8 +200,14 @@ class Drive:
         query: str,
         fields: str = "*",
         order_by: str = "modifiedTime desc",
+        team_drives: bool = True,
         **kwargs: Any,
     ) -> Iterable[File]:
+        if team_drives:
+            kwargs.update(
+                {"includeItemsFromAllDrives": True, "supportsAllDrives": True}
+            )
+
         list_func = lambda x: self.files.list(
             q=query,
             pageToken=x,
@@ -224,7 +230,6 @@ class Drive:
         )
 
     def _query_children(self, name: str, parents: List[FileId], q: str | None = None):
-        # TODO! Fix team drive support
         filename = Path(name)
 
         parents_list = " or ".join(
@@ -266,25 +271,26 @@ class Drive:
     def _create_nested_folders(
         self, filepath: Path, parents: List[FileId] | None, update: bool = True
     ) -> None:
-        dirs = str(os.path.normpath(filepath)).split(os.sep)
+        def create_or_get_if_exists(name: str, parents: List[FileId]):
+            folders = self._query_children(
+                name=name,
+                parents=parents,
+                q=f"mimeType = '{GoogleMimeTypes.folder.value}'",
+            )
 
-        for dirname in dirs[:-1]:
-            folder = None
-
-            if update:
-                folders = self._query_children(
-                    name=dirname,
-                    parents=parents,
-                    q=f"mimeType = '{GoogleMimeTypes.folder.value}'",
+            if update and (folder := next(folders, None)) is not None:
+                return folder
+            else:
+                return self.create(
+                    **self._upload_file_body(
+                        name=dirname,
+                        parents=parents,
+                        mimeType=GoogleMimeTypes.folder.value,
+                    )
                 )
-                folder = next(folders, None)
 
-            if folder is None:
-                t_kwargs = self._upload_file_body(
-                    name=dirname, parents=parents, mimeType=GoogleMimeTypes.folder.value
-                )
-                folder = self.create(**t_kwargs)
-
+        for dirname in filepath.parts[:-1]:
+            folder = create_or_get_if_exists(dirname, parents)
             parents = [folder["id"]]
 
         return parents
