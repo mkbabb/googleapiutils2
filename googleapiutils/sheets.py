@@ -176,9 +176,14 @@ class Sheets:
         )
 
     @staticmethod
-    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
-        df = pd.DataFrame(values["values"], **kwargs)
-        df = df.rename(columns=df.iloc[0]).drop(df.index[0])
+    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
+        if not len(rows := values.get("values", [])):
+            return None
+
+        kwargs["columns"] = kwargs.get("columns", []) + rows[0]
+        rows = rows[1:] if len(rows) > 1 else []
+
+        df = pd.DataFrame(rows, **kwargs)
         return df
 
     @staticmethod
