@@ -176,8 +176,8 @@ class Sheets:
         )
 
     @staticmethod
-    def to_frame(values: ValueRange) -> pd.DataFrame:
-        df = pd.DataFrame(values["values"])
+    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
+        df = pd.DataFrame(values["values"], **kwargs)
         df = df.rename(columns=df.iloc[0]).drop(df.index[0])
         return df
 
