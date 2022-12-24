@@ -30,31 +30,113 @@ class ValueInputOption(Enum):
     user_entered = "USER_ENTERED"
 
 
-UPDATE_CHUNK_SIZE = 100
+class ValueRenderOption(Enum):
+    formatted = "FORMATTED_VALUE"
+    unformatted = "UNFORMATTED_VALUE"
+    formula = "FORMULA"
+
+
+def format_range(range_name: str, sheet_name: str | None = None) -> str:
+    if sheet_name is not None:
+        return f"'{sheet_name}'!{range_name}"
+    else:
+        return range_name
+
+
+def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
+    t_col = "".join(
+        map(
+            lambda x: string.ascii_letters[x - 1].upper(),
+            to_base(col, base=26),
+        )
+    )
+    key = f"{t_col}{row}"
+    return format_range(key, sheet_name)
+
+
+def to_slice(*slices: slice | int) -> tuple[slice, ...]:
+    func = lambda slc: slc if isinstance(slc, slice) else slice(slc, slc)
+    return tuple(map(func, slices))
+
+
+def slices_to_a1(slices: tuple[slice, slice] | slice | int) -> tuple[str, str | None]:
+    match slices:
+        case row_ix, col_ix:
+            r1 = number_to_A1(row_ix.start, col_ix.start)
+            r2 = number_to_A1(row_ix.stop, col_ix.stop)
+            return r1, r2
+        case row_ix if isinstance(row_ix, slice):
+            return str(row_ix.start), str(row_ix.stop)
+        case _:
+            return str(slices), None
+
+
+def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
+    sheet_name = "Sheet1"
+    r1, r2 = "", None
+
+    match ixs:
+        case sheet_name, *slices if isinstance(sheet_name, str):
+            r1, r2 = slices_to_a1(to_slice(*slices))
+        case row_ix, col_ix:
+            r1, r2 = slices_to_a1(to_slice(row_ix, col_ix))
+        case row_ix:
+            r1 = slices_to_a1(row_ix)
+
+    range_name = f"{r1}:{r2}" if r2 is not None else str(r1)
+    return format_range(range_name, sheet_name)
+
+
+class SheetsValueRange:
+    def __init__(
+        self,
+        sheets: SheetsResource.SpreadsheetsResource,
+        spreadsheet_id: str,
+        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
+        **kwargs: Any,
+    ):
+        self.sheets = sheets
+        self.spreadsheet_id = parse_file_id(spreadsheet_id)
+        self.value_render_option = value_render_option
+        self.kwargs = kwargs
+
+    def __getitem__(self, ixs: tuple[str, slice, slice] | slice | int) -> ValueRange:
+        range_name = parse_sheets_ixs(ixs)
+
+        return self.values(
+            self.spreadsheet_id,
+            range_name=range_name,
+            valueRenderOption=self.value_render_option.value,
+            **self.kwargs,
+        )
+
+    def values(
+        self,
+        spreadsheet_id: FileId,
+        range_name: str,
+        **kwargs: Any,
+    ) -> ValueRange:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        return (
+            self.sheets.values()
+            .get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                **kwargs,
+            )
+            .execute()
+        )
 
 
 class Sheets:
+    UPDATE_CHUNK_SIZE: Final = 100
+
     def __init__(self, creds: Credentials):
         self.creds = creds
         self.service: SheetsResource = discovery.build(
             "sheets", VERSION, credentials=self.creds
         )
         self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
-
-    @staticmethod
-    def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
-        t_col = "".join(
-            map(
-                lambda x: string.ascii_letters[x - 1].upper(),
-                to_base(col, base=26),
-            )
-        )
-        key = f"{t_col}{row}"
-
-        if sheet_name is not None:
-            return f"'{sheet_name}'!{key}"
-        else:
-            return key
 
     def create(self) -> Spreadsheet:
         return self.sheets.create().execute()
@@ -70,14 +152,16 @@ class Sheets:
     def values(
         self,
         spreadsheet_id: FileId,
-        range_name: str,
+        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
-    ) -> ValueRange:
+    ) -> "SheetsValueRange":
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return (
-            self.sheets.values()
-            .get(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
-            .execute()
+
+        return SheetsValueRange(
+            sheets=self.sheets,
+            spreadsheet_id=spreadsheet_id,
+            value_render_option=value_render_option,
+            **kwargs,
         )
 
     @staticmethod
@@ -92,14 +176,13 @@ class Sheets:
         for i in range(0, len(values), chunk_size):
             t_values = values[i : i + chunk_size]
 
-            start_row = i + row + 1
-            end_row = i + chunk_size + row + 1
-
+            # TODO! use new logic from slicing
+            start_row, end_row = i + row + 1, i + chunk_size + row + 1
             start_col, end_col = col + 1, len(values) + col + 1
 
             start_ix, end_ix = (
-                Sheets.number_to_A1(row=start_row, col=start_col),
-                Sheets.number_to_A1(row=end_row, col=end_col),
+                number_to_A1(row=start_row, col=start_col),
+                number_to_A1(row=end_row, col=end_col),
             )
 
             range_name = f"{start_ix}:{end_ix}"
@@ -142,29 +225,17 @@ class Sheets:
 
         body: ValueRange = {"values": values}
 
-        if auto_batch and len(values) > UPDATE_CHUNK_SIZE:
-            for t_range_name, t_values in self._chunk_values(values, row=0, col=0):
-                t_range_name = f"{range_name}!{t_range_name}"
-
-                self.update(
-                    spreadsheet_id=spreadsheet_id,
-                    range_name=t_range_name,
-                    values=t_values,
-                    **kwargs,
-                )
-            return None
-        else:
-            return (
-                self.sheets.values()
-                .update(
-                    spreadsheetId=spreadsheet_id,
-                    range=range_name,
-                    body=body,
-                    valueInputOption=value_input_option.value,
-                    **kwargs,
-                )
-                .execute()
+        return (
+            self.sheets.values()
+            .update(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body=body,
+                valueInputOption=value_input_option.value,
+                **kwargs,
             )
+            .execute()
+        )
 
     def clear(self, spreadsheet_id: FileId, range_name: str, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -180,10 +251,16 @@ class Sheets:
         if not len(rows := values.get("values", [])):
             return None
 
-        kwargs["columns"] = kwargs.get("columns", []) + rows[0]
+        columns = kwargs.pop("columns", []) + rows[0]
         rows = rows[1:] if len(rows) > 1 else []
 
         df = pd.DataFrame(rows, **kwargs)
+
+        cols = df.shape[1]
+        left_cols = columns[:cols]
+        df.columns = left_cols
+        df = df.reindex(columns=columns)
+
         return df
 
     @staticmethod
