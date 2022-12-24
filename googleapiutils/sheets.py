@@ -36,6 +36,10 @@ class ValueRenderOption(Enum):
     formula = "FORMULA"
 
 
+def ix_to_str(ix: int | str | Ellipsis):
+    return str(ix) if ix is not ... else ""
+
+
 def format_range(range_name: str, sheet_name: str | None = None) -> str:
     if sheet_name is not None:
         return f"'{sheet_name}'!{range_name}"
@@ -44,13 +48,19 @@ def format_range(range_name: str, sheet_name: str | None = None) -> str:
 
 
 def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
-    t_col = "".join(
-        map(
-            lambda x: string.ascii_letters[x - 1].upper(),
-            to_base(col, base=26),
+    t_col = (
+        "".join(
+            map(
+                lambda x: string.ascii_letters[x - 1].upper(),
+                to_base(col, base=26),
+            )
         )
+        if col is not ...
+        else ""
     )
-    key = f"{t_col}{row}"
+    t_row = ix_to_str(row)
+
+    key = f"{t_col}{t_row}"
     return format_range(key, sheet_name)
 
 
@@ -66,9 +76,9 @@ def slices_to_a1(slices: tuple[slice, slice] | slice | int) -> tuple[str, str | 
             r2 = number_to_A1(row_ix.stop, col_ix.stop)
             return r1, r2
         case row_ix if isinstance(row_ix, slice):
-            return str(row_ix.start), str(row_ix.stop)
+            return ix_to_str(row_ix.start), ix_to_str(row_ix.stop)
         case _:
-            return str(slices), None
+            return ix_to_str(slices), None
 
 
 def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
@@ -100,31 +110,27 @@ class SheetsValueRange:
         self.value_render_option = value_render_option
         self.kwargs = kwargs
 
-    def __getitem__(self, ixs: tuple[str, slice, slice] | slice | int) -> ValueRange:
-        range_name = parse_sheets_ixs(ixs)
-
-        return self.values(
-            self.spreadsheet_id,
-            range_name=range_name,
-            valueRenderOption=self.value_render_option.value,
-            **self.kwargs,
-        )
-
     def values(
         self,
-        spreadsheet_id: FileId,
         range_name: str,
         **kwargs: Any,
     ) -> ValueRange:
-        spreadsheet_id = parse_file_id(spreadsheet_id)
         return (
             self.sheets.values()
             .get(
-                spreadsheetId=spreadsheet_id,
+                spreadsheetId=self.spreadsheet_id,
                 range=range_name,
                 **kwargs,
             )
             .execute()
+        )
+
+    def __getitem__(self, ixs: tuple[str, slice, slice] | slice | int) -> ValueRange:
+        range_name = parse_sheets_ixs(ixs)
+        return self.values(
+            range_name=range_name,
+            valueRenderOption=self.value_render_option.value,
+            **self.kwargs,
         )
 
 
@@ -150,6 +156,17 @@ class Sheets:
         return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()
 
     def values(
+        self,
+        spreadsheet_id: FileId,
+        range_name: str,
+        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
+        **kwargs: Any,
+    ) -> ValueRange:
+        return self.sheet(
+            spreadsheet_id=spreadsheet_id, value_render_option=value_render_option
+        ).values(range_name=range_name, **kwargs)
+
+    def sheet(
         self,
         spreadsheet_id: FileId,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
