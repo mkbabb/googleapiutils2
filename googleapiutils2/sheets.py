@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         ValueRange,
     )
 
-    from .utils import FileId
+    from .utils import str
 
 VERSION = "v4"
 
@@ -149,7 +149,7 @@ class Sheets:
 
     def get(
         self,
-        spreadsheet_id: FileId,
+        spreadsheet_id: str,
         **kwargs: Any,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -157,7 +157,7 @@ class Sheets:
 
     def values(
         self,
-        spreadsheet_id: FileId,
+        spreadsheet_id: str,
         range_name: str,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
@@ -168,7 +168,7 @@ class Sheets:
 
     def sheet(
         self,
-        spreadsheet_id: FileId,
+        spreadsheet_id: str,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ) -> "SheetsValueRange":
@@ -208,7 +208,7 @@ class Sheets:
 
     def batchUpdate(
         self,
-        spreadsheet_id: FileId,
+        spreadsheet_id: str,
         data: list[ValueRange],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
@@ -231,7 +231,7 @@ class Sheets:
 
     def update(
         self,
-        spreadsheet_id: FileId,
+        spreadsheet_id: str,
         range_name: str,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
@@ -254,7 +254,7 @@ class Sheets:
             .execute()
         )
 
-    def clear(self, spreadsheet_id: FileId, range_name: str, **kwargs: Any):
+    def clear(self, spreadsheet_id: str, range_name: str, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         return (

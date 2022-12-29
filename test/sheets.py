@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from googlea_pi_utils.sheets import Sheets
-from googlea_pi_utils.utils import get_oauth2_creds
+from googleapiutils2.sheets import Sheets
+from googleapiutils2.utils import get_oauth2_creds
 
 dir = Path("auth")
 config_path = dir.joinpath("friday-institute-reports.credentials.json")

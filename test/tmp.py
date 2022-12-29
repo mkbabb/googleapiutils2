@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import *
 
-from googlea_pi_utils.drive import Drive
-from googlea_pi_utils.utils import GoogleMimeTypes, get_oauth2_creds
+from googleapiutils2.drive import Drive
+from googleapiutils2.utils import GoogleMimeTypes, get_oauth2_creds
 
 dir = Path("auth")
 

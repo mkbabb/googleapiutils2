@@ -1,7 +1,11 @@
 from __future__ import annotations
+import functools
 
 import json
 import pickle
+import random
+import time
+import traceback
 import urllib.parse
 from enum import Enum
 from functools import cache
@@ -21,8 +25,6 @@ FilePath = str | Path
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import Spreadsheet
-
-    FileId = str | File | Spreadsheet
 
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
@@ -133,6 +135,21 @@ def get_oauth2_creds(
         )
 
 
+def download_large_file(
+    url: str, filepath: FilePath, chunk_size=googleapiclient.http.DEFAULT_CHUNK_SIZE
+) -> Path:
+    filepath = Path(filepath)
+
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+
+        with open(filepath, "wb") as f:
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                f.write(chunk)
+
+    return filepath
+
+
 def get_id_from_url(url: str) -> str:
     url_obj = urllib.parse.urlparse(url)
     path = url_obj.path
@@ -156,49 +173,27 @@ def get_id_from_url(url: str) -> str:
             raise ValueError(f"Could not parse file URL of {url}")
 
 
-def download_large_file(
-    url: str, filepath: FilePath, chunk_size=googleapiclient.http.DEFAULT_CHUNK_SIZE
-):
-    filepath = Path(filepath)
-
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-
-        with open(filepath, "wb") as f:
-            for chunk in r.iter_content(chunk_size=chunk_size):
-                f.write(chunk)
-
-
+@cache
 def parse_file_id(
-    file_id: FileId | Iterable[FileId] | None,
-) -> str | Iterable[str] | None:
-    def obj_to_id(file: str | File | Spreadsheet):
-        if isinstance(file, str):
-            return file
-        elif isinstance(file, dict):
-            return file.get("id", file.get("spreadsheetId"))
-        else:
-            return None
-
-    @cache
+    file_id: str,
+) -> str:
     def parse(file_id: str) -> str:
-        if file_id.find("http") != -1:
+        if "http" in file_id:
             return get_id_from_url(file_id)
         else:
             return file_id
 
-    def inner(file_id: FileId) -> str:
-        if (id := obj_to_id(file_id)) is not None:
-            return parse(id)
-        else:
-            return None
+    def obj_to_id(file: str) -> str:
+        if isinstance(file, str):
+            return file
+        elif isinstance(file, dict):
+            return file.get("id", file.get("spreadsheetId", None))
 
-    if isinstance(file_id, str):
-        return inner(file_id)
-    elif isinstance(file_id, Iterable):
-        return list(map(inner, file_id))
+    if (id := obj_to_id(file_id)) is not None:
+        return parse(id)
     else:
-        return None
+        return file_id
+
 
 
 def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
@@ -227,3 +222,27 @@ def take_annotation_from(
         return new_function
 
     return decorator
+
+
+def retry_with_backoff(retries: int = 4, backoff: int = 5) -> Callable[P, T]:
+    """Modified from: https://keestalkstech.com/2021/03/python-utility-function-retry-with-exponential-backoff/"""
+
+    def inner(func: Callable[P, T]) -> Callable[P, T]:
+        @functools.wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            x = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    traceback.print_exc(e)
+                    if x == retries:
+                        raise
+
+                sleep = backoff * 2**x + random.uniform(0, 1)
+                time.sleep(sleep)
+                x += 1
+
+        return wrapper
+
+    return inner
