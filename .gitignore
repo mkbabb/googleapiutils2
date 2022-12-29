@@ -7,6 +7,7 @@ vendor/
 bootstrap/
 storage/
 auth/
+dist/
 
 data/
 __pycache__/

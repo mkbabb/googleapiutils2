@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils.drive import Drive
-from googleapiutils.utils import get_oauth2_creds
+from googlea_pi_utils.drive import Drive
+from googlea_pi_utils.utils import get_oauth2_creds
 
 dir = Path("auth")
 config_path = dir.joinpath("friday-institute-reports.credentials.json")

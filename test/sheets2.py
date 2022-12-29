@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils.sheets import Sheets
-from googleapiutils.utils import get_oauth2_creds
+from googlea_pi_utils.sheets import Sheets
+from googlea_pi_utils.utils import get_oauth2_creds
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
 
