@@ -6,7 +6,7 @@ from types import EllipsisType
 from typing import *
 
 from ..utils import parse_file_id, to_base
-from .misc import ValueInputOption, ValueRenderOption
+from .misc import DEFAULT_SHEET_NAME, ValueInputOption, ValueRenderOption
 from .sheets import Sheets
 
 if TYPE_CHECKING:
@@ -78,9 +78,6 @@ def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
     range_name = f"{r1}:{r2}" if r2 is not None else str(r1)
 
     return sheet_name, range_name
-
-
-DEFAULT_SHEET_NAME = "Sheet1"
 
 
 class SheetsValueRange:

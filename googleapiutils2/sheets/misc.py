@@ -2,6 +2,8 @@ from enum import Enum
 
 VERSION = "v4"
 
+DEFAULT_SHEET_NAME = "Sheet1"
+
 
 class ValueInputOption(Enum):
     unspecified = "INPUT_VALUE_OPTION_UNSPECIFIED"

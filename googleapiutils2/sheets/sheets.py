@@ -7,7 +7,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
 from ..utils import parse_file_id
-from .misc import VERSION, ValueInputOption, ValueRenderOption
+from .misc import DEFAULT_SHEET_NAME, VERSION, ValueInputOption, ValueRenderOption
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -42,7 +42,7 @@ class Sheets:
     def values(
         self,
         spreadsheet_id: str,
-        range_name: str,
+        range_name: str = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ) -> ValueRange:
