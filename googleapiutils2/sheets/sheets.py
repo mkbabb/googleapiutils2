@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import *
 
-
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
+from collections import defaultdict
 
 from ..utils import parse_file_id
 from .misc import DEFAULT_SHEET_NAME, VERSION, ValueInputOption, ValueRenderOption
@@ -19,14 +19,16 @@ if TYPE_CHECKING:
 
 
 class Sheets:
-    UPDATE_CHUNK_SIZE: Final = 100
-
     def __init__(self, creds: Credentials):
         self.creds = creds
         self.service: SheetsResource = discovery.build(
             "sheets", VERSION, credentials=self.creds
         )
         self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
+
+        self._batched_values: defaultdict[
+            str, dict[str, list[list[Any]]]
+        ] = defaultdict(dict)
 
     def create(self) -> Spreadsheet:
         return self.sheets.create().execute()
@@ -63,7 +65,7 @@ class Sheets:
         values: list[list[Any]],
         row: int = 0,
         col: int = 0,
-        chunk_size: int = UPDATE_CHUNK_SIZE,
+        chunk_size: int = 100,
     ) -> Iterable[tuple[str, list[list]]]:
         chunk_size = min(len(values), chunk_size)
 
@@ -106,27 +108,58 @@ class Sheets:
             .execute()
         )
 
+    def _send_batched_values(
+        self,
+        spreadsheet_id: str,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        **kwargs: Any,
+    ):
+        batch = self._batched_values[spreadsheet_id]
+        if not len(batch):
+            return
+
+        res = self.batch_update(
+            spreadsheet_id=spreadsheet_id,
+            data=batch,
+            value_input_option=value_input_option,
+            **kwargs,
+        )
+        batch.clear()
+        return res
+
     def update(
         self,
         spreadsheet_id: str,
         range_name: str,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        auto_batch_size: int = 1,
         **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        body: ValueRange = {"values": values}
-        return (
-            self.sheets.values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
-                body=body,
-                valueInputOption=value_input_option.value,
-                **kwargs,
+
+        if auto_batch_size == 1:
+            return (
+                self.sheets.values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    body={"values": values},
+                    valueInputOption=value_input_option.value,
+                    **kwargs,
+                )
+                .execute()
             )
-            .execute()
-        )
+
+        batch = self._batched_values[spreadsheet_id]
+        batch[range_name] = values
+
+        if len(batch) >= auto_batch_size:
+            return self._send_batched_values(
+                spreadsheet_id, value_input_option, **kwargs
+            )
+        else:
+            return None
 
     def clear(self, spreadsheet_id: str, range_name: str, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)

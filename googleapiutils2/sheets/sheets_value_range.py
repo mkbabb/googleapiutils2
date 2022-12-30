@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import functools
 import string
+from dataclasses import dataclass
 from types import EllipsisType
 from typing import *
 
 from ..utils import parse_file_id, to_base
 from .misc import DEFAULT_SHEET_NAME, ValueInputOption, ValueRenderOption
 from .sheets import Sheets
-from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
