@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import *
 
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
-from collections import defaultdict
 
 from ..utils import parse_file_id
-from .misc import DEFAULT_SHEET_NAME, VERSION, ValueInputOption, ValueRenderOption
+from .misc import (
+    DEFAULT_SHEET_NAME,
+    VERSION,
+    SheetSlice,
+    ValueInputOption,
+    ValueRenderOption,
+    SheetSliceT,
+)
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -44,11 +51,12 @@ class Sheets:
     def values(
         self,
         spreadsheet_id: str,
-        range_name: str = DEFAULT_SHEET_NAME,
+        range_name: str | SheetSliceT = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ) -> ValueRange:
         spreadsheet_id = parse_file_id(spreadsheet_id)
+        range_name = str(range_name)
         return (
             self.sheets.values()
             .get(
@@ -59,29 +67,6 @@ class Sheets:
             )
             .execute()
         )
-
-    @staticmethod
-    def _chunk_values(
-        values: list[list[Any]],
-        row: int = 0,
-        col: int = 0,
-        chunk_size: int = 100,
-    ) -> Iterable[tuple[str, list[list]]]:
-        chunk_size = min(len(values), chunk_size)
-
-        for i in range(0, len(values), chunk_size):
-            t_values = values[i : i + chunk_size]
-            # TODO! use new logic from slicing
-            start_row, end_row = i + row + 1, i + chunk_size + row + 1
-            start_col, end_col = col + 1, len(values) + col + 1
-
-            start_ix, end_ix = (
-                number_to_A1(row=start_row, col=start_col),
-                number_to_A1(row=end_row, col=end_col),
-            )
-            range_name = f"{start_ix}:{end_ix}"
-
-            yield range_name, t_values
 
     def batch_update(
         self,
@@ -130,13 +115,14 @@ class Sheets:
     def update(
         self,
         spreadsheet_id: str,
-        range_name: str,
+        range_name: str | SheetSliceT,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch_size: int = 1,
         **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
+        range_name = str(range_name)
 
         if auto_batch_size == 1:
             return (
@@ -161,8 +147,9 @@ class Sheets:
         else:
             return None
 
-    def clear(self, spreadsheet_id: str, range_name: str, **kwargs: Any):
+    def clear(self, spreadsheet_id: str, range_name: str | SheetSliceT, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
+        range_name = str(range_name)
         return (
             self.sheets.values()
             .clear(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)

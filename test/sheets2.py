@@ -16,7 +16,13 @@ Sheet = SheetsValueRange(sheets, SHEET_URL)
 Sheet1 = Sheet["Sheet1"]
 slc = SheetSlice[2, ...]
 Sheet1[slc].update([[1, 2]], auto_batch_size=2)
-Sheet1[3, ...].update([[1, 2]], auto_batch_size=2)
+
+sheets.update(
+    SHEET_URL,
+    SheetSlice[3, ...],
+    values=[[1, 2]],
+    auto_batch_size=2,
+)
 
 sheets.batch_update(
     SHEET_URL,
