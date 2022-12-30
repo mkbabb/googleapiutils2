@@ -1,10 +1,7 @@
 import re
-import time
 from itertools import chain
 from pathlib import Path
 from typing import *
-
-import pandas as pd
 
 from googleapiutils2.drive.drive import Drive
 from googleapiutils2.sheets.sheets import Sheets
@@ -13,10 +10,7 @@ from googleapiutils2.utils import get_oauth2_creds
 PSU_ID_RE = re.compile("\[(.*)\]")
 
 
-dir = Path("auth")
-
-config_path = dir.joinpath("friday-institute-reports.credentials.json")
-
+config_path = Path("auth/friday-institute-reports.credentials.json")
 creds = get_oauth2_creds(client_config=config_path)
 
 drive = Drive(creds=creds)
@@ -28,12 +22,10 @@ psu_col, email_col = (
     "What are the email addresses you'd like to grant access to the report? Please separate each email address by a comma.",
 )
 
-responses_sheet = "https://docs.google.com/spreadsheets/d/1hjeVzc_WsEVyth8lje9uZNBvSPldawFpj96lrclOahU/edit#gid=506522074"
+responses_sheet_url = "https://docs.google.com/spreadsheets/d/1hjeVzc_WsEVyth8lje9uZNBvSPldawFpj96lrclOahU/edit#gid=506522074"
 
-t = sheets.get(responses_sheet, "Validated Responses")
-responses_df = pd.DataFrame(t["values"])
-responses_df: pd.DataFrame = responses_df.rename(columns=responses_df.iloc[0]).drop(
-    responses_df.index[0]
+responses_df = sheets.to_frame(
+    sheets.values(responses_sheet_url, "Validated Responses")
 )
 
 responses_df["psu_id"] = responses_df[psu_col].map(

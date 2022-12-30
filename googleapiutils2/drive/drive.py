@@ -9,6 +9,7 @@ import googleapiclient
 import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
+import mimetypes
 
 from ..utils import (
     FilePath,
@@ -42,32 +43,39 @@ class Drive:
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
 
-    def _build_nested_filepath(
-        self,
-        out_filepath: FilePath,
-        file_id: str,
-        mime_type: GoogleMimeTypes = GoogleMimeTypes.folder,
-    ):
-        while mime_type == GoogleMimeTypes.folder:
-            for file in self.list_children(file_id):
-                name, file_id, mime_type = (
-                    file["name"],
-                    file["id"],
-                    GoogleMimeTypes(file["mimeType"]),
-                )
-                out_filepath = out_filepath.joinpath(name)
-
-        return out_filepath, file_id, mime_type
-
-    def _download(
-        self, file_id: str, out_filepath: FilePath, mime_type: GoogleMimeTypes
-    ):
+    def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
         request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
         with out_filepath.open("wb") as out_file:
             downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
             done = False
             while done is False:
                 status, done = downloader.next_chunk()
+        return out_filepath
+
+    def _download_nested_filepath(
+        self,
+        out_filepath: FilePath,
+        file_id: str,
+    ) -> None:
+        for file in self.list_children(file_id):
+            t_name, t_file_id, t_mime_type = (
+                file["name"],
+                file["id"],
+                GoogleMimeTypes(file["mimeType"]),
+            )
+            t_out_filepath = out_filepath.joinpath(t_name)
+
+            if t_mime_type == GoogleMimeTypes.folder:
+                self._download_nested_filepath(
+                    out_filepath=t_out_filepath, file_id=t_file_id
+                )
+            else:
+                self.download(
+                    out_filepath=t_out_filepath,
+                    file_id=t_file_id,
+                    mime_type=t_mime_type,
+                    recursive=True,
+                )
         return out_filepath
 
     def download(
@@ -84,9 +92,7 @@ class Drive:
         out_filepath = Path(out_filepath)
 
         if recursive and mime_type == GoogleMimeTypes.folder:
-            out_filepath, file_id, mime_type = self._build_nested_filepath(
-                out_filepath, file_id, mime_type
-            )
+            return self._download_nested_filepath(out_filepath, file_id)
 
         mime_type, ext = conversion_map.get(mime_type, (mime_type, ""))
         out_filepath = out_filepath.with_suffix(ext)
@@ -108,15 +114,12 @@ class Drive:
         **kwargs: Any,
     ) -> dict[str, File | Any]:
         body = body if body is not None else {}
-        kwargs = {
-            "body": {
-                "name": name,
-                **body,
-                **kwargs,
-            }
-        }
+        body = {"name": name, **body, **kwargs}
+        kwargs = {"body": body}
+
         if parents is not None:
             kwargs["body"].setdefault("parents", parents)
+
         return kwargs
 
     def copy(
@@ -126,8 +129,7 @@ class Drive:
         to_folder_id: str,
         body: File | None = None,
         **kwargs: Any,
-    ) -> File | None:
-        # TODO! Check if this and update returns valid File object.
+    ) -> File:
         file_id = parse_file_id(file_id)
         to_folder_id = parse_file_id(to_folder_id)
 
@@ -138,10 +140,7 @@ class Drive:
             ),
             **kwargs,
         }
-        try:
-            return self.files.copy(**kwargs).execute()
-        except:
-            return None
+        return self.files.copy(**kwargs).execute()
 
     def update(
         self,
@@ -180,7 +179,6 @@ class Drive:
         while True:
             response = list_func(page_token)
             yield response
-
             if (page_token := response.get("nextPageToken", None)) is None:
                 break
 
@@ -206,8 +204,7 @@ class Drive:
         ).execute()
 
         for response in self._list(list_func):
-            for file in response.get("files", []):
-                yield file
+            yield from response.get("files", [])
 
     def list_children(
         self, parent_id: str, fields: str = "*", **kwargs: Any
@@ -233,9 +230,7 @@ class Drive:
         queries = [parents_list, names_list, "trashed = false"]
         if q is not None:
             queries.append(q)
-
         query = " and ".join((f"({i})" for i in queries))
-
         return self.list(query=query)
 
     def _update_if_exists(
@@ -247,13 +242,9 @@ class Drive:
     ) -> File | None:
         if parents is None:
             return None
-
-        files = self._query_children(name=name, parents=parents)
-
-        for file in files:
+        for file in self._query_children(name=name, parents=parents):
             return self.update(file["id"], filepath, supportsAllDrives=team_drives)
-        else:
-            return None
+        return None
 
     def _create_nested_folders(
         self, filepath: Path, parents: List[str], update: bool = True
@@ -262,19 +253,18 @@ class Drive:
             folders = self._query_children(
                 name=name,
                 parents=parents,
-                q=f"mimeType = '{GoogleMimeTypes.folder.value}'",
+                q=f"mimeType='{GoogleMimeTypes.folder.value}'",
             )
-
             if update and (folder := next(folders, None)) is not None:
                 return folder
-            else:
-                return self.files.create(
-                    **self._upload_file_body(
-                        name=dirname,
-                        parents=parents,
-                        mimeType=GoogleMimeTypes.folder.value,
-                    )
-                ).execute()
+
+            return self.files.create(
+                **self._upload_file_body(
+                    name=dirname,
+                    parents=parents,
+                    mimeType=GoogleMimeTypes.folder.value,
+                )
+            ).execute()
 
         for dirname in filepath.parts[:-1]:
             folder = create_or_get_if_exists(dirname, parents)
@@ -285,13 +275,13 @@ class Drive:
     def create(
         self,
         filepath: FilePath,
-        mime_type: GoogleMimeTypes | None = None,
+        mime_type: GoogleMimeTypes,
         parents: List[str] | None = None,
         create_folders: bool = False,
         update: bool = False,
         fields: str = "*",
         **kwargs: Any,
-    ) -> File | None:
+    ) -> File:
         filepath = Path(filepath)
         parents = list(map(parse_file_id, parents)) if parents is not None else []
 
@@ -299,7 +289,6 @@ class Drive:
             parents = self._create_nested_folders(
                 filepath=filepath, parents=parents, update=update
             )
-
         if (
             update
             and (file := next(self._query_children(filepath.name, parents), None))
@@ -307,18 +296,15 @@ class Drive:
         ):
             return file
 
-        if mime_type is None:
-            return None
-
         kwargs = {
             **self._upload_file_body(
                 name=filepath.name, parents=parents, mimeType=mime_type.value
             ),
             **kwargs,
+            "fields": fields,
         }
         file = self.files.create(**kwargs).execute()
-        # TODO! check if this get is necessary
-        return self.get(file_id=file["id"], fields=fields)
+        return file
 
     def _upload(
         self,
@@ -329,26 +315,22 @@ class Drive:
         parents: List[str] | None = None,
         body: File | None = None,
         update: bool = True,
-        fields: str = "*",
         **kwargs,
     ) -> File:
         filepath = Path(filepath)
         parents = list(map(parse_file_id, parents)) if parents is not None else []
-
         if (
             update
             and (file := self._update_if_exists(name, filepath, parents)) is not None
         ):
             return file
 
-        # TODO! Fix mimetype bug
         kwargs = {
             **self._upload_file_body(
                 name=name, parents=parents, body=body, mimeType=mime_type.value
             ),
             **kwargs,
         }
-
         kwargs["media_body"] = uploader()
         return self.files.create(**kwargs).execute()
 
@@ -363,6 +345,11 @@ class Drive:
         **kwargs: Any,
     ) -> File:
         filepath = Path(filepath)
+        mime_type = (
+            mime_type
+            if mime_type is not None
+            else GoogleMimeTypes[mimetypes.guess_type(str(filepath))[0]]
+        )
 
         def uploader():
             return googleapiclient.http.MediaFileUpload(str(filepath), resumable=True)
@@ -382,7 +369,7 @@ class Drive:
         self,
         data: bytes,
         name: str,
-        mime_type: GoogleMimeTypes | None = None,
+        mime_type: GoogleMimeTypes,
         parents: List[str] | None = None,
         body: File | None = None,
         update: bool = True,
@@ -408,7 +395,6 @@ class Drive:
         self, file_id: str, permission_id: str, **kwargs: Any
     ) -> Permission:
         file_id = parse_file_id(file_id)
-
         return (
             self.service.permissions()
             .get(fileId=file_id, permissionId=permission_id, **kwargs)
@@ -419,7 +405,6 @@ class Drive:
         self, file_id: str, fields: str = "*", **kwargs: Any
     ) -> Iterable[Permission]:
         file_id = parse_file_id(file_id)
-
         list_func = (
             lambda x: self.service.permissions()
             .list(
@@ -428,8 +413,7 @@ class Drive:
             .execute()
         )
         for response in self._list(list_func):
-            for file in response.get("permissions", []):
-                yield file
+            yield from response.get("permissions", [])
 
     def _permission_update_if_exists(
         self, file_id: str, user_permission: Permission
