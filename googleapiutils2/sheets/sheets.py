@@ -9,7 +9,6 @@ from googleapiclient import discovery
 from ..utils import parse_file_id
 from .misc import VERSION, ValueInputOption, ValueRenderOption
 
-
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
         BatchUpdateValuesRequest,
@@ -160,7 +159,7 @@ class Sheets:
     def from_frame(df: pd.DataFrame) -> list[list[Any]]:
         df = df.fillna("")
         df = df.astype(str)
-
+        
         data: list = df.values.tolist()
         data.insert(0, list(df.columns))
         return data

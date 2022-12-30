@@ -16,11 +16,16 @@ if TYPE_CHECKING:
     )
 
 
+def to_slice(*slices: slice | int) -> tuple[slice, ...]:
+    func = lambda slc: slc if isinstance(slc, slice) else slice(slc, slc)
+    return tuple(map(func, slices))
+
+
 def ix_to_str(ix: int | str | EllipsisType) -> str:
     return str(ix) if ix is not ... else ""
 
 
-def format_range(range_name: str, sheet_name: str | None = None) -> str:
+def format_range_name(range_name: str, sheet_name: str | None = None) -> str:
     if sheet_name is not None:
         return f"'{sheet_name}'!{range_name}"
     else:
@@ -39,14 +44,8 @@ def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
         else ""
     )
     t_row = ix_to_str(row)
-
     key = f"{t_col}{t_row}"
-    return format_range(key, sheet_name)
-
-
-def to_slice(*slices: slice | int) -> tuple[slice, ...]:
-    func = lambda slc: slc if isinstance(slc, slice) else slice(slc, slc)
-    return tuple(map(func, slices))
+    return format_range_name(key, sheet_name)
 
 
 def slices_to_a1(slices: tuple[slice, slice] | slice | int) -> tuple[str, str | None]:
@@ -77,7 +76,11 @@ def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
             r1 = slices_to_a1(row_ix)
 
     range_name = f"{r1}:{r2}" if r2 is not None else str(r1)
+
     return sheet_name, range_name
+
+
+DEFAULT_SHEET_NAME = "Sheet1"
 
 
 class SheetsValueRange:
@@ -103,8 +106,10 @@ class SheetsValueRange:
 
     @property
     def range_name(self) -> str:
-        sheet_name = self._sheet_name if self._sheet_name is not None else "Sheet1"
-        return format_range(self._range_name, sheet_name)
+        sheet_name = (
+            self._sheet_name if self._sheet_name is not None else DEFAULT_SHEET_NAME
+        )
+        return format_range_name(self._range_name, sheet_name)
 
     @functools.cached_property
     def values(self) -> ValueRange:
@@ -128,6 +133,7 @@ class SheetsValueRange:
         self, ixs: tuple[str, slice, slice] | slice | int
     ) -> "SheetsValueRange":
         sheet_name, range_name = parse_sheets_ixs(ixs)
+
         return self.__class__(
             self.sheets,
             self.spreadsheet_id,
