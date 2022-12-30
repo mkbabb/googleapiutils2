@@ -28,15 +28,6 @@ class InsertDataOption(Enum):
     overwrite = "OVERWRITE"
 
 
-def to_slice(*slices: slice | int) -> tuple[slice, ...]:
-    func = lambda slc: slc if isinstance(slc, slice) else slice(slc, slc)
-    return tuple(map(func, slices))
-
-
-def ix_to_str(ix: int | str | EllipsisType) -> str:
-    return str(ix) if ix is not ... else ""
-
-
 def format_range_name(range_name: str | None, sheet_name: str | None = None) -> str:
     if sheet_name is not None and range_name is not None:
         return f"'{sheet_name}'!{range_name}"
@@ -49,18 +40,13 @@ def format_range_name(range_name: str | None, sheet_name: str | None = None) -> 
 
 
 def number_to_A1(row: int, col: int) -> str:
-    t_col = (
-        "".join(
-            map(
-                lambda x: string.ascii_letters[x - 1].upper(),
-                to_base(col, base=26),
-            )
+    t_col = "".join(
+        map(
+            lambda x: string.ascii_letters[x - 1].upper(),
+            to_base(col, base=26),
         )
-        if col is not ...
-        else ""
     )
-    t_row = ix_to_str(row)
-    return f"{t_col}{t_row}"
+    return f"{t_col}{row}"
 
 
 slice_or_int = (slice, int)
@@ -74,45 +60,39 @@ def is_valid_sheet_name(sheet_name: str | None) -> bool:
     return isinstance(sheet_name, str) or sheet_name is None
 
 
-def slices_to_a1(slices: tuple[slice, slice] | slice | int) -> tuple[str, str | None]:
+def slices_to_a1(row_ix: slice, col_ix: slice) -> tuple[str, str]:
+    return number_to_A1(row_ix.start, col_ix.start), number_to_A1(
+        row_ix.stop, col_ix.stop
+    )
+
+
+def tmpp(*slices: slice):
     match slices:
-        case row_ix, col_ix:
-            r1 = number_to_A1(row_ix.start, col_ix.start)
-            r2 = number_to_A1(row_ix.stop, col_ix.stop)
-            return r1, r2
-        case row_ix if isinstance(row_ix, slice):
-            return ix_to_str(row_ix.start), ix_to_str(row_ix.stop)
-        case row_ix:
-            return ix_to_str(row_ix)
+        case t_row_ix, t_col_ix:
+            return
+        case t_row_ix:
+            return
 
 
 def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
     sheet_name = None
-    r1, r2 = None, None
+    row_ix, col_ix = None, None
 
     match ixs:
-        case t_sheet_name if is_valid_sheet_name(t_sheet_name):
-            sheet_name = t_sheet_name
-        case t_sheet_name, *slices if isinstance(t_sheet_name, str):
-            sheet_name = t_sheet_name
-            r1, r2 = slices_to_a1(to_slice(*slices))
         case t_sheet_name, t_range_name if is_valid_sheet_name(
             t_sheet_name
         ) and is_valid_sheet_name(t_range_name):
             return t_sheet_name, t_range_name
-        case row_ix, col_ix if is_valid_ix(row_ix) and is_valid_ix(col_ix):
-            r1, r2 = slices_to_a1(to_slice(row_ix, col_ix))
-        case row_ix if is_valid_ix(row_ix):
-            r1 = slices_to_a1(row_ix)
-        case _:
-            raise ValueError(f"Invalid ixs: {ixs}")
 
-    range_name = None
+        case t_sheet_name, *slices if is_valid_sheet_name(t_sheet_name):
+            sheet_name = t_sheet_name
+            row_ix, col_ix = tmpp(slices)
 
-    if r1 is not None and r2 is not None:
-        range_name = f"{r1}:{r2}"
-    elif r1 is not None:
-        range_name = str(r1)
+        case t_row_ix, *slices:
+            row_ix, col_ix = tmpp((t_row_ix, *slices))
+
+    r1, r2 = slices_to_a1(row_ix, col_ix)
+    range_name = f"{r1}:{r2}"
 
     return sheet_name, range_name
 
