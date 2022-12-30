@@ -69,7 +69,6 @@ class Sheets:
 
         for i in range(0, len(values), chunk_size):
             t_values = values[i : i + chunk_size]
-
             # TODO! use new logic from slicing
             start_row, end_row = i + row + 1, i + chunk_size + row + 1
             start_col, end_col = col + 1, len(values) + col + 1
@@ -78,7 +77,6 @@ class Sheets:
                 number_to_A1(row=start_row, col=start_col),
                 number_to_A1(row=end_row, col=end_col),
             )
-
             range_name = f"{start_ix}:{end_ix}"
 
             yield range_name, t_values
@@ -94,7 +92,7 @@ class Sheets:
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option.value,
             "data": [
-                {"range": range_name, "values": values}
+                {"range": str(range_name), "values": values}
                 for range_name, values in data.items()
             ],
         }

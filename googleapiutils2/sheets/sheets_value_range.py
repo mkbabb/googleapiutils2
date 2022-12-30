@@ -8,6 +8,7 @@ from typing import *
 from ..utils import parse_file_id, to_base
 from .misc import DEFAULT_SHEET_NAME, ValueInputOption, ValueRenderOption
 from .sheets import Sheets
+from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -97,23 +98,23 @@ def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
     return sheet_name, range_name
 
 
+@dataclass(frozen=True)
 class _SheetSlice:
-    def __init__(self, range_name: str | None = None, sheet_name: str | None = None):
-        self.range_name = range_name
-        self.sheet_name = sheet_name
+    sheet_name: str | None = None
+    range_name: str | None = None
 
     def __str__(self) -> str:
         sheet_name = (
             self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
         )
-        return format_range_name(self.range_name, sheet_name)
+        range_name = self.range_name if self.range_name is not None else ""
+        return format_range_name(range_name, sheet_name)
 
     def __getitem__(self, ixs: tuple[slice, slice] | slice | int) -> _SheetSlice:
         if isinstance(ixs, _SheetSlice):
             return ixs
         else:
-            self.sheet_name, self.range_name = parse_sheets_ixs(ixs)
-            return self
+            return _SheetSlice(*parse_sheets_ixs(ixs))
 
 
 SheetSlice = _SheetSlice()
@@ -142,7 +143,7 @@ class SheetsValueRange:
 
     @property
     def range_name(self) -> str:
-        return str(_SheetSlice(self._range_name, self._sheet_name))
+        return str(_SheetSlice(self._sheet_name, self._range_name))
 
     @functools.cached_property
     def values(self) -> ValueRange:
@@ -171,8 +172,8 @@ class SheetsValueRange:
     ) -> "SheetsValueRange":
         slc = SheetSlice[ixs]
 
-        range_name = slc.range_name if slc.range_name is not None else self._range_name
         sheet_name = slc.sheet_name if slc.sheet_name is not None else self._sheet_name
+        range_name = slc.range_name if slc.range_name is not None else self._range_name
 
         return self.__class__(
             self.sheets,

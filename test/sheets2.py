@@ -20,7 +20,7 @@ Sheet1[slc].update([[1, 2]])
 sheets.batch_update(
     SHEET_URL,
     {
-        "2:2": [["Gay vibes", "wow"]],
+        slc: [["Gay vibes", "wow"]],
         "3:3": [["Gayer vibes", "wower"]],
     },
 )
