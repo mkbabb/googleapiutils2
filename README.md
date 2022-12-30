@@ -1,4 +1,4 @@
-# googleapiutils
+# googleapiutils2
 
 Utilities for
 [Google's v2 Python API](https://github.com/googleapis/google-api-python-client).

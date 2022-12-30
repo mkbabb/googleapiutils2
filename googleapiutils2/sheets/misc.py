@@ -23,6 +23,11 @@ class ValueRenderOption(Enum):
     formula = "FORMULA"
 
 
+class InsertDataOption(Enum):
+    insert = "INSERT_ROWS"
+    overwrite = "OVERWRITE"
+
+
 def to_slice(*slices: slice | int) -> tuple[slice, ...]:
     func = lambda slc: slc if isinstance(slc, slice) else slice(slc, slc)
     return tuple(map(func, slices))
@@ -32,14 +37,18 @@ def ix_to_str(ix: int | str | EllipsisType) -> str:
     return str(ix) if ix is not ... else ""
 
 
-def format_range_name(range_name: str, sheet_name: str | None = None) -> str:
-    if sheet_name is not None:
+def format_range_name(range_name: str | None, sheet_name: str | None = None) -> str:
+    if sheet_name is not None and range_name is not None:
         return f"'{sheet_name}'!{range_name}"
-    else:
+    elif range_name is not None:
         return range_name
+    elif sheet_name is not None:
+        return sheet_name
+    else:
+        return ""
 
 
-def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
+def number_to_A1(row: int, col: int) -> str:
     t_col = (
         "".join(
             map(
@@ -51,8 +60,7 @@ def number_to_A1(row: int, col: int, sheet_name: str | None = None) -> str:
         else ""
     )
     t_row = ix_to_str(row)
-    key = f"{t_col}{t_row}"
-    return format_range_name(key, sheet_name)
+    return f"{t_col}{t_row}"
 
 
 slice_or_int = (slice, int)
@@ -80,7 +88,7 @@ def slices_to_a1(slices: tuple[slice, slice] | slice | int) -> tuple[str, str | 
 
 def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
     sheet_name = None
-    r1, r2 = "", None
+    r1, r2 = None, None
 
     match ixs:
         case t_sheet_name if is_valid_sheet_name(t_sheet_name):
@@ -99,7 +107,12 @@ def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
         case _:
             raise ValueError(f"Invalid ixs: {ixs}")
 
-    range_name = f"{r1}:{r2}" if r2 is not None else str(r1)
+    range_name = None
+
+    if r1 is not None and r2 is not None:
+        range_name = f"{r1}:{r2}"
+    elif r1 is not None:
+        range_name = str(r1)
 
     return sheet_name, range_name
 
@@ -113,10 +126,12 @@ class SheetSliceT:
         sheet_name = (
             self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
         )
-        range_name = self.range_name if self.range_name is not None else ""
-        return format_range_name(range_name, sheet_name)
+        return format_range_name(self.range_name, sheet_name)
 
-    def __getitem__(self, ixs: tuple[slice, slice] | slice | int) -> "SheetSliceT":
+    # TODO! Redo all of this - add support for range size inference
+    def __getitem__(
+        self, ixs: tuple[str, slice, slice] | tuple[slice, slice]
+    ) -> "SheetSliceT":
         if isinstance(ixs, SheetSliceT):
             return ixs
         else:

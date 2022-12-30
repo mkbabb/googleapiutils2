@@ -1,60 +1,122 @@
 from __future__ import annotations
 
-import functools
+
 from typing import *
 
+import functools
+
 from ..utils import parse_file_id
-from .misc import SheetSlice, ValueInputOption, ValueRenderOption, SheetSliceT
+from .misc import (
+    InsertDataOption,
+    SheetSlice,
+    SheetSliceT,
+    ValueInputOption,
+    ValueRenderOption,
+)
 from .sheets import Sheets
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
-        UpdateValuesResponse,
+        BatchUpdateValuesRequest,
+        SheetsResource,
+        Spreadsheet,
         ValueRange,
     )
 
 
 class SheetsValueRange:
+    MAX_CACHE_SIZE = 4
+
     def __init__(
         self,
         sheets: Sheets,
         spreadsheet_id: str,
-        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
-        value_input_option: ValueInputOption = ValueInputOption.user_entered,
         sheet_name: str | None = None,
         range_name: str | None = None,
-        **kwargs: Any,
     ):
         self.sheets = sheets
         self.spreadsheet_id = parse_file_id(spreadsheet_id)
-        self.value_render_option = value_render_option
-        self.value_input_option = value_input_option
 
         self._sheet_name = sheet_name
         self._range_name = range_name
 
-        self.kwargs = kwargs
+        self._shape: tuple[int, int] | None = None
+
+    @property
+    @functools.lru_cache(MAX_CACHE_SIZE)
+    def spreadsheet(self) -> Spreadsheet:
+        return self.sheets.get(self.spreadsheet_id)
+
+    @property
+    @functools.lru_cache(MAX_CACHE_SIZE)
+    def shape(self):
+        if self._sheet_name is None:
+            return None
+
+        for sheet in self.spreadsheet["sheets"]:
+            properties = sheet["properties"]
+
+            if properties["title"] == self._sheet_name:
+                grid_properties = properties["gridProperties"]
+                self._shape = (
+                    grid_properties["rowCount"],
+                    grid_properties["columnCount"],
+                )
+                break
+
+        return self._shape
 
     @property
     def range_name(self) -> str:
         return str(SheetSliceT(self._sheet_name, self._range_name))
 
-    @functools.cached_property
-    def values(self) -> ValueRange:
+    @property
+    @functools.lru_cache(MAX_CACHE_SIZE)
+    def values(
+        self,
+        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
+        **kwargs,
+    ):
         return self.sheets.values(
             spreadsheet_id=self.spreadsheet_id,
             range_name=self.range_name,
-            value_render_option=self.value_render_option,
-            **self.kwargs,
+            value_render_option=value_render_option,
+            **kwargs,
         )
 
-    def update(self, values: list[list[Any]], **kwargs: Any) -> UpdateValuesResponse:
+    def update(
+        self,
+        values: list[list[Any]],
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        **kwargs: Any,
+    ):
         return self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
             range_name=self.range_name,
             values=values,
-            value_input_option=self.value_input_option,
+            value_input_option=value_input_option,
             **kwargs,
+        )
+
+    def append(
+        self,
+        values: list[list[Any]],
+        insert_data_option: InsertDataOption = InsertDataOption.overwrite,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        **kwargs: Any,
+    ):
+        return self.sheets.append(
+            spreadsheet_id=self.spreadsheet_id,
+            range_name=self.range_name,
+            values=values,
+            insert_data_option=insert_data_option,
+            value_input_option=value_input_option,
+            **kwargs,
+        )
+
+    def clear(self, **kwargs: Any):
+        return self.sheets.clear(
+            spreadsheet_id=self.spreadsheet_id, range_name=self.range_name, **kwargs
         )
 
     def __getitem__(
@@ -72,9 +134,12 @@ class SheetsValueRange:
         return self.__class__(
             self.sheets,
             self.spreadsheet_id,
-            self.value_render_option,
-            self.value_input_option,
             sheet_name,
             range_name,
-            **self.kwargs,
         )
+
+    def _update_cache(self):
+        SheetsValueRange.spreadsheet.fget.cache_clear()
+        SheetsValueRange.shape.fget.cache_clear()
+        SheetsValueRange.values.fget.cache_clear()
+        return self

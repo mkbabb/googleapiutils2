@@ -10,10 +10,11 @@ from ..utils import parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
+    InsertDataOption,
     SheetSlice,
+    SheetSliceT,
     ValueInputOption,
     ValueRenderOption,
-    SheetSliceT,
 )
 
 if TYPE_CHECKING:
@@ -139,13 +140,37 @@ class Sheets:
 
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
-
+        
         if len(batch) >= auto_batch_size:
             return self._send_batched_values(
                 spreadsheet_id, value_input_option, **kwargs
             )
         else:
             return None
+
+    def append(
+        self,
+        spreadsheet_id: str,
+        range_name: str | SheetSliceT,
+        values: list[list[Any]],
+        insert_data_option: InsertDataOption = InsertDataOption.overwrite,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        **kwargs: Any,
+    ):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        range_name = str(range_name)
+        return (
+            self.sheets.values()
+            .append(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body={"values": values},
+                insertDataOption=insert_data_option.value,
+                valueInputOption=value_input_option.value,
+                **kwargs,
+            )
+            .execute()
+        )
 
     def clear(self, spreadsheet_id: str, range_name: str | SheetSliceT, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)

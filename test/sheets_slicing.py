@@ -15,6 +15,7 @@ sheets = Sheets(creds=creds)
 Sheet = SheetsValueRange(sheets, SHEET_URL)
 Sheet1 = Sheet["Sheet1"]
 
+
 slc = SheetSlice[2, ...]
 Sheet1[slc].update([[1, 2]], auto_batch_size=2)
 
@@ -32,3 +33,5 @@ sheets.batch_update(
         "3:3": [["Gayer vibes", "wower"]],
     },
 )
+
+Sheet1[2:..., ...].clear()

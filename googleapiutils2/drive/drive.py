@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import mimetypes
 from io import BytesIO
 from pathlib import Path
 from typing import *
@@ -9,7 +9,6 @@ import googleapiclient
 import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
-import mimetypes
 
 from ..utils import (
     FilePath,
