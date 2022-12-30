@@ -46,6 +46,7 @@ class Sheets:
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ) -> ValueRange:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
         return (
             self.sheets.values()
             .get(
@@ -90,7 +91,6 @@ class Sheets:
         **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option.value,
             "data": [
@@ -159,7 +159,7 @@ class Sheets:
     def from_frame(df: pd.DataFrame) -> list[list[Any]]:
         df = df.fillna("")
         df = df.astype(str)
-        
+
         data: list = df.values.tolist()
         data.insert(0, list(df.columns))
         return data
