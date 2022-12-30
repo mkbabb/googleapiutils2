@@ -1,2 +1,2 @@
 from .sheets import Sheets
-from .sheets_value_range import SheetsValueRange
+from .sheets_value_range import SheetsValueRange, SheetSlice

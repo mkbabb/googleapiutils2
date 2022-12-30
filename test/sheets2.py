@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils2.sheets import Sheets, SheetsValueRange
+from googleapiutils2.sheets import Sheets, SheetSlice, SheetsValueRange
 from googleapiutils2.utils import get_oauth2_creds
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
@@ -14,7 +14,8 @@ sheets = Sheets(creds=creds)
 
 Sheet = SheetsValueRange(sheets, SHEET_URL)
 Sheet1 = Sheet["Sheet1"]
-Sheet1[2, ...].update([[1, 2]])
+slc = SheetSlice[2, ...]
+Sheet1[slc].update([[1, 2]])
 
 sheets.batch_update(
     SHEET_URL,

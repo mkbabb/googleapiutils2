@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import *
 
-import pandas as pd
+
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
@@ -139,7 +139,9 @@ class Sheets:
         )
 
     @staticmethod
-    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
+    def to_frame(values: ValueRange, **kwargs: Any):
+        import pandas as pd
+
         if not len(rows := values.get("values", [])):
             return None
 
@@ -156,7 +158,7 @@ class Sheets:
         return df
 
     @staticmethod
-    def from_frame(df: pd.DataFrame) -> list[list[Any]]:
+    def from_frame(df) -> list[list[Any]]:
         df = df.fillna("")
         df = df.astype(str)
 

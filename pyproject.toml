@@ -12,7 +12,7 @@ google-api-python-client = "^2.47.0"
 requests = "^2.28.1"
 google-api-python-client-stubs = "^1.11.0"
 types-requests = "^2.28.9"
-pandas = { version = "^1.4.3", optional = true }
+pandas = "^1.5.2"
 
 [tool.poetry.dev-dependencies]
 black = "^22.6.0"
