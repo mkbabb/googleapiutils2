@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import typing
+from enum import Enum
 from typing import *
 
-LocationType = Literal[
-    "ROOFTOP", "RANGE_INTERPOLATED", "GEOMETRIC_CENTER", "APPROXIMATE"
-]
+
+class LocationType(Enum):
+    ROOFTOP = "ROOFTOP"
+    RANGE_INTERPOLATED = "RANGE_INTERPOLATED"
+    GEOMETRIC_CENTER = "GEOMETRIC_CENTER"
+    APPROXIMATE = "APPROXIMATE"
+
 
 if TYPE_CHECKING:
 
@@ -28,7 +33,12 @@ if TYPE_CHECKING:
     @typing.type_check_only
     class Geometry(TypedDict):
         location: Location
-        location_type: LocationType
+        location_type: Literal[
+            LocationType.ROOFTOP,
+            LocationType.RANGE_INTERPOLATED,
+            LocationType.GEOMETRIC_CENTER,
+            LocationType.APPROXIMATE,
+        ]
         viewport: ViewPort
 
     @typing.type_check_only

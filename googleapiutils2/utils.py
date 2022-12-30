@@ -1,6 +1,6 @@
 from __future__ import annotations
-import functools
 
+import functools
 import json
 import pickle
 import random
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import Spreadsheet
 
-GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -193,7 +192,6 @@ def parse_file_id(
         return parse(id)
     else:
         return file_id
-
 
 
 def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:

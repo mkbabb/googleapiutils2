@@ -10,13 +10,14 @@ import googleapiclient.http
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from .utils import (
+from ..utils import (
     FilePath,
     GoogleMimeTypes,
     download_large_file,
     parse_file_id,
     q_escape,
 )
+from .misc import DEFAULT_DOWNLOAD_CONVERSION_MAP, DOWNLOAD_LIMIT, VERSION
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -27,17 +28,6 @@ if TYPE_CHECKING:
         Permission,
         PermissionList,
     )
-
-
-DEFAULT_DOWNLOAD_CONVERSION_MAP = {
-    GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx"),
-    GoogleMimeTypes.docs: (GoogleMimeTypes.doc, ".docx"),
-    GoogleMimeTypes.slides: (GoogleMimeTypes.pdf, ".pdf"),
-}
-
-DOWNLOAD_LIMIT = 4e6
-
-VERSION = "v3"
 
 
 class Drive:
@@ -56,7 +46,7 @@ class Drive:
         self,
         out_filepath: FilePath,
         file_id: str,
-        mime_type: GoogleMimeTypes.folder,
+        mime_type: GoogleMimeTypes = GoogleMimeTypes.folder,
     ):
         while mime_type == GoogleMimeTypes.folder:
             for file in self.list_children(file_id):

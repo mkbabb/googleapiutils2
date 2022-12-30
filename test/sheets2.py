@@ -1,23 +1,25 @@
 from pathlib import Path
 from typing import *
 
-from googleapiutils2.sheets import Sheets
+from googleapiutils2.sheets import Sheets, SheetsValueRange
 from googleapiutils2.utils import get_oauth2_creds
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
 
 dir = Path("auth")
-
 config_path = dir.joinpath("friday-institute-reports.credentials.json")
 
 creds = get_oauth2_creds(client_config=config_path)
 sheets = Sheets(creds=creds)
 
+Sheet = SheetsValueRange(sheets, SHEET_URL)
+Sheet1 = Sheet["Sheet1"]
+Sheet1[2, ...].update([[1, 2]])
 
-Sheet = sheets.sheet(SHEET_URL)
-
-values = Sheet["Sheet1", 1, ...]
-
-df = sheets.to_frame(values)
-
-print(df)
+sheets.batch_update(
+    SHEET_URL,
+    {
+        "2:2": [["Gay vibes", "wow"]],
+        "3:3": [["Gayer vibes", "wower"]],
+    },
+)

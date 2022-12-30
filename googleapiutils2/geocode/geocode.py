@@ -5,8 +5,8 @@ from typing import *
 import requests
 from requests.exceptions import JSONDecodeError
 
-from ._types.geocode import *
-from .utils import update_url_params
+from ..utils import update_url_params
+from .misc import *
 
 
 class Geocode:
@@ -28,10 +28,12 @@ class Geocode:
     def geocode(self, address: str):
         url = update_url_params(Geocode.URL, {"address": address, "key": self.api_key})
         r = requests.get(url)
+
         return self._return_if_200(r)
 
     def reverse_geocode(self, lat: float, long: float):
         latlng = f"{lat},{long}"
         url = update_url_params(Geocode.URL, {"latlng": latlng, "key": self.api_key})
         r = requests.get(url)
+
         return self._return_if_200(r)
