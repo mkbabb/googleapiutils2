@@ -98,11 +98,22 @@ def parse_sheets_ixs(ixs: tuple[str, slice, slice] | slice | int) -> str:
 
 
 class _SheetSlice:
-    def __init__(self):
-        pass
+    def __init__(self, range_name: str | None = None, sheet_name: str | None = None):
+        self.range_name = range_name
+        self.sheet_name = sheet_name
 
-    def __getitem__(self, ixs: tuple[slice, slice] | slice | int) -> tuple[str, str]:
-        return parse_sheets_ixs(ixs)
+    def __str__(self) -> str:
+        sheet_name = (
+            self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
+        )
+        return format_range_name(self.range_name, sheet_name)
+
+    def __getitem__(self, ixs: tuple[slice, slice] | slice | int) -> _SheetSlice:
+        if isinstance(ixs, _SheetSlice):
+            return ixs
+        else:
+            self.sheet_name, self.range_name = parse_sheets_ixs(ixs)
+            return self
 
 
 SheetSlice = _SheetSlice()
@@ -131,10 +142,7 @@ class SheetsValueRange:
 
     @property
     def range_name(self) -> str:
-        sheet_name = (
-            self._sheet_name if self._sheet_name is not None else DEFAULT_SHEET_NAME
-        )
-        return format_range_name(self._range_name, sheet_name)
+        return str(_SheetSlice(self._range_name, self._sheet_name))
 
     @functools.cached_property
     def values(self) -> ValueRange:
@@ -161,12 +169,10 @@ class SheetsValueRange:
         | tuple[slice, slice]
         | tuple[str, str],
     ) -> "SheetsValueRange":
-        sheet_name, range_name = SheetSlice[ixs]
+        slc = SheetSlice[ixs]
 
-        if sheet_name is None:
-            sheet_name = self._sheet_name
-        if range_name is None:
-            range_name = self._range_name
+        range_name = slc.range_name if slc.range_name is not None else self._range_name
+        sheet_name = slc.sheet_name if slc.sheet_name is not None else self._sheet_name
 
         return self.__class__(
             self.sheets,
