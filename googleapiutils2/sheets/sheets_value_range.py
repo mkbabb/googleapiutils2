@@ -6,13 +6,23 @@ from typing import *
 import pandas as pd
 
 from ..utils import parse_file_id
-from .misc import (DEFAULT_SHEET_NAME, InsertDataOption, SheetSliceT,
-                   ValueInputOption, ValueRenderOption, format_range_name)
+from .misc import (
+    DEFAULT_SHEET_NAME,
+    InsertDataOption,
+    SheetSliceT,
+    ValueInputOption,
+    ValueRenderOption,
+    format_range_name,
+)
 from .sheets import Sheets
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
-        BatchUpdateValuesRequest, SheetsResource, Spreadsheet, ValueRange)
+        BatchUpdateValuesRequest,
+        SheetsResource,
+        Spreadsheet,
+        ValueRange,
+    )
 
 
 @dataclass(unsafe_hash=True)

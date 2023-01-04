@@ -61,6 +61,7 @@ class Sheets:
     ) -> ValueRange:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+
         return self.sheets.values().get(
             spreadsheetId=spreadsheet_id,
             range=range_name,
@@ -83,6 +84,7 @@ class Sheets:
                 for range_name, values in data.items()
             ],
         }
+
         return self.sheets.values().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body=body,
@@ -133,11 +135,12 @@ class Sheets:
                 valueInputOption=value_input_option.value,
                 **kwargs,
             )
+
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
 
         if len(batch) >= auto_batch_size:
-            return self._send_batched_values(
+            return await self._send_batched_values(
                 spreadsheet_id, value_input_option, **kwargs
             )
         else:
@@ -154,6 +157,7 @@ class Sheets:
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+
         return self.sheets.values().append(
             spreadsheetId=spreadsheet_id,
             range=range_name,
@@ -168,6 +172,7 @@ class Sheets:
     ) -> ClearValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+
         return self.sheets.values().clear(
             spreadsheetId=spreadsheet_id, range=range_name, **kwargs
         )
