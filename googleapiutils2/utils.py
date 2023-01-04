@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import pickle
@@ -245,3 +246,56 @@ def retry_with_backoff(retries: int = 4, backoff: int = 5) -> Callable[P, T]:
         return wrapper
 
     return inner
+
+
+BUFFER_TIME = 1.0
+
+
+def _asyncify(cls, buffer_time: float | None = BUFFER_TIME):
+    async def buffer_reqs(self, req: T):
+        while True:
+            t = time.perf_counter()
+            if (t - self.last_req_time) <= buffer_time:
+                await asyncio.sleep(0.1)
+            else:
+                self.last_req_time = t
+                return req
+
+    async def no_buffer_reqs(self, req: T):
+        return req
+
+    async def execute(req: T):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, req.execute)
+
+    def async_wrapper(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @functools.wraps(func)
+        async def wrapped(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
+            self = args[0]
+            req = await func(*args, **kwargs)
+            req = await self.__asyncify__(req)
+            return await execute(req)
+
+        return wrapped
+
+    if buffer_time is not None:
+        cls.__asyncify__ = buffer_reqs
+        cls.queue = asyncio.Queue()
+        cls.last_req_time = time.perf_counter()
+    else:
+        cls.__asyncify__ = no_buffer_reqs
+
+    for name, func in cls.__dict__.items():
+        if (
+            callable(func)
+            and name != "__asyncify__"
+            and not name.startswith("_")
+            and asyncio.iscoroutinefunction(func)
+        ):
+            setattr(cls, name, async_wrapper(func))
+
+    return cls
+
+
+def asyncify(buffer_time: float | None = None):
+    return lambda cls: _asyncify(cls, buffer_time=buffer_time)

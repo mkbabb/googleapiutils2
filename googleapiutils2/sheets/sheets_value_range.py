@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 from dataclasses import dataclass, field
 from typing import *
+import asyncio
 
 import pandas as pd
 
@@ -34,8 +35,9 @@ class SheetsValueRange:
     spreadsheet_id: str
     sheet_name: str | None = None
     range_name: str | None = None
+    spreadsheet: Spreadsheet | None = field(init=False, default=None, hash=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.spreadsheet_id = parse_file_id(self.spreadsheet_id)
 
     def __repr__(self) -> str:
@@ -44,16 +46,15 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
-    @functools.lru_cache(MAX_CACHE_SIZE)
-    def spreadsheet(self) -> Spreadsheet:
-        return self.sheets.get(self.spreadsheet_id)
+    async def sync(self) -> SheetsValueRange:
+        self.spreadsheet = await self.sheets.get(self.spreadsheet_id)
+        return self
 
-    @functools.lru_cache(MAX_CACHE_SIZE)
     def shape(self):
-        if self.sheet_name is None:
+        if self.spreadsheet is None or self.sheet_name is None:
             return None
 
-        for sheet in self.spreadsheet()["sheets"]:
+        for sheet in self.spreadsheet["sheets"]:
             properties = sheet["properties"]
 
             if properties["title"] == self.sheet_name:
@@ -62,29 +63,27 @@ class SheetsValueRange:
                     grid_properties["rowCount"],
                     grid_properties["columnCount"],
                 )
-
         return None
 
-    @functools.lru_cache(MAX_CACHE_SIZE)
-    def values(
+    async def values(
         self,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ):
-        return self.sheets.values(
+        return await self.sheets.values(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             value_render_option=value_render_option,
             **kwargs,
         )
 
-    def update(
+    async def update(
         self,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
     ):
-        return self.sheets.update(
+        return await self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
@@ -92,14 +91,14 @@ class SheetsValueRange:
             **kwargs,
         )
 
-    def append(
+    async def append(
         self,
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
     ):
-        return self.sheets.append(
+        return await self.sheets.append(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
@@ -108,18 +107,16 @@ class SheetsValueRange:
             **kwargs,
         )
 
-    def clear(self, **kwargs: Any):
-        return self.sheets.clear(
+    async def clear(self, **kwargs: Any):
+        return await self.sheets.clear(
             spreadsheet_id=self.spreadsheet_id, range_name=str(self), **kwargs
         )
 
-    @functools.lru_cache(MAX_CACHE_SIZE)
-    def to_frame(self, **kwargs: Any) -> pd.DataFrame:
-        return self.sheets.to_frame(self.values(), **kwargs)
+    async def to_frame(self, **kwargs: Any) -> pd.DataFrame:
+        return self.sheets.to_frame(await self.values(), **kwargs)
 
     def __getitem__(self, ixs: Any) -> SheetsValueRange:
         slc = SheetSliceT(self.sheet_name, self.range_name, self.shape())[ixs]
-
         return self.__class__(
             self.sheets,
             self.spreadsheet_id,
