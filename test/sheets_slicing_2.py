@@ -17,7 +17,7 @@ def test_ixs(ixs: Any):
 
 sheets = ["Sheet1", None]
 start_ixs = ["A", 0, 2, ..., None]
-end_ixs = [None, 1, 6, ..., "B"]
+end_ixs = [None, 1, 6, ..., "B", -2]
 
 all_passed = True
 

@@ -11,8 +11,6 @@ from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
     InsertDataOption,
-    SheetSlice,
-    SheetSliceT,
     ValueInputOption,
     ValueRenderOption,
 )
@@ -52,7 +50,7 @@ class Sheets:
     def values(
         self,
         spreadsheet_id: str,
-        range_name: str | SheetSliceT = DEFAULT_SHEET_NAME,
+        range_name: str | Any = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ) -> ValueRange:
@@ -72,7 +70,7 @@ class Sheets:
     def batch_update(
         self,
         spreadsheet_id: str,
-        data: dict[str, list[list[Any]]],
+        data: dict[Any, list[list[Any]]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
     ):
@@ -121,7 +119,7 @@ class Sheets:
     def update(
         self,
         spreadsheet_id: str,
-        range_name: str | SheetSliceT,
+        range_name: str | Any,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch_size: int = 1,
@@ -156,7 +154,7 @@ class Sheets:
     def append(
         self,
         spreadsheet_id: str,
-        range_name: str | SheetSliceT,
+        range_name: str | Any,
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
@@ -177,7 +175,7 @@ class Sheets:
             .execute()
         )
 
-    def clear(self, spreadsheet_id: str, range_name: str | SheetSliceT, **kwargs: Any):
+    def clear(self, spreadsheet_id: str, range_name: str | Any, **kwargs: Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         return (
@@ -198,10 +196,8 @@ class Sheets:
 
         df = pd.DataFrame(rows, **kwargs)
 
-        cols = df.shape[1]
-        left_cols = columns[:cols]
-        df.columns = left_cols
-        df = df.reindex(columns=columns)
+        mapper = {i: col for i, col in enumerate(columns)}
+        df.rename(columns=mapper, inplace=True)
 
         return df
 
