@@ -248,10 +248,7 @@ def retry_with_backoff(retries: int = 4, backoff: int = 5) -> Callable[P, T]:
     return inner
 
 
-BUFFER_TIME = 1.0
-
-
-def _asyncify(cls, buffer_time: float | None = BUFFER_TIME):
+def _asyncify(cls, buffer_time: float | None = None):
     async def buffer_reqs(self, req: T):
         while True:
             t = time.perf_counter()

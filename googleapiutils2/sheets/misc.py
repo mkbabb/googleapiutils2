@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import string
 from dataclasses import dataclass
 from enum import Enum
@@ -9,6 +11,8 @@ from ..utils import to_base
 VERSION = "v4"
 
 DEFAULT_SHEET_NAME = "Sheet1"
+
+DEFAULT_SHEET_SHAPE = (1000, 26)
 
 
 class ValueInputOption(Enum):
@@ -150,12 +154,12 @@ def parse_sheets_ixs(
 class SheetSliceT:
     sheet_name: str | None = None
     range_name: str | None = None
-    shape: tuple[int, int] = (1000, 26)
+    shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
 
     def __repr__(self) -> str:
         return format_range_name(self.sheet_name, self.range_name)
 
-    def __getitem__(self, ixs: str | tuple[Any, ...]) -> "SheetSliceT":
+    def __getitem__(self, ixs: str | tuple[Any, ...]) -> SheetSliceT:
         if isinstance(ixs, SheetSliceT):
             return ixs
         if isinstance(ixs, tuple) and not len(ixs):
