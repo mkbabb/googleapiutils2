@@ -26,7 +26,7 @@ async def main():
 
     await Sheet1[6:, ...].clear()
 
-    batched = sheets.batch_update(
+    await sheets.batch_update(
         SHEET_URL,
         {
             Sheet1[6, ...]: [["Gay vibes", "wow"]],
@@ -40,7 +40,7 @@ async def main():
     slc = SheetSlice[..., ...]
     df = await Sheet1[slc].to_frame()
     print(df)
-    df["Heyy"] = "Frunk!"
+    df[8] = "Frunk!"
 
     await Sheet1.update(sheets.from_frame(df))
 
