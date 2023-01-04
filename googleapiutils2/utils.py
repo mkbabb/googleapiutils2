@@ -199,10 +199,10 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
         x = int(x, base=from_base)
 
     y = []
-    while x != 0:
+    while True:
         y.append(x % base)
-        x //= base
-
+        if (x := (x // base) - 1) <= 0:
+            break
     return y[::-1]
 
 

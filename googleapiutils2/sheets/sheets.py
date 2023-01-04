@@ -113,6 +113,11 @@ class Sheets:
         batch.clear()
         return res
 
+    def send_all_batches(self) -> None:
+        for spreadsheet_id in self._batched_values.keys():
+            self._send_batched_values(spreadsheet_id)
+        self._batched_values.clear()
+
     def update(
         self,
         spreadsheet_id: str,
@@ -140,7 +145,7 @@ class Sheets:
 
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
-        
+
         if len(batch) >= auto_batch_size:
             return self._send_batched_values(
                 spreadsheet_id, value_input_option, **kwargs

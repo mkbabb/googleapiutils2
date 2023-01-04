@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-
-from typing import *
-
 import functools
+from typing import *
 
 from ..utils import parse_file_id
 from .misc import (
@@ -119,13 +117,7 @@ class SheetsValueRange:
             spreadsheet_id=self.spreadsheet_id, range_name=self.range_name, **kwargs
         )
 
-    def __getitem__(
-        self,
-        ixs: tuple[str, slice, slice]
-        | tuple[str, slice]
-        | tuple[slice, slice]
-        | tuple[str, str],
-    ) -> "SheetsValueRange":
+    def __getitem__(self, ixs: Any) -> "SheetsValueRange":
         slc = SheetSlice[ixs]
 
         sheet_name = slc.sheet_name if slc.sheet_name is not None else self._sheet_name
@@ -138,8 +130,9 @@ class SheetsValueRange:
             range_name,
         )
 
-    def _update_cache(self):
+    @staticmethod
+    def _update_cache():
         SheetsValueRange.spreadsheet.fget.cache_clear()
         SheetsValueRange.shape.fget.cache_clear()
         SheetsValueRange.values.fget.cache_clear()
-        return self
+        return
