@@ -255,7 +255,10 @@ def _asyncify(cls, buffer_time: float | None = BUFFER_TIME):
     async def buffer_reqs(self, req: T):
         while True:
             t = time.perf_counter()
-            if (t - self.last_req_time) <= buffer_time:
+            if (
+                self.last_req_time is not None
+                and (t - self.last_req_time) <= buffer_time
+            ):
                 await asyncio.sleep(0.1)
             else:
                 self.last_req_time = t
@@ -271,17 +274,24 @@ def _asyncify(cls, buffer_time: float | None = BUFFER_TIME):
     def async_wrapper(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
         async def wrapped(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
+            start_time = time.perf_counter()
+
             self = args[0]
             req = await func(*args, **kwargs)
             req = await self.__asyncify__(req)
-            return await execute(req)
+
+            out = await execute(req)
+
+            print(f"{func.__name__} took {time.perf_counter() - start_time} seconds")
+
+            return out
 
         return wrapped
 
     if buffer_time is not None:
         cls.__asyncify__ = buffer_reqs
         cls.queue = asyncio.Queue()
-        cls.last_req_time = time.perf_counter()
+        cls.last_req_time = None
     else:
         cls.__asyncify__ = no_buffer_reqs
 

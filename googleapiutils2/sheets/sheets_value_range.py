@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import functools
 from dataclasses import dataclass, field
 from typing import *
-import asyncio
 
 import pandas as pd
 
@@ -50,7 +48,7 @@ class SheetsValueRange:
         self.spreadsheet = await self.sheets.get(self.spreadsheet_id)
         return self
 
-    def shape(self):
+    def shape(self) -> tuple[int, int] | None:
         if self.spreadsheet is None or self.sheet_name is None:
             return None
 
@@ -123,10 +121,3 @@ class SheetsValueRange:
             slc.sheet_name,
             slc.range_name,
         )
-
-    @staticmethod
-    def _update_cache():
-        SheetsValueRange.spreadsheet.fget.cache_clear()
-        SheetsValueRange.shape.fget.cache_clear()
-        SheetsValueRange.values.fget.cache_clear()
-        return

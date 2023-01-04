@@ -39,7 +39,6 @@ async def main():
 
     slc = SheetSlice[..., ...]
     df = await Sheet1[slc].to_frame()
-    print(df)
     df[8] = "Frunk!"
 
     await Sheet1.update(sheets.from_frame(df))
