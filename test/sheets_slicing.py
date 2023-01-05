@@ -14,6 +14,16 @@ async def main():
     creds = get_oauth2_creds(client_config=config_path)
     sheets = Sheets(creds=creds)
 
+    a = await sheets.create(
+        body={
+            "properties": {"title": "Test Sheet"},
+            "sheets": [
+                {"properties": {"title": "Sheet2"}},
+                {"properties": {"title": "Sheet1"}},
+            ],
+        }
+    )
+
     Sheet1 = await SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1").sync()
 
     await Sheet1[4, "A"].update([["Frunk!"]], auto_batch_size=1)

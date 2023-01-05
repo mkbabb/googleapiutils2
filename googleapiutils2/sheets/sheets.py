@@ -7,7 +7,7 @@ import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import asyncify, parse_file_id
+from ..utils import asyncify, nested_defaultdict, parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
@@ -18,13 +18,18 @@ from .misc import (
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
+        AppendValuesResponse,
         BatchUpdateValuesRequest,
         BatchUpdateValuesResponse,
         ClearValuesResponse,
+        Sheet,
+        SheetProperties,
         SheetsResource,
         Spreadsheet,
+        SpreadsheetProperties,
         UpdateValuesResponse,
         ValueRange,
+        CopySheetToAnotherSpreadsheetRequest,
     )
 
 
@@ -32,7 +37,7 @@ if TYPE_CHECKING:
 class Sheets:
     def __init__(self, creds: Credentials):
         self.creds = creds
-        self.service: SheetsResource = discovery.build(
+        self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
         )
         self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
@@ -41,8 +46,43 @@ class Sheets:
             str, dict[str, list[list[Any]]]
         ] = defaultdict(dict)
 
-    async def create(self) -> Spreadsheet:
-        return self.sheets.create()
+    async def create(
+        self,
+        title: str,
+        sheet_names: list[str] = None,
+        body: Spreadsheet = None,
+    ) -> Spreadsheet:
+        body = nested_defaultdict(body if body else {})
+        sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
+
+        body["properties"]["title"] = title
+        for n, sheet_name in enumerate(sheet_names):
+            body["sheets"][n]["properties"]["title"] = sheet_name
+        body["sheets"] = list(body["sheets"].values())
+
+        return self.sheets.create(body=body)  # type: ignore
+
+    async def copy_to(
+        self,
+        from_spreadsheet_id: str,
+        from_sheet_id: int,
+        to_spreadsheet_id: str,
+        **kwargs: Any,
+    ) -> SheetProperties:
+        from_spreadsheet_id, to_spreadsheet_id = (
+            parse_file_id(from_spreadsheet_id),
+            parse_file_id(to_spreadsheet_id),
+        )
+        body: CopySheetToAnotherSpreadsheetRequest = {
+            "destinationSpreadsheetId": to_spreadsheet_id
+        }
+
+        return self.sheets.sheets().copyTo(
+            spreadsheetId=from_spreadsheet_id,
+            sheetId=from_sheet_id,
+            body=body,
+            **kwargs,
+        )
 
     async def get(
         self,
@@ -50,7 +90,24 @@ class Sheets:
         **kwargs: Any,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs)
+        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs)  # type: ignore
+
+    async def get_sheet(
+        self,
+        spreadsheet_id: str,
+        name: str | None = None,
+        sheet_id: int | None = None,
+    ) -> Sheet | None:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        spreadsheet = await self.get(spreadsheet_id)
+
+        for sheet in spreadsheet["sheets"]:
+            if sheet_id is not None and sheet["properties"]["sheetId"] == sheet_id:
+                return sheet
+            if name is not None and sheet["properties"]["title"] == name:
+                return sheet
+
+        return None
 
     async def values(
         self,
@@ -62,7 +119,7 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
-        return self.sheets.values().get(
+        return self.sheets.values().get(  # type: ignore
             spreadsheetId=spreadsheet_id,
             range=range_name,
             valueRenderOption=value_render_option.value,
@@ -84,8 +141,7 @@ class Sheets:
                 for range_name, values in data.items()
             ],
         }
-
-        return self.sheets.values().batchUpdate(
+        return self.sheets.values().batchUpdate(  # type: ignore
             spreadsheetId=spreadsheet_id,
             body=body,
             **kwargs,
@@ -123,12 +179,12 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch_size: int = 1,
         **kwargs: Any,
-    ) -> UpdateValuesResponse:
+    ) -> UpdateValuesResponse | None:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
         if auto_batch_size == 1:
-            return self.sheets.values().update(
+            return self.sheets.values().update(  # type: ignore
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 body={"values": values},
@@ -140,7 +196,7 @@ class Sheets:
         batch[range_name] = values
 
         if len(batch) >= auto_batch_size:
-            return await self._send_batched_values(
+            return await self._send_batched_values(  # type: ignore
                 spreadsheet_id, value_input_option, **kwargs
             )
         else:
@@ -154,11 +210,11 @@ class Sheets:
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
-    ):
+    ) -> AppendValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
-        return self.sheets.values().append(
+        return self.sheets.values().append(  # type: ignore
             spreadsheetId=spreadsheet_id,
             range=range_name,
             body={"values": values},
@@ -173,7 +229,7 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
-        return self.sheets.values().clear(
+        return self.sheets.values().clear(  # type: ignore
             spreadsheetId=spreadsheet_id, range=range_name, **kwargs
         )
 

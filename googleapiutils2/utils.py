@@ -8,6 +8,7 @@ import random
 import time
 import traceback
 import urllib.parse
+from collections import defaultdict
 from enum import Enum
 from functools import cache
 from pathlib import Path
@@ -208,6 +209,15 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
     return y[::-1]
 
 
+def nested_defaultdict(existing: dict | Any | None = None, **kwargs: Any):
+    if existing is None:
+        existing = {}
+    elif not isinstance(existing, dict):
+        return existing
+    existing = {key: nested_defaultdict(val) for key, val in existing.items()}
+    return defaultdict(nested_defaultdict, existing, **kwargs)
+
+
 T = TypeVar("T")
 P = ParamSpec("P")
 
@@ -265,8 +275,11 @@ def _asyncify(cls, buffer_time: float | None = None):
         return req
 
     async def execute(req: T):
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, req.execute)
+        if hasattr(req, "execute"):
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, req.execute)
+        else:
+            return req
 
     def async_wrapper(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
