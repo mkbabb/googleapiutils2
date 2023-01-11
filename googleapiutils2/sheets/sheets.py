@@ -156,7 +156,7 @@ class Sheets:
             "values", [[]]
         )[0]
 
-    async def _dict_to_values(
+    async def _dict_to_values_align_columns(
         self,
         spreadsheet_id: str,
         range_name: str,
@@ -168,12 +168,18 @@ class Sheets:
         ):
             other = pd.DataFrame(rows)
             other.index = other.index.astype(str)
-
             header = pd.Index(header).astype(str)
-            header = header.append(other.columns.difference(header))
+
+            if len(diff := other.columns.difference(header)):
+                header = header.append(diff)
+                sheet_name, _ = reverse_sheet_range(range_name)
+                await self.update(
+                    spreadsheet_id,
+                    SheetSlice[sheet_name, 1, ...],
+                    [header.tolist()],
+                )
 
             frame = pd.DataFrame(columns=header)
-
             frame = pd.concat([frame, other], ignore_index=True, copy=False).fillna("")
             values = frame.values.tolist()
             return values
@@ -190,7 +196,7 @@ class Sheets:
         align_columns: bool = True,
     ) -> list[list[Any]]:
         if isinstance(values[0], dict):
-            return await self._dict_to_values(
+            return await self._dict_to_values_align_columns(
                 spreadsheet_id, range_name, values, align_columns
             )
         return values
