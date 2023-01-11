@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from types import EllipsisType
 from typing import *
+import re
 
 from ..utils import to_base
 
@@ -36,7 +37,9 @@ def format_range_name(
     sheet_name: str | None = None, range_name: str | None = None
 ) -> str:
     if sheet_name is not None and range_name is not None:
-        return f"'{sheet_name}'!{range_name}"
+        if not (sheet_name.startswith("'") and sheet_name.endswith("'")):
+            sheet_name = f"'{sheet_name}'"
+        return f"{sheet_name}!{range_name}"
     elif range_name is not None:
         return range_name
     elif sheet_name is not None:
@@ -148,6 +151,17 @@ def parse_sheets_ixs(
             return None, expand_slices(row_ix, col_ix, shape=shape)
         case _:
             raise IndexError(f"Invalid index: {ixs}")
+
+
+def reverse_sheet_range(range_name: str) -> tuple[str, str]:
+    if "!" in range_name:
+        sheet_name, range_name = range_name.split("!")
+        return sheet_name, range_name
+
+    if ":" in range_name:
+        return DEFAULT_SHEET_NAME, range_name
+    else:
+        return range_name, ""
 
 
 @dataclass(frozen=True)

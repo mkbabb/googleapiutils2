@@ -14,6 +14,9 @@ from .misc import (
     InsertDataOption,
     ValueInputOption,
     ValueRenderOption,
+    SheetSlice,
+    SheetSliceT,
+    reverse_sheet_range,
 )
 
 if TYPE_CHECKING:
@@ -147,6 +150,51 @@ class Sheets:
             **kwargs,
         )
 
+    async def _header(self, spreadsheet_id: str, range_name: str = DEFAULT_SHEET_NAME):
+        sheet_name, _ = reverse_sheet_range(range_name)
+        return (await self.values(spreadsheet_id, SheetSlice[sheet_name, 1, ...])).get(
+            "values", [[]]
+        )[0]
+
+    async def _dict_to_values(
+        self,
+        spreadsheet_id: str,
+        range_name: str,
+        rows: list[dict[str, Any]],
+        align_columns: bool = True,
+    ):
+        if align_columns and len(
+            header := await self._header(spreadsheet_id, range_name)
+        ):
+            other = pd.DataFrame(rows)
+            other.index = other.index.astype(str)
+
+            header = pd.Index(header).astype(str)
+            header = header.append(other.columns.difference(header))
+
+            frame = pd.DataFrame(columns=header)
+
+            frame = pd.concat([frame, other], ignore_index=True, copy=False).fillna("")
+            values = frame.values.tolist()
+            return values
+        else:
+            values = [list(rows[0].keys())]
+            values += [list(row.values()) for row in rows]
+            return values
+
+    async def _process_values(
+        self,
+        spreadsheet_id: str,
+        range_name: str,
+        values: list[list[Any]] | list[dict[str, Any]],
+        align_columns: bool = True,
+    ) -> list[list[Any]]:
+        if isinstance(values[0], dict):
+            return await self._dict_to_values(
+                spreadsheet_id, range_name, values, align_columns
+            )
+        return values
+
     async def _send_batched_values(
         self,
         spreadsheet_id: str,
@@ -178,10 +226,14 @@ class Sheets:
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch_size: int = 1,
+        align_columns: bool = True,
         **kwargs: Any,
     ) -> UpdateValuesResponse | None:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+        values = await self._process_values(
+            spreadsheet_id, range_name, values, align_columns
+        )
 
         if auto_batch_size == 1:
             return self.sheets.values().update(  # type: ignore
@@ -195,7 +247,7 @@ class Sheets:
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
 
-        if len(batch) >= auto_batch_size:
+        if len(batch) >= auto_batch_size or auto_batch_size == -1:
             return await self._send_batched_values(  # type: ignore
                 spreadsheet_id, value_input_option, **kwargs
             )
@@ -209,10 +261,14 @@ class Sheets:
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
         **kwargs: Any,
     ) -> AppendValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+        values = await self._process_values(
+            spreadsheet_id, range_name, values, align_columns
+        )
 
         return self.sheets.values().append(  # type: ignore
             spreadsheetId=spreadsheet_id,
