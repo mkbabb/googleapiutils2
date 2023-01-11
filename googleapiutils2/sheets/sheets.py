@@ -7,7 +7,7 @@ import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import asyncify, nested_defaultdict, parse_file_id
+from ..utils import nested_defaultdict, parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     )
 
 
-@asyncify()
 class Sheets:
     def __init__(self, creds: Credentials):
         self.creds = creds
@@ -49,7 +48,7 @@ class Sheets:
             str, dict[str, list[list[Any]]]
         ] = defaultdict(dict)
 
-    async def create(
+    def create(
         self,
         title: str,
         sheet_names: list[str] = None,
@@ -65,7 +64,7 @@ class Sheets:
 
         return self.sheets.create(body=body)  # type: ignore
 
-    async def copy_to(
+    def copy_to(
         self,
         from_spreadsheet_id: str,
         from_sheet_id: int,
@@ -87,22 +86,22 @@ class Sheets:
             **kwargs,
         )
 
-    async def get(
+    def get(
         self,
         spreadsheet_id: str,
         **kwargs: Any,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs)  # type: ignore
+        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()  # type: ignore
 
-    async def get_sheet(
+    def get_sheet(
         self,
         spreadsheet_id: str,
         name: str | None = None,
         sheet_id: int | None = None,
     ) -> Sheet | None:
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        spreadsheet = await self.get(spreadsheet_id)
+        spreadsheet = self.get(spreadsheet_id)
 
         for sheet in spreadsheet["sheets"]:
             if sheet_id is not None and sheet["properties"]["sheetId"] == sheet_id:
@@ -112,7 +111,7 @@ class Sheets:
 
         return None
 
-    async def values(
+    def values(
         self,
         spreadsheet_id: str,
         range_name: str | Any = DEFAULT_SHEET_NAME,
@@ -122,14 +121,18 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
-        return self.sheets.values().get(  # type: ignore
-            spreadsheetId=spreadsheet_id,
-            range=range_name,
-            valueRenderOption=value_render_option.value,
-            **kwargs,
+        return (
+            self.sheets.values()
+            .get(  # type: ignore
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                valueRenderOption=value_render_option.value,
+                **kwargs,
+            )
+            .execute()
         )
 
-    async def batch_update(
+    def batch_update(
         self,
         spreadsheet_id: str,
         data: dict[Any, list[list[Any]]],
@@ -144,19 +147,23 @@ class Sheets:
                 for range_name, values in data.items()
             ],
         }
-        return self.sheets.values().batchUpdate(  # type: ignore
-            spreadsheetId=spreadsheet_id,
-            body=body,
-            **kwargs,
+        return (
+            self.sheets.values()
+            .batchUpdate(  # type: ignore
+                spreadsheetId=spreadsheet_id,
+                body=body,
+                **kwargs,
+            )
+            .execute()
         )
 
-    async def _header(self, spreadsheet_id: str, range_name: str = DEFAULT_SHEET_NAME):
+    def _header(self, spreadsheet_id: str, range_name: str = DEFAULT_SHEET_NAME):
         sheet_name, _ = reverse_sheet_range(range_name)
-        return (await self.values(spreadsheet_id, SheetSlice[sheet_name, 1, ...])).get(
+        return self.values(spreadsheet_id, SheetSlice[sheet_name, 1, ...]).get(
             "values", [[]]
         )[0]
 
-    async def _dict_to_values_align_columns(
+    def _dict_to_values_align_columns(
         self,
         spreadsheet_id: str,
         range_name: str,
@@ -164,7 +171,7 @@ class Sheets:
         align_columns: bool = True,
     ):
         if align_columns:
-            header = await self._header(spreadsheet_id, range_name)
+            header = self._header(spreadsheet_id, range_name)
             header = pd.Index(header).astype(str)
 
             other = pd.DataFrame(rows)
@@ -173,7 +180,7 @@ class Sheets:
             if len(diff := other.columns.difference(header)):
                 header = header.append(diff)
                 sheet_name, _ = reverse_sheet_range(range_name)
-                await self.update(
+                self.update(
                     spreadsheet_id,
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
@@ -188,7 +195,7 @@ class Sheets:
             values += [list(row.values()) for row in rows]
             return values
 
-    async def _process_values(
+    def _process_values(
         self,
         spreadsheet_id: str,
         range_name: str,
@@ -196,12 +203,12 @@ class Sheets:
         align_columns: bool = True,
     ) -> list[list[Any]]:
         if isinstance(values[0], dict):
-            return await self._dict_to_values_align_columns(
+            return self._dict_to_values_align_columns(
                 spreadsheet_id, range_name, values, align_columns
             )
         return values
 
-    async def _send_batched_values(
+    def _send_batched_values(
         self,
         spreadsheet_id: str,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
@@ -211,7 +218,7 @@ class Sheets:
         if not len(batch):
             return
 
-        res = await self.batch_update(
+        res = self.batch_update(
             spreadsheet_id=spreadsheet_id,
             data=batch,
             value_input_option=value_input_option,
@@ -220,12 +227,12 @@ class Sheets:
         batch.clear()
         return res
 
-    async def _send_all_batches(self) -> None:
+    def _send_all_batches(self) -> None:
         for spreadsheet_id in self._batched_values.keys():
-            await self._send_batched_values(spreadsheet_id)
+            self._send_batched_values(spreadsheet_id)
         self._batched_values.clear()
 
-    async def update(
+    def update(
         self,
         spreadsheet_id: str,
         range_name: str | Any,
@@ -237,30 +244,32 @@ class Sheets:
     ) -> UpdateValuesResponse | None:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        values = await self._process_values(
-            spreadsheet_id, range_name, values, align_columns
-        )
+        values = self._process_values(spreadsheet_id, range_name, values, align_columns)
 
         if auto_batch_size == 1:
-            return self.sheets.values().update(  # type: ignore
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
-                body={"values": values},
-                valueInputOption=value_input_option.value,
-                **kwargs,
+            return (
+                self.sheets.values()
+                .update(  # type: ignore
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    body={"values": values},
+                    valueInputOption=value_input_option.value,
+                    **kwargs,
+                )
+                .execute()
             )
 
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
 
         if len(batch) >= auto_batch_size or auto_batch_size == -1:
-            return await self._send_batched_values(  # type: ignore
+            return self._send_batched_values(  # type: ignore
                 spreadsheet_id, value_input_option, **kwargs
             )
         else:
             return None
 
-    async def append(
+    def append(
         self,
         spreadsheet_id: str,
         range_name: str | Any,
@@ -272,27 +281,33 @@ class Sheets:
     ) -> AppendValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        values = await self._process_values(
-            spreadsheet_id, range_name, values, align_columns
+        values = self._process_values(spreadsheet_id, range_name, values, align_columns)
+
+        return (
+            self.sheets.values()
+            .append(  # type: ignore
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body={"values": values},
+                insertDataOption=insert_data_option.value,
+                valueInputOption=value_input_option.value,
+                **kwargs,
+            )
+            .execute()
         )
 
-        return self.sheets.values().append(  # type: ignore
-            spreadsheetId=spreadsheet_id,
-            range=range_name,
-            body={"values": values},
-            insertDataOption=insert_data_option.value,
-            valueInputOption=value_input_option.value,
-            **kwargs,
-        )
-
-    async def clear(
+    def clear(
         self, spreadsheet_id: str, range_name: str | Any, **kwargs: Any
     ) -> ClearValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
-        return self.sheets.values().clear(  # type: ignore
-            spreadsheetId=spreadsheet_id, range=range_name, **kwargs
+        return (
+            self.sheets.values()
+            .clear(  # type: ignore
+                spreadsheetId=spreadsheet_id, range=range_name, **kwargs
+            )
+            .execute()
         )
 
     @staticmethod

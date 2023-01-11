@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import Enum
 from types import EllipsisType
 from typing import *
-import re
 
 from ..utils import to_base
 

@@ -258,6 +258,7 @@ def retry_with_backoff(retries: int = 4, backoff: int = 5) -> Callable[P, T]:
     return inner
 
 
+# Maybe some day...
 def _asyncify(cls, buffer_time: float | None = None):
     async def buffer_reqs(self, req: T):
         while True:

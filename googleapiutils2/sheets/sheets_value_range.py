@@ -42,8 +42,8 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
-    async def sync(self) -> SheetsValueRange:
-        self.spreadsheet = await self.sheets.get(self.spreadsheet_id)
+    def sync(self) -> SheetsValueRange:
+        self.spreadsheet = self.sheets.get(self.spreadsheet_id)
         return self
 
     def shape(self) -> tuple[int, int] | None:
@@ -61,25 +61,25 @@ class SheetsValueRange:
                 )
         return None
 
-    async def values(
+    def values(
         self,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ):
-        return await self.sheets.values(
+        return self.sheets.values(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             value_render_option=value_render_option,
             **kwargs,
         )
 
-    async def update(
+    def update(
         self,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
     ):
-        return await self.sheets.update(
+        return self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
@@ -87,14 +87,14 @@ class SheetsValueRange:
             **kwargs,
         )
 
-    async def append(
+    def append(
         self,
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         **kwargs: Any,
     ):
-        return await self.sheets.append(
+        return self.sheets.append(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
@@ -103,13 +103,13 @@ class SheetsValueRange:
             **kwargs,
         )
 
-    async def clear(self, **kwargs: Any):
-        return await self.sheets.clear(
+    def clear(self, **kwargs: Any):
+        return self.sheets.clear(
             spreadsheet_id=self.spreadsheet_id, range_name=str(self), **kwargs
         )
 
-    async def to_frame(self, **kwargs: Any) -> pd.DataFrame:
-        return self.sheets.to_frame(await self.values(), **kwargs)
+    def to_frame(self, **kwargs: Any) -> pd.DataFrame:
+        return self.sheets.to_frame(self.values(), **kwargs)
 
     def __getitem__(self, ixs: Any) -> SheetsValueRange:
         slc = SheetSliceT(self.sheet_name, self.range_name, self.shape())[ixs]

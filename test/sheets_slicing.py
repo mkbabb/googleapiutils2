@@ -1,4 +1,4 @@
-import asyncio
+
 from pathlib import Path
 from typing import *
 
@@ -6,7 +6,7 @@ from googleapiutils2.sheets import Sheets, SheetSlice, SheetsValueRange
 from googleapiutils2.utils import get_oauth2_creds
 
 
-async def main():
+def main():
     SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
 
     config_path = Path("auth/friday-institute-reports.credentials.json")
@@ -14,7 +14,7 @@ async def main():
     creds = get_oauth2_creds(client_config=config_path)
     sheets = Sheets(creds=creds)
 
-    Sheet1 = await SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1").sync()
+    Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1").sync()
 
     rows = [
         {
@@ -29,19 +29,19 @@ async def main():
             "9": "wow",
         },
     ]
-    await Sheet1[2:3, ...].update(rows)
+    Sheet1[2:3, ...].update(rows)
 
-    await Sheet1[4, "A"].update([["Frunk!"]], auto_batch_size=1)
+    Sheet1[4, "A"].update([["Frunk!"]], auto_batch_size=1)
 
-    await sheets.update(
+    sheets.update(
         SHEET_URL,
         Sheet1[5, ...],
         values=[[11, 22, 33]],
     )
 
-    await Sheet1[6:, ...].clear()
+    Sheet1[6:, ...].clear()
 
-    await sheets.batch_update(
+    sheets.batch_update(
         SHEET_URL,
         {
             Sheet1[6, ...]: [["Gay vibes", "wow"]],
@@ -50,14 +50,14 @@ async def main():
         },
     )
 
-    await Sheet1[-1, -1].update([["Heyy ;)))"]])
+    Sheet1[-1, -1].update([["Heyy ;)))"]])
 
     slc = SheetSlice[..., ...]
-    df = await Sheet1[slc].to_frame()
+    df = Sheet1[slc].to_frame()
     df[8] = "Frunk!"
 
-    await Sheet1.update(sheets.from_frame(df))
+    Sheet1.update(sheets.from_frame(df))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
