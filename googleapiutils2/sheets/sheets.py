@@ -174,10 +174,11 @@ class Sheets:
             header = self._header(spreadsheet_id, range_name)
             header = pd.Index(header).astype(str)
 
-            other = pd.DataFrame(rows)
-            other.index = other.index.astype(str)
+            frame = pd.DataFrame(rows)
+            frame.index = frame.index.astype(str)
 
-            if len(diff := other.columns.difference(header)):
+            if len(diff := frame.columns.difference(header)):
+                # only align columns if there are new columns
                 header = header.append(diff)
                 sheet_name, _ = reverse_sheet_range(range_name)
                 self.update(
@@ -185,9 +186,9 @@ class Sheets:
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
                 )
+                other = pd.DataFrame(columns=header)
+                frame = pd.concat([other, frame], ignore_index=True).fillna("")
 
-            frame = pd.DataFrame(columns=header)
-            frame = pd.concat([frame, other], ignore_index=True, copy=False).fillna("")
             values = frame.values.tolist()
             return values
         else:
