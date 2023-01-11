@@ -163,12 +163,12 @@ class Sheets:
         rows: list[dict[str, Any]],
         align_columns: bool = True,
     ):
-        if align_columns and len(
-            header := await self._header(spreadsheet_id, range_name)
-        ):
+        if align_columns:
+            header = await self._header(spreadsheet_id, range_name)
+            header = pd.Index(header).astype(str)
+
             other = pd.DataFrame(rows)
             other.index = other.index.astype(str)
-            header = pd.Index(header).astype(str)
 
             if len(diff := other.columns.difference(header)):
                 header = header.append(diff)
