@@ -50,13 +50,13 @@ class Sheets:
             str, dict[str, list[list[Any]]]
         ] = defaultdict(dict)
 
-        self._cache = TTLCache(maxsize=128, ttl=2)
+        self._cache: TTLCache = TTLCache(maxsize=128, ttl=2)
 
     def create(
         self,
         title: str,
-        sheet_names: list[str] = None,
-        body: Spreadsheet = None,
+        sheet_names: list[str] | None = None,
+        body: Spreadsheet | None = None,
     ):
         body = nested_defaultdict(body if body else {})
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]

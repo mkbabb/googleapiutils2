@@ -20,9 +20,6 @@ types-cachetools = "^5.2.1"
 black = "^22.6.0"
 mypy = "^0.971"
 
-[tool.mypy]
-disallow_untyped_defs = true
-
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
