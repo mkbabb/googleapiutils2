@@ -50,7 +50,7 @@ class Sheets:
             str, dict[str, list[list[Any]]]
         ] = defaultdict(dict)
 
-        self._cache = TTLCache(maxsize=128, ttl=30)
+        self._cache = TTLCache(maxsize=128, ttl=2)
 
     def create(
         self,
