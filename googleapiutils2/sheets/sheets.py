@@ -186,9 +186,9 @@ class Sheets:
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
                 )
-                other = pd.DataFrame(columns=header)
-                frame = pd.concat([other, frame], ignore_index=True).fillna("")
-
+                
+            other = pd.DataFrame(columns=header)
+            frame = pd.concat([other, frame], ignore_index=True).fillna("")
             values = frame.values.tolist()
             return values
         else:
@@ -207,25 +207,43 @@ class Sheets:
             return self._dict_to_values_align_columns(
                 spreadsheet_id, range_name, values, align_columns
             )
-        return values
+        else:
+            return values
+
+    def _align_batch(
+        self,
+        spreadsheet_id: str,
+        batch: dict[str, list[list[Any]] | list[dict[str, Any]]],
+    ):
+        for range_name, values in batch.items():
+            batch[range_name] = self._process_values(
+                spreadsheet_id, range_name, values, True
+            )
+        return batch
 
     def _send_batched_values(
         self,
         spreadsheet_id: str,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
         **kwargs: Any,
     ):
         batch = self._batched_values[spreadsheet_id]
         if not len(batch):
             return
 
+        if align_columns:
+            self._batched_values[spreadsheet_id] = self._align_batch(
+                spreadsheet_id, batch
+            )
+
         res = self.batch_update(
             spreadsheet_id=spreadsheet_id,
-            data=batch,
+            data=self._batched_values[spreadsheet_id],
             value_input_option=value_input_option,
             **kwargs,
         )
-        batch.clear()
+        self._batched_values[spreadsheet_id].clear()
         return res
 
     def _send_all_batches(self) -> None:
@@ -245,9 +263,11 @@ class Sheets:
     ) -> UpdateValuesResponse | None:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        values = self._process_values(spreadsheet_id, range_name, values, align_columns)
 
         if auto_batch_size == 1:
+            values = self._process_values(
+                spreadsheet_id, range_name, values, align_columns
+            )
             return (
                 self.sheets.values()
                 .update(  # type: ignore
@@ -262,10 +282,9 @@ class Sheets:
 
         batch = self._batched_values[spreadsheet_id]
         batch[range_name] = values
-
         if len(batch) >= auto_batch_size or auto_batch_size == -1:
             return self._send_batched_values(  # type: ignore
-                spreadsheet_id, value_input_option, **kwargs
+                spreadsheet_id, value_input_option, align_columns, **kwargs
             )
         else:
             return None
