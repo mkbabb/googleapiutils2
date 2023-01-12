@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import operator
 from collections import defaultdict
 from typing import *
 
 import pandas as pd
+from cachetools import TTLCache, cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
@@ -12,10 +14,10 @@ from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
     InsertDataOption,
-    ValueInputOption,
-    ValueRenderOption,
     SheetSlice,
     SheetSliceT,
+    ValueInputOption,
+    ValueRenderOption,
     reverse_sheet_range,
 )
 
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
         BatchUpdateValuesRequest,
         BatchUpdateValuesResponse,
         ClearValuesResponse,
+        CopySheetToAnotherSpreadsheetRequest,
         Sheet,
         SheetProperties,
         SheetsResource,
@@ -32,7 +35,6 @@ if TYPE_CHECKING:
         SpreadsheetProperties,
         UpdateValuesResponse,
         ValueRange,
-        CopySheetToAnotherSpreadsheetRequest,
     )
 
 
@@ -48,12 +50,14 @@ class Sheets:
             str, dict[str, list[list[Any]]]
         ] = defaultdict(dict)
 
+        self._cache = TTLCache(maxsize=128, ttl=30)
+
     def create(
         self,
         title: str,
         sheet_names: list[str] = None,
         body: Spreadsheet = None,
-    ) -> Spreadsheet:
+    ):
         body = nested_defaultdict(body if body else {})
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
 
@@ -62,7 +66,7 @@ class Sheets:
             body["sheets"][n]["properties"]["title"] = sheet_name
         body["sheets"] = list(body["sheets"].values())
 
-        return self.sheets.create(body=body)  # type: ignore
+        return self.sheets.create(body=body).execute()
 
     def copy_to(
         self,
@@ -70,7 +74,7 @@ class Sheets:
         from_sheet_id: int,
         to_spreadsheet_id: str,
         **kwargs: Any,
-    ) -> SheetProperties:
+    ):
         from_spreadsheet_id, to_spreadsheet_id = (
             parse_file_id(from_spreadsheet_id),
             parse_file_id(to_spreadsheet_id),
@@ -79,27 +83,31 @@ class Sheets:
             "destinationSpreadsheetId": to_spreadsheet_id
         }
 
-        return self.sheets.sheets().copyTo(
-            spreadsheetId=from_spreadsheet_id,
-            sheetId=from_sheet_id,
-            body=body,
-            **kwargs,
+        return (
+            self.sheets.sheets()
+            .copyTo(
+                spreadsheetId=from_spreadsheet_id,
+                sheetId=from_sheet_id,
+                body=body,
+                **kwargs,
+            )
+            .execute()
         )
 
     def get(
         self,
         spreadsheet_id: str,
         **kwargs: Any,
-    ) -> Spreadsheet:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()  # type: ignore
+        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()
 
     def get_sheet(
         self,
         spreadsheet_id: str,
         name: str | None = None,
         sheet_id: int | None = None,
-    ) -> Sheet | None:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         spreadsheet = self.get(spreadsheet_id)
 
@@ -117,13 +125,13 @@ class Sheets:
         range_name: str | Any = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
-    ) -> ValueRange:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
         return (
             self.sheets.values()
-            .get(  # type: ignore
+            .get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 valueRenderOption=value_render_option.value,
@@ -132,33 +140,8 @@ class Sheets:
             .execute()
         )
 
-    def batch_update(
-        self,
-        spreadsheet_id: str,
-        data: dict[Any, list[list[Any]]],
-        value_input_option: ValueInputOption = ValueInputOption.user_entered,
-        **kwargs: Any,
-    ) -> BatchUpdateValuesResponse:
-        spreadsheet_id = parse_file_id(spreadsheet_id)
-        body: BatchUpdateValuesRequest = {
-            "valueInputOption": value_input_option.value,
-            "data": [
-                {"range": str(range_name), "values": values}
-                for range_name, values in data.items()
-            ],
-        }
-        return (
-            self.sheets.values()
-            .batchUpdate(  # type: ignore
-                spreadsheetId=spreadsheet_id,
-                body=body,
-                **kwargs,
-            )
-            .execute()
-        )
-
-    def _header(self, spreadsheet_id: str, range_name: str = DEFAULT_SHEET_NAME):
-        sheet_name, _ = reverse_sheet_range(range_name)
+    @cachedmethod(operator.attrgetter("_cache"))
+    def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         return self.values(spreadsheet_id, SheetSlice[sheet_name, 1, ...]).get(
             "values", [[]]
         )[0]
@@ -171,7 +154,8 @@ class Sheets:
         align_columns: bool = True,
     ):
         if align_columns:
-            header = self._header(spreadsheet_id, range_name)
+            sheet_name, _ = reverse_sheet_range(range_name)
+            header = self._header(spreadsheet_id, sheet_name)
             header = pd.Index(header).astype(str)
 
             frame = pd.DataFrame(rows)
@@ -186,7 +170,7 @@ class Sheets:
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
                 )
-                
+
             other = pd.DataFrame(columns=header)
             frame = pd.concat([other, frame], ignore_index=True).fillna("")
             values = frame.values.tolist()
@@ -210,17 +194,6 @@ class Sheets:
         else:
             return values
 
-    def _align_batch(
-        self,
-        spreadsheet_id: str,
-        batch: dict[str, list[list[Any]] | list[dict[str, Any]]],
-    ):
-        for range_name, values in batch.items():
-            batch[range_name] = self._process_values(
-                spreadsheet_id, range_name, values, True
-            )
-        return batch
-
     def _send_batched_values(
         self,
         spreadsheet_id: str,
@@ -228,19 +201,14 @@ class Sheets:
         align_columns: bool = True,
         **kwargs: Any,
     ):
-        batch = self._batched_values[spreadsheet_id]
-        if not len(batch):
+        if not len(self._batched_values[spreadsheet_id]):
             return
-
-        if align_columns:
-            self._batched_values[spreadsheet_id] = self._align_batch(
-                spreadsheet_id, batch
-            )
 
         res = self.batch_update(
             spreadsheet_id=spreadsheet_id,
             data=self._batched_values[spreadsheet_id],
             value_input_option=value_input_option,
+            align_columns=align_columns,
             **kwargs,
         )
         self._batched_values[spreadsheet_id].clear()
@@ -255,12 +223,12 @@ class Sheets:
         self,
         spreadsheet_id: str,
         range_name: str | Any,
-        values: list[list[Any]],
+        values: list[list[Any]] | list[dict],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         auto_batch_size: int = 1,
         align_columns: bool = True,
         **kwargs: Any,
-    ) -> UpdateValuesResponse | None:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
@@ -279,15 +247,51 @@ class Sheets:
                 )
                 .execute()
             )
-
-        batch = self._batched_values[spreadsheet_id]
-        batch[range_name] = values
-        if len(batch) >= auto_batch_size or auto_batch_size == -1:
-            return self._send_batched_values(  # type: ignore
-                spreadsheet_id, value_input_option, align_columns, **kwargs
-            )
         else:
-            return None
+            batch = self._batched_values[spreadsheet_id]
+            batch[range_name] = values
+            if len(batch) >= auto_batch_size or auto_batch_size == -1:
+                return self._send_batched_values(  # type: ignore
+                    spreadsheet_id, value_input_option, align_columns, **kwargs
+                )
+            else:
+                return None
+
+    def batch_update(
+        self,
+        spreadsheet_id: str,
+        data: dict[Any, list[list[Any]] | list[dict]],
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
+        **kwargs: Any,
+    ) -> BatchUpdateValuesResponse:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        batch = [
+            {"range": str(range_name), "values": values}
+            for range_name, values in data.items()
+        ]
+        for n, item in enumerate(batch):
+            batch[n]["values"] = self._process_values(
+                spreadsheet_id=spreadsheet_id,
+                range_name=item["range"],
+                values=item["values"],
+                align_columns=align_columns,
+            )
+
+        body: BatchUpdateValuesRequest = {
+            "valueInputOption": value_input_option.value,
+            "data": batch,
+        }
+        return (
+            self.sheets.values()
+            .batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=body,
+                **kwargs,
+            )
+            .execute()
+        )
 
     def append(
         self,
@@ -305,7 +309,7 @@ class Sheets:
 
         return (
             self.sheets.values()
-            .append(  # type: ignore
+            .append(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 body={"values": values},
@@ -324,9 +328,7 @@ class Sheets:
 
         return (
             self.sheets.values()
-            .clear(  # type: ignore
-                spreadsheetId=spreadsheet_id, range=range_name, **kwargs
-            )
+            .clear(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
             .execute()
         )
 

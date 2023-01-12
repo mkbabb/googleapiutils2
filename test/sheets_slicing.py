@@ -29,7 +29,8 @@ def main():
             "9": "wow",
         },
     ]
-    Sheet1[2:3, ...].update(rows)
+    Sheet1[2:3, ...].update(rows, auto_batch_size=2)
+    Sheet1[4:5, ...].update(rows, auto_batch_size=2)
 
     Sheet1[4, "A"].update([["Frunk!"]], auto_batch_size=1)
 

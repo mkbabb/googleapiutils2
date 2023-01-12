@@ -627,6 +627,18 @@ files = [
 ]
 
 [[package]]
+name = "types-cachetools"
+version = "5.2.1"
+description = "Typing stubs for cachetools"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-cachetools-5.2.1.tar.gz", hash = "sha256:069cfc825697cd51445c1feabbe4edc1fae2b2315870e7a9a179a7c4a5851bee"},
+    {file = "types_cachetools-5.2.1-py3-none-any.whl", hash = "sha256:b496b7e364ba050c4eaadcc6582f2c9fbb04f8ee7141eb3b311a8589dbd4506a"},
+]
+
+[[package]]
 name = "types-requests"
 version = "2.28.11.7"
 description = "Typing stubs for requests"
@@ -697,4 +709,4 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "b361d4eb13b1dafa43f69a73e9f0e3154a0cef2aa56ac0ddbf5dbc8b8182d1fc"
+content-hash = "85bd9ae6cd64ab3e81e0e5d4d5aac3f69943c0e530b0b462279478e832d00cbf"
