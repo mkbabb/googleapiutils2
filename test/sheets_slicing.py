@@ -36,6 +36,10 @@ def main():
 
     Sheet1[6:, ...].clear()
 
+    for _ in range(10):
+        t = sheets._header(SHEET_URL)
+        print(t)
+
     sheets.batch_update(
         SHEET_URL,
         {

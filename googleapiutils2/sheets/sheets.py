@@ -137,6 +137,7 @@ class Sheets:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
             "values", [[]]
