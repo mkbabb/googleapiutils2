@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import *
 
@@ -17,22 +16,17 @@ def main():
     Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1").sync()
 
     rows = [
-        {
-            "Heyy": "99",
-            "Gay Vibes": "hey",
-            "9": "wow",
-            "not there": "OMG"
-        },
+        {"Heyy": "99", "Gay Vibes": "hey", "9": "wow", "not there": "OMG"},
         {
             "5": "99",
             "6": "hey",
             "9": "wow",
         },
     ]
-    Sheet1[2:3, ...].update(rows, auto_batch_size=2)
-    Sheet1[4:5, ...].update(rows, auto_batch_size=2)
+    Sheet1[2:3, ...].update(rows)
+    Sheet1[4:5, ...].update(rows)
 
-    Sheet1[4, "A"].update([["Frunk!"]], auto_batch_size=1)
+    Sheet1[4, "A"].update([["Frunk!"]])
 
     sheets.update(
         SHEET_URL,
@@ -49,6 +43,7 @@ def main():
             "7:7": [["Gayer vibes", "wower"]],
             Sheet1[-90, 1:3]: [["I'm down here", "wow I'm here"]],
         },
+        align_columns=False,
     )
 
     Sheet1[-1, -1].update([["Heyy ;)))"]])
