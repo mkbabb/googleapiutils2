@@ -45,7 +45,7 @@ class Sheets:
         )
         self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
 
-        self._cache: TTLCache = TTLCache(maxsize=128, ttl=2)
+        self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
 
     def create(
         self,
@@ -53,7 +53,7 @@ class Sheets:
         sheet_names: list[str] | None = None,
         body: Spreadsheet | None = None,
     ):
-        body = nested_defaultdict(body if body else {})
+        body: DefaultDict = nested_defaultdict(body if body else {})
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
 
         body["properties"]["title"] = title
@@ -123,7 +123,6 @@ class Sheets:
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-
         return (
             self.sheets.values()
             .get(
@@ -156,6 +155,9 @@ class Sheets:
             header = pd.Index(header).astype(str)
 
             frame = pd.DataFrame(rows)
+            frame = frame.reindex(
+                list(rows[0].keys()), axis=1
+            )  # preserve the insertion order
             frame.index = frame.index.astype(str)
 
             if len(diff := frame.columns.difference(header)):
@@ -167,14 +169,11 @@ class Sheets:
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
                 )
-
             other = pd.DataFrame(columns=header)
             frame = pd.concat([other, frame], ignore_index=True).fillna("")
-            values = frame.values.tolist()
-            return values
+            return frame.values.tolist()
         else:
-            values = [list(row.values()) for row in rows]
-            return values
+            return [list(row.values()) for row in rows]
 
     def _process_values(
         self,
@@ -183,9 +182,13 @@ class Sheets:
         values: list[list[Any]] | list[dict[str, Any]],
         align_columns: bool = True,
     ) -> list[list[Any]]:
-        if isinstance(values[0], dict):
+
+        if all((isinstance(value, dict) for value in values)):
             return self._dict_to_values_align_columns(
-                spreadsheet_id, range_name, values, align_columns
+                spreadsheet_id=spreadsheet_id,
+                range_name=range_name,
+                rows=values,
+                align_columns=align_columns,
             )
         else:
             return values
@@ -201,8 +204,8 @@ class Sheets:
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-
         values = self._process_values(spreadsheet_id, range_name, values, align_columns)
+
         return (
             self.sheets.values()
             .update(  # type: ignore
@@ -225,17 +228,18 @@ class Sheets:
     ) -> BatchUpdateValuesResponse:
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        batch = [
-            {"range": str(range_name), "values": values}
+        batch: List[ValueRange] = [
+            {
+                "range": (str_range_name := str(range_name)),
+                "values": self._process_values(
+                    spreadsheet_id=spreadsheet_id,
+                    range_name=str_range_name,
+                    values=values,
+                    align_columns=align_columns,
+                ),
+            }
             for range_name, values in data.items()
         ]
-        for n, item in enumerate(batch):
-            batch[n]["values"] = self._process_values(
-                spreadsheet_id=spreadsheet_id,
-                range_name=item["range"],
-                values=item["values"],
-                align_columns=align_columns,
-            )
 
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option.value,

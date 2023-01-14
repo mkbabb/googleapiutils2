@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass, field
 from typing import *
 
 import pandas as pd
+from cachetools import TTLCache, cachedmethod
 
 from ..utils import parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
+    DEFAULT_SHEET_SHAPE,
     InsertDataOption,
     SheetSliceT,
     ValueInputOption,
@@ -32,6 +35,7 @@ class SheetsValueRange:
     sheet_name: str | None = None
     range_name: str | None = None
     spreadsheet: Spreadsheet | None = field(init=False, default=None, hash=False)
+    _cache: TTLCache = field(default_factory=lambda: TTLCache(maxsize=128, ttl=80))
 
     def __post_init__(self) -> None:
         self.spreadsheet_id = parse_file_id(self.spreadsheet_id)
@@ -42,15 +46,9 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
-    def sync(self) -> SheetsValueRange:
-        self.spreadsheet = self.sheets.get(self.spreadsheet_id)
-        return self
-
-    def shape(self) -> tuple[int, int] | None:
-        if self.spreadsheet is None or self.sheet_name is None:
-            return None
-
-        for sheet in self.spreadsheet["sheets"]:
+    @cachedmethod(operator.attrgetter("_cache"))
+    def shape(self) -> tuple[int, int]:
+        for sheet in self.sheets.get(self.spreadsheet_id)["sheets"]:
             properties = sheet["properties"]
 
             if properties["title"] == self.sheet_name:
@@ -59,7 +57,8 @@ class SheetsValueRange:
                     grid_properties["rowCount"],
                     grid_properties["columnCount"],
                 )
-        return None
+                
+        return DEFAULT_SHEET_SHAPE
 
     def values(
         self,
@@ -112,7 +111,9 @@ class SheetsValueRange:
         return self.sheets.to_frame(self.values(), **kwargs)
 
     def __getitem__(self, ixs: Any) -> SheetsValueRange:
-        slc = SheetSliceT(self.sheet_name, self.range_name, self.shape())[ixs]
+        slc = SheetSliceT(
+            sheet_name=self.sheet_name, range_name=self.range_name, shape=self.shape()
+        )[ixs]
         return self.__class__(
             self.sheets,
             self.spreadsheet_id,
