@@ -7,9 +7,6 @@ from googleapiutils2.drive.drive import Drive
 from googleapiutils2.sheets.sheets import Sheets
 from googleapiutils2.utils import get_oauth2_creds
 
-PSU_ID_RE = re.compile("\[(.*)\]")
-
-
 config_path = Path("auth/friday-institute-reports.credentials.json")
 creds = get_oauth2_creds(client_config=config_path)
 
@@ -28,6 +25,7 @@ responses_df = sheets.to_frame(
     sheets.values(responses_sheet_url, "Validated Responses")
 )
 
+PSU_ID_RE = re.compile("\[(.*)\]")
 responses_df["psu_id"] = responses_df[psu_col].map(
     lambda x: re.findall(PSU_ID_RE, x)[0]
 )

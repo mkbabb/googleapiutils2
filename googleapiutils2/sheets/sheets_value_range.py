@@ -35,7 +35,9 @@ class SheetsValueRange:
     sheet_name: str | None = None
     range_name: str | None = None
     spreadsheet: Spreadsheet | None = field(init=False, default=None, hash=False)
-    _cache: TTLCache = field(default_factory=lambda: TTLCache(maxsize=128, ttl=80))
+    _cache: TTLCache = field(
+        hash=False, default_factory=lambda: TTLCache(maxsize=128, ttl=80)
+    )
 
     def __post_init__(self) -> None:
         self.spreadsheet_id = parse_file_id(self.spreadsheet_id)
@@ -45,6 +47,12 @@ class SheetsValueRange:
             self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
         )
         return format_range_name(sheet_name, self.range_name)
+
+    @cachedmethod(operator.attrgetter("_cache"))
+    def header(self) -> list[str]:
+        return self.sheets._header(
+            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
+        )
 
     @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
@@ -57,7 +65,7 @@ class SheetsValueRange:
                     grid_properties["rowCount"],
                     grid_properties["columnCount"],
                 )
-                
+
         return DEFAULT_SHEET_SHAPE
 
     def values(

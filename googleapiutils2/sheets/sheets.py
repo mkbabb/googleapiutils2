@@ -3,6 +3,9 @@ from __future__ import annotations
 import operator
 from typing import *
 
+
+import logging
+
 import pandas as pd
 from cachetools import TTLCache, cachedmethod
 from google.oauth2.credentials import Credentials
@@ -35,6 +38,8 @@ if TYPE_CHECKING:
         UpdateValuesResponse,
         ValueRange,
     )
+
+logger = logging.getLogger(__name__)
 
 
 class Sheets:
@@ -173,6 +178,7 @@ class Sheets:
             frame = pd.concat([other, frame], ignore_index=True).fillna("")
             return frame.values.tolist()
         else:
+            logger.debug("align_columns is False, skipping column alignment")
             return [list(row.values()) for row in rows]
 
     def _process_values(
