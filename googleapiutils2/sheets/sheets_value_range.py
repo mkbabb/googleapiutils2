@@ -17,8 +17,6 @@ from .misc import (
     ValueRenderOption,
     format_range_name,
 )
-
-
 from .sheets import Sheets
 
 if TYPE_CHECKING:

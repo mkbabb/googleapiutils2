@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import *
 
-from googleapiutils2.drive import Drive, GoogleMimeTypes
+from googleapiutils2 import Drive, GoogleMimeTypes
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File

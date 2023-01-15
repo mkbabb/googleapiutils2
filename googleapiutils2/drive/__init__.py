@@ -1,1 +1,1 @@
-from .drive import Drive, GoogleMimeTypes
+from .drive import Drive

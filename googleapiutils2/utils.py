@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-import functools
 import json
 import pickle
-import random
-import time
-import traceback
 import urllib.parse
 from collections import defaultdict
 from enum import Enum
@@ -232,91 +227,3 @@ def take_annotation_from(
         return new_function
 
     return decorator
-
-
-def retry_with_backoff(retries: int = 4, backoff: int = 5) -> Callable[P, T]:
-    """Modified from: https://keestalkstech.com/2021/03/python-utility-function-retry-with-exponential-backoff/"""
-
-    def inner(func: Callable[P, T]) -> Callable[P, T]:
-        @functools.wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            x = 0
-            while True:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    traceback.print_exc(e)
-                    if x == retries:
-                        raise
-
-                sleep = backoff * 2**x + random.uniform(0, 1)
-                time.sleep(sleep)
-                x += 1
-
-        return wrapper
-
-    return inner
-
-
-# Maybe some day...
-def _asyncify(cls, buffer_time: float | None = None):
-    async def buffer_reqs(self, req: T):
-        while True:
-            t = time.perf_counter()
-            if (
-                self.last_req_time is not None
-                and (t - self.last_req_time) <= buffer_time
-            ):
-                await asyncio.sleep(0.1)
-            else:
-                self.last_req_time = t
-                return req
-
-    async def no_buffer_reqs(self, req: T):
-        return req
-
-    async def execute(req: T):
-        if hasattr(req, "execute"):
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, req.execute)
-        else:
-            return req
-
-    def async_wrapper(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
-        @functools.wraps(func)
-        async def wrapped(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
-            start_time = time.perf_counter()
-
-            self = args[0]
-            req = await func(*args, **kwargs)
-            req = await self.__asyncify__(req)
-
-            out = await execute(req)
-
-            print(f"{func.__name__} took {time.perf_counter() - start_time} seconds")
-
-            return out
-
-        return wrapped
-
-    if buffer_time is not None:
-        cls.__asyncify__ = buffer_reqs
-        cls.queue = asyncio.Queue()
-        cls.last_req_time = None
-    else:
-        cls.__asyncify__ = no_buffer_reqs
-
-    for name, func in cls.__dict__.items():
-        if (
-            callable(func)
-            and name != "__asyncify__"
-            and not name.startswith("_")
-            and asyncio.iscoroutinefunction(func)
-        ):
-            setattr(cls, name, async_wrapper(func))
-
-    return cls
-
-
-def asyncify(buffer_time: float | None = None):
-    return lambda cls: _asyncify(cls, buffer_time=buffer_time)

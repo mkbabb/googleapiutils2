@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 from typing import *
 
-from googleapiutils2.sheets import Sheets, SheetSlice, SheetsValueRange
+from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File

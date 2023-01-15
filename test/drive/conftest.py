@@ -4,7 +4,7 @@ from typing import *
 
 import pytest
 
-from googleapiutils2.drive import Drive, GoogleMimeTypes
+from googleapiutils2 import Drive, GoogleMimeTypes
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File

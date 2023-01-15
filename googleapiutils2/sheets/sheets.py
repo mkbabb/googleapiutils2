@@ -94,10 +94,9 @@ class Sheets:
     def get(
         self,
         spreadsheet_id: str,
-        **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.sheets.get(spreadsheetId=spreadsheet_id, **kwargs).execute()
+        return self.sheets.get(spreadsheetId=spreadsheet_id).execute()
 
     def get_sheet(
         self,
