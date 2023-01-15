@@ -30,6 +30,23 @@ if TYPE_CHECKING:
 
 @dataclass(unsafe_hash=True)
 class SheetsValueRange:
+    """A class representing a range of values in a Google Sheet.
+    Used in conjunction with both the Sheets class (facilitating all API calls) and the SheetSliceT class (facilitating indexing)
+
+    When indexed into, provides one with a more dynamic, or informed, SheetSliceT object,
+    as live shape information is used to determine the shape of the slice.
+
+    As such, one can use a SheetsValueRange also as a key into a dict, e.g.:
+    >>> MySheet = SheetsValueRange(sheets, spreadsheet_id)["MySheet"]
+    >>> d = {MySheet: 1}
+    >>> assert d[MySheet] == 1
+    >>> assert str(MySheet) == "MySheet"
+
+    Convenient when using the ellipsis notation.
+
+    Note that a SheetsValueRange object doesn't anything other than sheet metadata, such as shape, or range information;
+    no values are stored. Make as many as you want, they're cheap."""
+
     sheets: Sheets = field(hash=False)
     spreadsheet_id: str
     sheet_name: str | None = None
@@ -48,7 +65,6 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
-    @cachedmethod(operator.attrgetter("_cache"))
     def header(self) -> list[str]:
         return self.sheets._header(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
@@ -65,7 +81,6 @@ class SheetsValueRange:
                     grid_properties["rowCount"],
                     grid_properties["columnCount"],
                 )
-
         return DEFAULT_SHEET_SHAPE
 
     def values(
@@ -82,12 +97,14 @@ class SheetsValueRange:
         self,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
     ):
         return self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
             value_input_option=value_input_option,
+            align_columns=align_columns,
         )
 
     def append(
@@ -95,6 +112,7 @@ class SheetsValueRange:
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
     ):
         return self.sheets.append(
             spreadsheet_id=self.spreadsheet_id,
@@ -102,6 +120,7 @@ class SheetsValueRange:
             values=values,
             insert_data_option=insert_data_option,
             value_input_option=value_input_option,
+            align_columns=align_columns,
         )
 
     def clear(self):

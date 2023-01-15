@@ -137,6 +137,8 @@ class Sheets:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        print("cache miss")
+
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
@@ -163,13 +165,15 @@ class Sheets:
 
             if len(diff := frame.columns.difference(header)):
                 # only align columns if there are new columns
-                header = header.append(diff)
+                header: pd.Index = header.append(diff)
                 sheet_name, _ = reverse_sheet_range(range_name)
                 self.update(
                     spreadsheet_id,
                     SheetSlice[sheet_name, 1, ...],
                     [header.tolist()],
                 )
+                self._cache[(spreadsheet_id, sheet_name)] = list(header)
+
             other = pd.DataFrame(columns=header)
             frame = pd.concat([other, frame], ignore_index=True).fillna("")
             return frame.values.tolist()

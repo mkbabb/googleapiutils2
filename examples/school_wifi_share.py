@@ -1,13 +1,12 @@
+import os
 import re
 from itertools import chain
 from pathlib import Path
 from typing import *
 
-from googleapiutils2.drive.drive import Drive
-from googleapiutils2.sheets.sheets import Sheets
-from googleapiutils2.utils import get_oauth2_creds
+from googleapiutils2 import Drive, Sheets, get_oauth2_creds
 
-config_path = Path("auth/friday-institute-reports.credentials.json")
+config_path = Path(os.environ.get("GOOGLE_API_CREDENTIALS"))
 creds = get_oauth2_creds(client_config=config_path)
 
 drive = Drive(creds=creds)
@@ -46,7 +45,6 @@ list_func = lambda x: list(drive.list_children(x, fields="files(name,id)"))
 
 all_folders = chain(shodan_folders)
 all_folders = list(chain.from_iterable((list_func(x) for x in all_folders)))
-
 
 for n, row in responses_df.iterrows():
     psu_id = row["psu_id"]

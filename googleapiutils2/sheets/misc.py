@@ -165,6 +165,41 @@ def reverse_sheet_range(range_name: str) -> tuple[str, str]:
 
 @dataclass(frozen=True)
 class SheetSliceT:
+    """For better indexing of a Sheet-like object, e.g. a Google Sheet.
+    Allows you to index into a sheet using numpy-like syntax.
+
+    The forms a slice index can take are:
+        SheetSlice[sheet_name, row_ix, col_ix]
+        SheetSlice[sheet_name, range_name]
+        SheetSlice[row_ix, col_ix]
+        SheetSlice[range_name]
+
+    The sheet_name and range_name must be a string.
+    Where the row_ix and col_ix can be either a slice, an int, a string, or an ellipsis.
+    If it's a string, it must be in A1 notation. Finally, a slice can include a step value, but it's ignored (for now).
+
+    Examples (using the singleton SheetSlice object):
+    >>> ix = SheetSlice[1:3, 2:4]
+    >>> assert str(ix) == "Sheet1!B1:E3"]
+
+    Notice the "Sheet1" name interpolated: if no sheet name is provided, the default sheet name is used.
+
+    Allows for the usage of ellipsis notation:
+
+    >>> ix = SheetSlice[..., 1:3]
+    >>> assert str(ix) == "Sheet1!A1:Z3"]
+
+    The ellipsis is expanded to the shape of the sheet, if known.
+    Defaults to the default shape of a Google Sheet, which is (1000, 26).
+
+    A SheetSliceT can be used also as key into a dict:
+
+    >>> key = SheetSlice["Sheet1", "A1:B2"]
+    >>> d = {key: 1}
+    >>> assert d[key] == 1
+    >>> assert str(key) == "Sheet1!A1:B2"
+    """
+
     sheet_name: str | None = None
     range_name: str | None = None
     shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
