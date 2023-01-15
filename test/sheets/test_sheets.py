@@ -1,44 +1,55 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import *
+
 
 import pandas as pd
 
 from googleapiutils2.sheets.sheets import Sheets
-from googleapiutils2.utils import get_oauth2_creds
+from googleapiutils2.drive import Drive
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import File
 
 
-def test_values():
-    SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
+def test_values(test_sheet: File, sheets: Sheets):
+    sheet_id = test_sheet["id"]
 
-    config_path = Path("auth/friday-institute-reports.credentials.json")
+    values = sheets.values(sheet_id, "Sheet1").get("values", [])
 
-    creds = get_oauth2_creds(client_config=config_path)
-    sheets = Sheets(creds=creds)
+    assert len(values) == 0
 
-    values_obj = sheets.values(SHEET_URL, "Sheet1")
-    print(values_obj)
+    updates = [["a", "b", "c"], [1, 2, 3]]
+    sheets.update(sheet_id, "Sheet1", updates)
+
+    values = sheets.values(sheet_id, "Sheet1")["values"]
+
+    assert len(values) == 2
+    assert values == updates
 
 
-def test_create_copy_to():
-    config_path = Path("auth/friday-institute-reports.credentials.json")
-    creds = get_oauth2_creds(client_config=config_path)
-    sheets = Sheets(creds=creds)
+def test_create_copy_to(test_sheet: File, sheets: Sheets, drive: Drive):
+    sheet_id = test_sheet["id"]
 
-    CONFIG_URL = "https://docs.google.com/spreadsheets/d/11hX5E0V-OwRI9wBvVRIh98mlBlN_NwVivaXhk0NTKlI/edit#gid=150061767"
+    updates = [["a", "b", "c"], [1, 2, 3]]
+    sheets.update(sheet_id, "Sheet1", updates)
 
-    config_sheet = sheets.get_sheet(CONFIG_URL, name="Config")
-    my_sheet = sheets.create("My Sheet")
+    sheet_obj = sheets.get_sheet(sheet_id, name="Sheet1")
+    new_sheet = sheets.create("My Sheet")
 
     copied_sheet = sheets.copy_to(
-        from_spreadsheet_id=CONFIG_URL,
-        from_sheet_id=config_sheet["properties"]["sheetId"],
-        to_spreadsheet_id=my_sheet["spreadsheetId"],
+        from_spreadsheet_id=sheet_id,
+        from_sheet_id=sheet_obj["properties"]["sheetId"],
+        to_spreadsheet_id=new_sheet["spreadsheetId"],
     )
 
-    old_df = sheets.to_frame(sheets.values(CONFIG_URL))
+    old_df = sheets.to_frame(sheets.values(sheet_id))
 
     new_df = sheets.to_frame(
-        sheets.values(my_sheet["spreadsheetId"], copied_sheet["title"])
+        sheets.values(new_sheet["spreadsheetId"], copied_sheet["title"])
     )
 
     assert old_df.equals(new_df)
+
+    drive.delete(new_sheet["spreadsheetId"])

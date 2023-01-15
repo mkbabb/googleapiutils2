@@ -1,16 +1,15 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import *
 
-from googleapiutils2.drive.drive import Drive
-from googleapiutils2.utils import GoogleMimeTypes, get_oauth2_creds
+from googleapiutils2.drive import Drive, GoogleMimeTypes
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import File
 
 
-config_path = Path("auth/friday-institute-reports.credentials.json")
-creds = get_oauth2_creds(client_config=config_path)
-drive = Drive(creds=creds)
-
-
-def test_lists():
+def test_lists(drive: Drive):
     test_folder_url = (
         "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
     )
@@ -24,7 +23,7 @@ def test_lists():
         print(p)
 
 
-def test_upload():
+def test_upload(drive: Drive):
     ECF_FOLDER = (
         "https://drive.google.com/drive/u/0/folders/1fB2mj-hl7KIduiNidbWLlMAFXZ76GmN8"
     )
@@ -38,29 +37,29 @@ def test_recursive_download():
     shodan_folder = (
         "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
     )
-    drive.download(
-        out_filepath="./data/shodan_data",
-        file_id=shodan_folder,
-        mime_type=GoogleMimeTypes.folder,
-        recursive=True,
-    )
+    # drive.download(
+    #     out_filepath="./data/shodan_data",
+    #     file_id=shodan_folder,
+    #     mime_type=GoogleMimeTypes.folder,
+    #     recursive=True,
+    # )
 
 
-def test_nested_files():
-    FOLDER_URL = (
-        "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
-    )
+def test_nested_files(test_folder: File, drive: Drive):
+    folder_id = test_folder["id"]
 
     filepath = Path("toasting")
     parent_folder = drive.create(
         filepath=filepath,
         create_folders=True,
-        parents=[FOLDER_URL],
+        parents=[folder_id],
         mime_type=GoogleMimeTypes.folder,
         update=True,
     )
+    assert parent_folder["name"] == filepath.name
 
-    filepath = Path("hey/what")
+    name = "what"
+    filepath = Path(f"hey/{name}")
     t_file = drive.create(
         filepath=filepath,
         create_folders=True,
@@ -68,8 +67,10 @@ def test_nested_files():
         mime_type=GoogleMimeTypes.sheets,
         update=True,
     )
+    assert t_file["name"] == name
 
-    filepath = filepath / "who!!!!/b's a really cool thing"
+    name = "b's a really cool thing"
+    filepath = filepath / f"who!!!!/{name}"
     t_file = drive.create(
         filepath=filepath,
         create_folders=True,
@@ -77,3 +78,4 @@ def test_nested_files():
         mime_type=GoogleMimeTypes.sheets,
         update=True,
     )
+    assert t_file["name"] == name

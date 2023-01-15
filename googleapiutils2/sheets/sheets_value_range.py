@@ -73,27 +73,23 @@ class SheetsValueRange:
     def values(
         self,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
-        **kwargs: Any,
     ):
         return self.sheets.values(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             value_render_option=value_render_option,
-            **kwargs,
         )
 
     def update(
         self,
         values: list[list[Any]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
-        **kwargs: Any,
     ):
         return self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
             range_name=str(self),
             values=values,
             value_input_option=value_input_option,
-            **kwargs,
         )
 
     def append(
@@ -101,7 +97,6 @@ class SheetsValueRange:
         values: list[list[Any]],
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
-        **kwargs: Any,
     ):
         return self.sheets.append(
             spreadsheet_id=self.spreadsheet_id,
@@ -109,15 +104,14 @@ class SheetsValueRange:
             values=values,
             insert_data_option=insert_data_option,
             value_input_option=value_input_option,
-            **kwargs,
         )
 
-    def clear(self, **kwargs: Any):
+    def clear(self):
         return self.sheets.clear(
-            spreadsheet_id=self.spreadsheet_id, range_name=str(self), **kwargs
+            spreadsheet_id=self.spreadsheet_id, range_name=str(self)
         )
 
-    def to_frame(self, **kwargs: Any) -> pd.DataFrame:
+    def to_frame(self, **kwargs) -> pd.DataFrame:
         return self.sheets.to_frame(self.values(), **kwargs)
 
     def __getitem__(self, ixs: Any) -> SheetsValueRange:

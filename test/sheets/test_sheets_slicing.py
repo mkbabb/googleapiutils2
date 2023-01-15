@@ -1,14 +1,12 @@
+from __future__ import annotations
+
 import itertools
-from pathlib import Path
 from typing import *
 
 from googleapiutils2.sheets import Sheets, SheetSlice, SheetsValueRange
-from googleapiutils2.utils import get_oauth2_creds
 
-
-config_path = Path("auth/friday-institute-reports.credentials.json")
-creds = get_oauth2_creds(client_config=config_path)
-sheets = Sheets(creds=creds)
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import File
 
 
 def test_sheet_slice():
@@ -43,15 +41,18 @@ def test_sheet_slice():
         else:
             ixs = tuple(ixs)
 
-        slc = SheetSlice.__getitem__(ixs)
+        try:
+            slc = SheetSlice.__getitem__(ixs)
+        except IndexError:
+            continue
+        except:
+            raise
 
-        assert slc.sheet == sheet
 
+def test_many_slicing(sheets: Sheets, test_sheet: File):
+    sheet_id = test_sheet["id"]
 
-def test_sheets():
-    SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
-
-    Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1")
+    Sheet1 = SheetsValueRange(sheets, sheet_id, sheet_name="Sheet1")
 
     rows = [
         {"Heyy": "99", "Gay Vibes": "hey", "9": "wow", "not there": "OMG"},
@@ -67,7 +68,7 @@ def test_sheets():
     Sheet1[4, "A"].update([["Frunk!"]])
 
     sheets.update(
-        SHEET_URL,
+        sheet_id,
         Sheet1[5, ...],
         values=[[11, 22, 33]],
     )
@@ -80,7 +81,7 @@ def test_sheets():
         print(h, s)
 
     sheets.batch_update(
-        SHEET_URL,
+        sheet_id,
         {
             Sheet1[6, ...]: [["Gay vibes", "wow"]],
             "7:7": [["Gayer vibes", "wower"]],

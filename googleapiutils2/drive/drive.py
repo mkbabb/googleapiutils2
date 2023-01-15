@@ -305,6 +305,9 @@ class Drive:
         file = self.files.create(**kwargs).execute()
         return file
 
+    def delete(self, file_id: str, **kwargs: Any):
+        return self.files.delete(fileId=file_id, **kwargs).execute()
+
     def _upload(
         self,
         uploader: Callable,

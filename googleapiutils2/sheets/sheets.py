@@ -1,10 +1,8 @@
 from __future__ import annotations
 
+import logging
 import operator
 from typing import *
-
-
-import logging
 
 import pandas as pd
 from cachetools import TTLCache, cachedmethod
@@ -24,6 +22,7 @@ from .misc import (
 )
 
 if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import (
         AppendValuesResponse,
         BatchUpdateValuesRequest,
@@ -58,7 +57,7 @@ class Sheets:
         sheet_names: list[str] | None = None,
         body: Spreadsheet | None = None,
     ):
-        body: DefaultDict = nested_defaultdict(body if body else {})
+        body = nested_defaultdict(body if body else {})
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
 
         body["properties"]["title"] = title
@@ -73,7 +72,6 @@ class Sheets:
         from_spreadsheet_id: str,
         from_sheet_id: int,
         to_spreadsheet_id: str,
-        **kwargs: Any,
     ):
         from_spreadsheet_id, to_spreadsheet_id = (
             parse_file_id(from_spreadsheet_id),
@@ -89,7 +87,6 @@ class Sheets:
                 spreadsheetId=from_spreadsheet_id,
                 sheetId=from_sheet_id,
                 body=body,
-                **kwargs,
             )
             .execute()
         )
@@ -151,7 +148,7 @@ class Sheets:
         self,
         spreadsheet_id: str,
         range_name: str,
-        rows: list[dict[str, Any]],
+        rows: list[dict],
         align_columns: bool = True,
     ):
         if align_columns:
@@ -185,11 +182,10 @@ class Sheets:
         self,
         spreadsheet_id: str,
         range_name: str,
-        values: list[list[Any]] | list[dict[str, Any]],
+        values: list[list[Any]] | list[dict],
         align_columns: bool = True,
     ) -> list[list[Any]]:
-
-        if all((isinstance(value, dict) for value in values)):
+        if all(isinstance(value, dict) for value in values):
             return self._dict_to_values_align_columns(
                 spreadsheet_id=spreadsheet_id,
                 range_name=range_name,
@@ -206,7 +202,6 @@ class Sheets:
         values: list[list[Any]] | list[dict],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        **kwargs: Any,
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
@@ -214,12 +209,11 @@ class Sheets:
 
         return (
             self.sheets.values()
-            .update(  # type: ignore
+            .update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 body={"values": values},
                 valueInputOption=value_input_option.value,
-                **kwargs,
             )
             .execute()
         )
@@ -227,14 +221,13 @@ class Sheets:
     def batch_update(
         self,
         spreadsheet_id: str,
-        data: dict[Any, list[list[Any]] | list[dict]],
+        data: dict[Any, list[list[Any]]] | dict[Any, list[dict]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        **kwargs: Any,
-    ) -> BatchUpdateValuesResponse:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        batch: List[ValueRange] = [
+        batch: list[ValueRange] = [
             {
                 "range": (str_range_name := str(range_name)),
                 "values": self._process_values(
@@ -256,7 +249,6 @@ class Sheets:
             .batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body,
-                **kwargs,
             )
             .execute()
         )
@@ -269,8 +261,7 @@ class Sheets:
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        **kwargs: Any,
-    ) -> AppendValuesResponse:
+    ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         values = self._process_values(spreadsheet_id, range_name, values, align_columns)
@@ -283,20 +274,17 @@ class Sheets:
                 body={"values": values},
                 insertDataOption=insert_data_option.value,
                 valueInputOption=value_input_option.value,
-                **kwargs,
             )
             .execute()
         )
 
-    def clear(
-        self, spreadsheet_id: str, range_name: str | Any, **kwargs: Any
-    ) -> ClearValuesResponse:
+    def clear(self, spreadsheet_id: str, range_name: str | Any):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
         return (
             self.sheets.values()
-            .clear(spreadsheetId=spreadsheet_id, range=range_name, **kwargs)
+            .clear(spreadsheetId=spreadsheet_id, range=range_name)
             .execute()
         )
 
@@ -312,6 +300,9 @@ class Sheets:
 
         mapper = {i: col for i, col in enumerate(columns)}
         df.rename(columns=mapper, inplace=True)
+        df.select_dtypes(include=["object"]).replace(
+            r"^\s*$", pd.NA, regex=True, inplace=True
+        )
         return df
 
     @staticmethod
