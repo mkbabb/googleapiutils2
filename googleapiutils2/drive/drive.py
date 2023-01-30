@@ -349,7 +349,7 @@ class Drive:
         mime_type = (
             mime_type
             if mime_type is not None
-            else GoogleMimeTypes(filepath.suffix.lstrip("."))
+            else GoogleMimeTypes[filepath.suffix.lstrip(".")]
         )
 
         def uploader():
