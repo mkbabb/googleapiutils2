@@ -36,20 +36,44 @@ CONFIG_PATH = "auth/credentials.json"
 
 
 class GoogleMimeTypes(Enum):
+    audio = "application/vnd.google-apps.audio"
+    docs = "application/vnd.google-apps.document"
+    drive_sdk = "application/vnd.google-apps.drive-sdk"
+    drawing = "application/vnd.google-apps.drawing"
+    file = "application/vnd.google-apps.file"
+    folder = "application/vnd.google-apps.folder"
+    form = "application/vnd.google-apps.form"
+    fusiontable = "application/vnd.google-apps.fusiontable"
+    jam = "application/vnd.google-apps.jam"
+    map = "application/vnd.google-apps.map"
+    photo = "application/vnd.google-apps.photo"
+    slides = "application/vnd.google-apps.presentation"
+    script = "application/vnd.google-apps.script"
+    shortcut = "application/vnd.google-apps.shortcut"
+    site = "application/vnd.google-apps.site"
+    sheets = "application/vnd.google-apps.spreadsheet"
+    unknown = "application/vnd.google-apps.unknown"
+    video = "application/vnd.google-apps.video"
+
     xls = "application/vnd.ms-excel"
     xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    xml = "text/xml"
     ods = "application/vnd.oasis.opendocument.spreadsheet"
-    csv = "text/plain"
-    tmpl = "text/plain"
-    pdf = "application/pdf"
-    php = "application/x-httpd-php"
+    csv = "text/csv"
+
     jpg = "image/jpeg"
     png = "image/png"
+    svg = "image/svg+xml"
     gif = "image/gif"
     bmp = "image/bmp"
+
     txt = "text/plain"
+    html = "text/html"
+    htm = "text/html"
+    xml = "text/xml"
+    tmpl = "text/plain"
+
     doc = "application/msword"
+    pdf = "application/pdf"
     js = "text/js"
     swf = "application/x-shockwave-flash"
     mp3 = "audio/mpeg"
@@ -58,15 +82,10 @@ class GoogleMimeTypes(Enum):
     tar = "application/tar"
     arj = "application/arj"
     cab = "application/cab"
-    html = "text/html"
-    htm = "text/html"
+    php = "application/x-httpd-php"
+    json = "application/vnd.google-apps.script+json"
+
     default = "application/octet-stream"
-
-    folder = "application/vnd.google-apps.folder"
-
-    docs = "application/vnd.google-apps.document"
-    sheets = "application/vnd.google-apps.spreadsheet"
-    slides = "application/vnd.google-apps.presentation"
 
 
 def url_components(url: str) -> dict[str, List[str]]:

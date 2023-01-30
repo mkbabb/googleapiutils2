@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import mimetypes
 from io import BytesIO
 from pathlib import Path
 from typing import *
@@ -350,7 +349,7 @@ class Drive:
         mime_type = (
             mime_type
             if mime_type is not None
-            else GoogleMimeTypes[mimetypes.guess_type(str(filepath))[0]]
+            else GoogleMimeTypes(filepath.suffix.lstrip("."))
         )
 
         def uploader():
