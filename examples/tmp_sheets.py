@@ -7,7 +7,7 @@ from typing import *
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange, get_oauth2_creds
 
-config_path = Path(os.environ.get("GOOGLE_API_CREDENTIALS"))
+config_path = Path(os.environ.get("GOOGLE_API_CREDENTIALS", ""))
 creds = get_oauth2_creds(client_config=config_path)
 
 sheets = Sheets(creds=creds)
@@ -22,7 +22,7 @@ rows = [
         "Gay Vibes": "hey",
         "9": "wow",
         "not there": "OMG",
-        "Column: NOOO": "ok",
+        "Column: NOOOOOOOOOOOOOOOOOOOOOOOOOOOO": "ok",
     },
     {
         "5": "99",
@@ -57,7 +57,7 @@ for i in range(100):
 
 sheets.batch_update(sheet_id, batches)
 
-time.sleep(10)
+# time.sleep(10)
 
 sheets.batch_update(
     sheet_id,
@@ -79,6 +79,7 @@ df = Sheet1[slc].to_frame()
 df[8] = "Frunk!"
 
 Sheet1.update(sheets.from_frame(df))
+sheets.auto_size_columns(sheet_id, Sheet1.sheet_name)
 
 time.sleep(10)
 

@@ -187,7 +187,7 @@ class Sheets:
         range_name: str,
         values: list[list[Any]] | list[dict],
         align_columns: bool = True,
-    ) -> list[list[Any]]:
+    ) -> list[list[Any]] | list[dict]:
         if all(isinstance(value, dict) for value in values):
             return self._dict_to_values_align_columns(
                 spreadsheet_id=spreadsheet_id,
@@ -267,14 +267,17 @@ class Sheets:
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        values = self._process_values(spreadsheet_id, range_name, values, align_columns)
-
+        body = {
+            "values": self._process_values(
+                spreadsheet_id, range_name, values, align_columns
+            )
+        }
         return (
             self.sheets.values()
             .append(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                body={"values": values},
+                body=body,
                 insertDataOption=insert_data_option.value,
                 valueInputOption=value_input_option.value,
             )
@@ -316,3 +319,50 @@ class Sheets:
         data: list = df.values.tolist()
         data.insert(0, list(df.columns))
         return data
+
+    def resize_columns(
+        self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
+    ):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
+
+        if not sheet:
+            raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
+
+        sheet_id = sheet["properties"]["sheetId"]
+        num_columns = sheet["properties"]["gridProperties"]["columnCount"]
+
+        requests: list = []
+
+        make_range = lambda i: {
+            "sheetId": sheet_id,
+            "dimension": "COLUMNS",
+            "startIndex": i,
+            "endIndex": i + 1,
+        }
+        if width is None:
+            requests.append(
+                {
+                    "autoResizeDimensions": {
+                        "dimensions": make_range(i),
+                    }
+                }
+                for i in range(num_columns)
+            )
+        else:
+            requests.append(
+                {
+                    "updateDimensionProperties": {
+                        "range": make_range(i),
+                        "properties": {"pixelSize": width},
+                        "fields": "pixelSize",
+                    }
+                }
+                for i in range(num_columns)
+            )
+        body: BatchUpdateValuesRequest = {"requests": requests}
+        return (
+            self.service.spreadsheets()
+            .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
+            .execute()
+        )
