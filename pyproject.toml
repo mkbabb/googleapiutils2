@@ -1,10 +1,12 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.5.1"
+version = "0.5.2"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
 readme = "README.md"
 keywords = ["google", "googleapi", "googleapiutils2"]
+license = "MIT"
+repository = "https://github.com/mkbabb/googleapiutils2"
 
 [tool.poetry.dependencies]
 python = "^3.10"
