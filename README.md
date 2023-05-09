@@ -13,7 +13,8 @@ Currently supports sections of the following resources:
 This project requires Python `^3.10` to run.
 
 Several dependencies are needed, namely the aforesaid Google Python API, but also
-Google's oauth library, and `requests`.
+Google's oauth library, and `requests`. Pre-bundled for ease of use are the fairly
+monolithic `google-api-stubs`, which greatly improves the usage experience.
 
 ### via [`poetry`](https://python-poetry.org/docs/)
 

@@ -38,6 +38,7 @@ class Drive:
         self.files: DriveResource.FilesResource = self.service.files()
 
     def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
+        """Get a file by its ID."""
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
 
@@ -55,6 +56,12 @@ class Drive:
         out_filepath: FilePath,
         file_id: str,
     ) -> None:
+        """Internal usage function. Download a folder given by "out_filepath" and its contents recursively.
+
+        Args:
+            out_filepath (FilePath): The path to the folder to download to.
+            file_id (str): The ID of the folder to download.
+        """
         for file in self.list_children(file_id):
             t_name, t_file_id, t_mime_type = (
                 file["name"],
