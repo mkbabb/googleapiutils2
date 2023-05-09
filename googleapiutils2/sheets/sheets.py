@@ -137,8 +137,6 @@ class Sheets:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
-        print("cache miss")
-
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
@@ -224,7 +222,7 @@ class Sheets:
     def batch_update(
         self,
         spreadsheet_id: str,
-        data: dict[Any, list[list[Any]]] | dict[Any, list[dict]],
+        data: dict,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
@@ -341,7 +339,7 @@ class Sheets:
             "endIndex": i + 1,
         }
         if width is None:
-            requests.append(
+            requests.extend(
                 {
                     "autoResizeDimensions": {
                         "dimensions": make_range(i),
@@ -350,7 +348,7 @@ class Sheets:
                 for i in range(num_columns)
             )
         else:
-            requests.append(
+            requests.extend(
                 {
                     "updateDimensionProperties": {
                         "range": make_range(i),

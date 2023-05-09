@@ -200,7 +200,7 @@ class SheetSliceT:
     >>> assert str(key) == "Sheet1!A1:B2"
     """
 
-    sheet_name: str | None = None
+    sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
     shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
 

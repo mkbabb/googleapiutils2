@@ -49,7 +49,7 @@ class SheetsValueRange:
 
     sheets: Sheets = field(hash=False)
     spreadsheet_id: str
-    sheet_name: str | None = None
+    sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
     spreadsheet: Spreadsheet | None = field(init=False, default=None, hash=False)
     _cache: TTLCache = field(

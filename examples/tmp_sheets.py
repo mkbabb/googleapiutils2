@@ -79,7 +79,7 @@ df = Sheet1[slc].to_frame()
 df[8] = "Frunk!"
 
 Sheet1.update(sheets.from_frame(df))
-sheets.auto_size_columns(sheet_id, Sheet1.sheet_name)
+sheets.resize_columns(sheet_id, Sheet1.sheet_name)
 
 time.sleep(10)
 
