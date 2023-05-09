@@ -10,7 +10,7 @@ Currently supports sections of the following resources:
 
 ## Quickstart
 
-This project requires Python `^3.9` to run.
+This project requires Python `^3.10` to run.
 
 Several dependencies are needed, namely the aforesaid Google Python API, but also
 Google's oauth library, and `requests`.

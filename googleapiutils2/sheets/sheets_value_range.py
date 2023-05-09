@@ -95,7 +95,7 @@ class SheetsValueRange:
 
     def update(
         self,
-        values: list[list[Any]],
+        values: list[list[Any]] | list[dict],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
