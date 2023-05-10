@@ -318,19 +318,10 @@ class Sheets:
         data.insert(0, list(df.columns))
         return data
 
-    def resize_columns(
-        self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
-    ):
-        spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
-
-        if not sheet:
-            raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
-
+    @staticmethod
+    def _resize_columns(sheet: Sheet, widths: int | list[int] | None = None):
         sheet_id = sheet["properties"]["sheetId"]
         num_columns = sheet["properties"]["gridProperties"]["columnCount"]
-
-        requests: list = []
 
         make_range = lambda i: {
             "sheetId": sheet_id,
@@ -338,27 +329,42 @@ class Sheets:
             "startIndex": i,
             "endIndex": i + 1,
         }
-        if width is None:
-            requests.extend(
+
+        if widths is None:
+            return [
                 {
                     "autoResizeDimensions": {
                         "dimensions": make_range(i),
                     }
                 }
                 for i in range(num_columns)
-            )
+            ]
         else:
-            requests.extend(
+            if isinstance(widths, int):
+                widths = [widths] * num_columns
+
+            return [
                 {
                     "updateDimensionProperties": {
                         "range": make_range(i),
-                        "properties": {"pixelSize": width},
+                        "properties": {"pixelSize": widths[i]},
                         "fields": "pixelSize",
                     }
                 }
                 for i in range(num_columns)
-            )
-        body: BatchUpdateValuesRequest = {"requests": requests}
+            ]
+
+    def resize_columns(
+        self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
+    ):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
+        if not sheet:
+            raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
+
+        body: BatchUpdateValuesRequest = {
+            "requests": self._resize_columns(sheet, width)
+        }
         return (
             self.service.spreadsheets()
             .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
