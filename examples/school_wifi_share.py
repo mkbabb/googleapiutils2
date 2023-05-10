@@ -12,11 +12,6 @@ creds = get_oauth2_creds(client_config=config_path)
 drive = Drive(creds=creds)
 sheets = Sheets(creds=creds)
 
-tmp = "https://drive.google.com/drive/u/0/folders/1IJtqJF0uEgyJPDjg-8nZhrq1mB00UmyN"
-
-a = drive.get_name("f2023-05-10 CISA Report", parents=[tmp])
-
-
 psu_col, email_col = (
     "What is your PSU name and ID?  Select the dropdown and then start typing the name to jump ahead in the list.",
     "What are the email addresses you'd like to grant access to the report? Please separate each email address by a comma.",
