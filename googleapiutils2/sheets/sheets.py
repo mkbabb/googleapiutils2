@@ -98,7 +98,7 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         return self.sheets.get(spreadsheetId=spreadsheet_id).execute()
 
-    def get_sheet(
+    def get_by_sheet_name(
         self,
         spreadsheet_id: str,
         name: str | None = None,
@@ -381,7 +381,7 @@ class Sheets:
         self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
     ):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
+        sheet = self.get_by_sheet_name(spreadsheet_id, name=sheet_name)
         if not sheet:
             raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
 

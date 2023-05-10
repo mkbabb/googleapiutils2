@@ -42,7 +42,7 @@ class Drive:
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
 
-    def get_name(
+    def get_by_filename(
         self, name: str, parents: List[str], q: str | None = None
     ) -> Optional[File]:
         parents = list(map(parse_file_id, parents)) if parents is not None else []
