@@ -107,6 +107,13 @@ class SheetsValueRange:
             align_columns=align_columns,
         )
 
+    def rename(self, new_sheet_name: str):
+        return self.sheets.rename(
+            spreadsheet_id=self.spreadsheet_id,
+            sheet_name=self.sheet_name,
+            new_sheet_name=new_sheet_name,
+        )
+
     def append(
         self,
         values: list[list[Any]],

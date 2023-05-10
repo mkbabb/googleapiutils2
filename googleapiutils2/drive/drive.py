@@ -42,6 +42,11 @@ class Drive:
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
 
+    def get_name(
+        self, name: str, parents: List[str], q: str | None = None
+    ) -> Optional[File]:
+        return next(self._query_children(name, parents, q), None)
+
     def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
         request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
         with out_filepath.open("wb") as out_file:

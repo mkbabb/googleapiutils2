@@ -292,6 +292,29 @@ class Sheets:
             .execute()
         )
 
+    def rename(
+        self,
+        spreadsheet_id: str,
+        curr_name: str,
+        new_name: str,
+    ):
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet = self.get(spreadsheet_id, curr_name)
+        sheet_id = sheet["properties"]["sheetId"]
+        body = {
+            "requests": [
+                {
+                    "updateSheetProperties": {
+                        "properties": {"sheetId": sheet_id, "title": new_name},
+                        "fields": "title",
+                    }
+                }
+            ]
+        }
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
+
     @staticmethod
     def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
         if not len(rows := values.get("values", [])):
