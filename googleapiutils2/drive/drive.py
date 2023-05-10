@@ -45,7 +45,8 @@ class Drive:
     def get_name(
         self, name: str, parents: List[str], q: str | None = None
     ) -> Optional[File]:
-        return next(self._query_children(name, parents, q), None)
+        parents = list(map(parse_file_id, parents)) if parents is not None else []
+        return next(self._query_children(name=name, parents=parents, q=q), None)
 
     def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
         request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
