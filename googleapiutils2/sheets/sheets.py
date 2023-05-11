@@ -122,6 +122,13 @@ class Sheets:
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ):
+        """Get values from a spreadsheet within a range.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet ID.
+            range_name (str | Any, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
+            value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         return (
@@ -137,6 +144,7 @@ class Sheets:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        """Get the header of a sheet; cache the result"""
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
@@ -204,6 +212,20 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
+        """Updates a range of values in a spreadsheet.
+
+        If values is a list of dicts, the keys of the first dict will be used as the header row.
+        Further, if the input is a list of dicts and align_columns is True, the columns of the spreadsheet
+        will be aligned with the keys of the first dict.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
+            values (list[list[Any]] | list[dict]): The values to update.
+            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
+            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         values = self._process_values(spreadsheet_id, range_name, values, align_columns)
@@ -222,10 +244,20 @@ class Sheets:
     def batch_update(
         self,
         spreadsheet_id: str,
-        data: dict,
+        data: dict[str | Any, list[list[Any]] | list[dict]],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
+        """Updates a range of values in a spreadsheet. Much faster version of calling update() multiple times.
+        See update() for more details.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            data (dict): A dict of {range_name: values} to update;
+                        values: list[list[Any]] | list[dict].
+            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
+            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         batch: list[ValueRange] = [
@@ -292,7 +324,7 @@ class Sheets:
             .execute()
         )
 
-    def rename(
+    def rename_sheet(
         self,
         spreadsheet_id: str,
         curr_name: str,
@@ -316,7 +348,29 @@ class Sheets:
         ).execute()
 
     @staticmethod
-    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
+    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
+        """Converts a ValueRange to a DataFrame.
+        Useful for working with the data in Pandas after a call to sheets.values().
+        If one of the keyword arguments to the dataframe is "columns",
+        the first row of the values will be used as the column names, aligned to the data.
+
+        All string values that are empty will be converted to pd.NA,
+        and the data types of the columns will be inferred.
+
+        If the sheet is empty, None will be returned.
+
+        Args:
+            values (ValueRange): The values to convert.
+            **kwargs: Additional arguments to pass to pd.DataFrame.
+
+        Example:
+            >>> import sheets
+            >>> import pandas as pd
+            >>> df = sheets.to_frame(sheets.values(
+                SHEET_ID, "Sheet1!A1:B2"
+                ))
+            >>> df
+        """
         if not len(rows := values.get("values", [])):
             return None
 
@@ -334,6 +388,11 @@ class Sheets:
 
     @staticmethod
     def from_frame(df: pd.DataFrame) -> list[list[Any]]:
+        """Converts a DataFrame to a list of lists to be used with sheets.update() & c.
+
+        Args:
+            df (pd.DataFrame): The DataFrame to convert.
+        """
         df = df.fillna("")
         df = df.astype(str)
 

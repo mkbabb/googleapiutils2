@@ -45,6 +45,15 @@ class Drive:
     def get_by_filename(
         self, name: str, parents: List[str], q: str | None = None
     ) -> Optional[File]:
+        """Get a file by its name and its parent folder(s).
+        If multiple files are found, the first one is returned.
+        If no file is found, None is returned.
+
+        Args:
+            name (str): The name of the file.
+            parents (List[str]): The ID(s) of the parent folder(s).
+            q (str, optional): A query string to filter the results. Defaults to None.
+        """
         parents = list(map(parse_file_id, parents)) if parents is not None else []
         return next(self._query_children(name=name, parents=parents, q=q), None)
 
@@ -358,6 +367,20 @@ class Drive:
         update: bool = True,
         **kwargs: Any,
     ) -> File:
+        """Uploads a file to Google Drive. Filepath variant.
+
+        For more information on the File object (for the body, etc.), see https://developers.google.com/drive/api/v3/reference/files#resource
+        The `body` and kwargs arguments are expanded within the `body` argument of the underlying Google Drive API call.
+
+        Args:
+            filepath (FilePath): The path to the file to upload.
+            name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
+            mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
+            parents (List[str], optional): The list of parent IDs. Defaults to None.
+            body (File, optional): The body of the file. Defaults to None.
+            update (bool, optional): Whether to update the file if it already exists. Defaults to True.
+            **kwargs: Additional keyword arguments to pass to the underlying Google Drive API call.
+        """
         filepath = Path(filepath)
         mime_type = (
             mime_type
@@ -389,6 +412,18 @@ class Drive:
         update: bool = True,
         **kwargs: Any,
     ) -> File:
+        """Uploads data to Google Drive. Bytes variant of `upload_file`
+
+        For more information on the File object (for the body, etc.), see https://developers.google.com/drive/api/v3/reference/files#resource
+
+        Args:
+            data (bytes): Data to upload
+            name (str): Name of the file
+            mime_type (GoogleMimeTypes): Mime type of the file
+            parents (List[str], optional): List of parent IDs. Defaults to None.
+            body (File, optional): File body. Defaults to None.
+            update (bool, optional): Whether to update the file if it exists. Defaults to True.
+        """
         with BytesIO(data) as tio:
 
             def uploader():

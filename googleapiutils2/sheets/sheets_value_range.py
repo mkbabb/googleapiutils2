@@ -108,7 +108,7 @@ class SheetsValueRange:
         )
 
     def rename(self, new_sheet_name: str):
-        return self.sheets.rename(
+        return self.sheets.rename_sheet(
             spreadsheet_id=self.spreadsheet_id,
             sheet_name=self.sheet_name,
             new_sheet_name=new_sheet_name,

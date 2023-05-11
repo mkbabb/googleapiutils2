@@ -4,8 +4,9 @@ Utilities for
 [Google's v2 Python API](https://github.com/googleapis/google-api-python-client).
 Currently supports sections of the following resources:
 
--   Drive: `FilesResource`, `...`
--   Sheets: `SpreadsheetsResource`, `...`
+-   Drive: `DriveResource`, `FilesResource`, `PermissionsResource`, `RepliesResource`,
+    `...`
+-   Sheets: `SpreadsheetsResource`, `ValuesResource`, `...`
 -   Geocoding
 
 ## Quickstart
@@ -24,21 +25,49 @@ Install poetry, then run
 
 And you're done.
 
+## Overview
+
+The library was written to be both consistent in general, and consistent with Google's
+own API, just a little nicer to use. A note on IDs: anytime a resource ID is needed, one
+can be provide the actual resource ID, or the URL to the resource. If a URL is provided,
+this mapping is cached for future use.
+
 ## Drive
 
-...
+Example: copy a file to a folder.
+
+```python
+creds = get_oauth2_creds(config_obj)
+drive = Drive(creds)
+
+filename = "Heyy"
+
+file = drive.get_name(filename, parents=[FOLDER_URL])
+if file is not None:
+    drive.delete(file["id"])
+
+file = drive.copy(file_id=FILE_ID, to_filename=filename, to_folder_id=FOLDER_URL)
+```
+
+What the above does is:
+
+-   Get the OAuth2 credentials from the `config_obj` object (JSON object representing
+    the requisite credentials, see
+    [here](https://developers.google.com/identity/protocols/oauth2/native-app#step-2:-send-a-request-to-googles-oauth-2.0-server)
+    for more information).
+-   create a `Drive` object thereupon.
+-   Get the file with the given name, and delete it if it exists.
+-   Copy the file with the given ID to the given folder, and return the new file.
 
 ## Sheets
 
-Simple example:
+Example: update a range of cells in a sheet.
 
 ```python
-...
-creds = get_oauth2_creds(client_config=config_path)
-sheets = Sheets(creds=creds)
+creds = get_oauth2_creds(config_path)
+sheets = Sheets(creds)
 
-sheet_id = "id"
-Sheet1 = SheetsValueRange(sheets, sheet_id, sheet_name="Sheet1")
+Sheet1 = SheetsValueRange(sheets, SHEET_ID, sheet_name="Sheet1")
 
 rows = [
     {
@@ -48,12 +77,17 @@ rows = [
 Sheet1[2:3, ...].update(rows)
 ```
 
-What the above does is: - Get the OAuth2 credentials from the `client_config.json`
-file - create a `Sheets` object thereupon. - Create a `SheetsValueRange` object, which
-is a wrapper around the `spreadsheets.values` API. - Update the range `Sheet1!A2:B3`
-with the given rows.
+What the above does is:
 
-Note the slicing syntax, which will feel quite familiar for any Python programmer.
+-   Get the OAuth2 credentials from the `config_path` file (see
+    [here](https://developers.google.com/identity/protocols/oauth2/native-app#step-2:-send-a-request-to-googles-oauth-2.0-server)
+    for more information).
+-   create a `Sheets` object thereupon.
+-   Create a `SheetsValueRange` object, which is a wrapper around the
+    `spreadsheets.values` API.
+-   Update the range `Sheet1!A2:B3` with the given rows.
+
+Note the slicing syntax, which will feel quite familiar for any user of Numpy or Pandas.
 
 ### SheetSlice
 
