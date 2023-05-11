@@ -302,6 +302,16 @@ class Drive:
         fields: str = "*",
         **kwargs: Any,
     ) -> File:
+        """Create's a file on Google Drive.
+
+        Args:
+            filepath (FilePath): Filepath to the file to be uploaded.
+            mime_type (GoogleMimeTypes): Mime type of the file.
+            parents (List[str], optional): List of parent folder IDs wherein the file will be created. Defaults to None.
+            create_folders (bool, optional): Create parent folders if they don't exist. Defaults to False.
+            update (bool, optional): Update the file if it already exists. Defaults to False.
+            fields (str, optional): Fields to be returned. Defaults to "*".
+        """
         filepath = Path(filepath)
         parents = list(map(parse_file_id, parents)) if parents is not None else []
 

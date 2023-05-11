@@ -73,6 +73,13 @@ class Sheets:
         from_sheet_id: int,
         to_spreadsheet_id: str,
     ):
+        """Copy a sheet from one spreadsheet to another.
+
+        Args:
+            from_spreadsheet_id (str): The ID of the spreadsheet containing the sheet to copy.
+            from_sheet_id (int): The ID of the sheet to copy.
+            to_spreadsheet_id (str): The ID of the spreadsheet to copy the sheet to.
+        """
         from_spreadsheet_id, to_spreadsheet_id = (
             parse_file_id(from_spreadsheet_id),
             parse_file_id(to_spreadsheet_id),
@@ -248,8 +255,8 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
-        """Updates a range of values in a spreadsheet. Much faster version of calling update() multiple times.
-        See update() for more details.
+        """Updates a range of values in a spreadsheet. Much faster version of calling `update` multiple times.
+        See `update` for more details.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
@@ -295,6 +302,17 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
+        """Appends values to a spreadsheet. Like `update`, but appends instead of overwrites.
+        This means rows will be added to the spreadsheet if the input values are longer than the existing rows.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
+            values (list[list[Any]]): The values to append.
+            insert_data_option (InsertDataOption, optional): How the input data should be inserted. Defaults to InsertDataOption.overwrite.
+            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
+            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         body = {
@@ -315,6 +333,12 @@ class Sheets:
         )
 
     def clear(self, spreadsheet_id: str, range_name: str | Any):
+        """Clears a range of values in a spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
 
@@ -367,8 +391,7 @@ class Sheets:
             >>> import sheets
             >>> import pandas as pd
             >>> df = sheets.to_frame(sheets.values(
-                SHEET_ID, "Sheet1!A1:B2"
-                ))
+                SHEET_ID, "Sheet1!A1:B2"))
             >>> df
         """
         if not len(rows := values.get("values", [])):
@@ -439,6 +462,13 @@ class Sheets:
     def resize_columns(
         self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
     ):
+        """Resizes the columns of a sheet.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            sheet_name (str): The name of the sheet to update.
+            width (int, optional): The width to set the columns to. Defaults to 100. If None, will auto-resize.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet = self.get_by_sheet_name(spreadsheet_id, name=sheet_name)
         if not sheet:
