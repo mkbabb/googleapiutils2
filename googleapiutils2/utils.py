@@ -120,6 +120,19 @@ def get_oauth2_creds(
     token_path: FilePath = TOKEN_PATH,
     scopes: List[str] = SCOPES,
 ) -> Optional[Credentials]:
+    """Get OAuth2 credentials for Google API.
+
+    This will automatically detect if the credentials are for a service account.
+    If it's not, it will try to load the token from the token path (defaults to TOKEN_PATH)
+    and refresh it. The token will be saved to the token path.
+
+    Args:
+        client_config: Path to client config file or dict with client config.
+        token_path: Path to token file.
+        scopes: List of scopes. For more information on scopes, see:
+            https://developers.google.com/identity/protocols/oauth2/scopes
+    """
+
     token_path = Path(token_path)
 
     if not isinstance(client_config, dict):

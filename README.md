@@ -27,10 +27,32 @@ And you're done.
 
 ## Overview
 
-The library was written to be both consistent in general, and consistent with Google's
-own API, just a little nicer to use. A note on IDs: anytime a resource ID is needed, one
-can be provide the actual resource ID, or the URL to the resource. If a URL is provided,
-this mapping is cached for future use.
+The library was written to be consistent with Google's own Python API - just a little
+easier to use. Most `Drive` and `Sheets` operations are supported using explicit
+parameters. But most functions thereof take a `**kwargs` parameter (used for parameter
+forwarding) to allow for the more granular usage of the underlying API.
+
+A note on IDs: anytime a resource ID is needed, one can be provide the actual resource
+ID, or the URL to the resource. If a URL is provided, this mapping is cached for future
+use.
+
+## Authentication
+
+The library supports two methods of authentication:
+
+-   via a Google service account (recommended, see more
+    [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts))
+-   via OAuth2 (see more
+    [here](https://developers.google.com/identity/protocols/oauth2/native-app))
+
+With a service account, one can programmatically access resources without user input.
+This is by far the easiest route, but requires a bit of setup.
+
+If not using a service account, the library will attempt to open a browser window to
+authenticate using the provided credentials. This authentication is cached for future
+usage (though it does expire on some interval) - so an valid token path is required.
+
+See the [`get_oauth2_creds`](googleapiutils2/utils.py) function for more information.
 
 ## Drive
 
