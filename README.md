@@ -4,10 +4,11 @@ Utilities for
 [Google's v2 Python API](https://github.com/googleapis/google-api-python-client).
 Currently supports sections of the following resources:
 
--   Drive: `DriveResource`, `FilesResource`, `PermissionsResource`, `RepliesResource`,
-    `...`
--   Sheets: `SpreadsheetsResource`, `ValuesResource`, `...`
--   Geocoding
+-   [Drive](https://developers.google.com/drive/api/reference/rest/v3): `DriveResource`,
+    `FilesResource`, `PermissionsResource`, `RepliesResource`, `...`
+-   [Sheets](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets):
+    `SpreadsheetsResource`, `ValuesResource`, `...`
+-   [Geocoding](https://developers.google.com/maps/documentation/geocoding/overview)
 
 ## Quickstart
 
@@ -37,6 +38,9 @@ ID, or the URL to the resource. If a URL is provided, this mapping is cached for
 use.
 
 ## Authentication
+
+Before using a `Drive` or `Sheets` object, one must first authenticate. This is done via
+the `google.oauth2` library, creating a `Credentials` object.
 
 The library supports two methods of authentication:
 
@@ -121,15 +125,29 @@ The syntax is as follows:
 Wherein `rows` and `cols` are either integers, slices of integers (stride is not
 supported), strings (in A1 notation), or ellipses (`...`).
 
+Note that Google's implementation of A1 notation is 1-indexed; 0 is invalid (e.g., 1
+maps to `A`, 2 to `B`, etc.)
+
 ```py
 ix = SheetSlice["Sheet1", 1:3, 2:4] #  "Sheet1!B2:D4"
 ix = SheetSlice["Sheet1", "A1:B2"]  #  "Sheet1!A1:B2"
 ix = SheetSlice[1:3, 2:4]           #  "Sheet1!B2:D4"
 ix = SheetSlice["A1:B2"]            #  "Sheet1!A1:B2"
 ix = SheetSlice[..., 1:3]           #  "Sheet1!A1:Z3"
+
+values = {
+    SheetSlice["A1:B2"]: [
+        ["Heyy", "99"],
+        ["Heyy", "99"],
+    ],
+} # "Sheet1!A1:B2" = [["Heyy", "99"], ["Heyy", "99"]]
 ```
 
-`SheetSlice` object can also be used as a key into a `SheetsValueRange` object, or a
-dictionary (to use in updating a sheet's range, for example). Further, a
-`SheetsValueRange` object can be sliced in a similar manner to that of a `SheetSlice`
-object, and also be used as a dictionary key.
+A `SheetSlice` can also be used as a key into a `SheetsValueRange`, or a dictionary (to
+use in updating a sheet's range via `.update()`, for example). Further, a
+`SheetsValueRange` can be sliced in a similar manner to that of a `SheetSlice`.
+
+```py
+Sheet1[2:3, ...].update(rows)
+...
+```
