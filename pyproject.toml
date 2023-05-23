@@ -3,6 +3,7 @@ name = "googleapiutils2"
 version = "0.5.8"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
+
 readme = "README.md"
 keywords = ["google", "googleapi", "googleapiutils2"]
 license = "MIT"
@@ -12,7 +13,7 @@ repository = "https://github.com/mkbabb/googleapiutils2"
 python = "^3.10"
 pandas = "^2.0.1"
 mypy = "^1.3.0"
-google-api-python-client-stubs = "^1.16.0"
+google-api-python-client-stubs = "^1.17.0"
 google-api-python-client = "^2.86.0"
 google-auth-oauthlib = "^1.0.0"
 requests = "^2.30.0"

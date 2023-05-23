@@ -215,14 +215,14 @@ class Sheets:
         self,
         spreadsheet_id: str,
         range_name: str | Any,
-        values: list[list[Any]] | list[dict],
+        values: list[list[Any]] | list[dict] | list[Any],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
         """Updates a range of values in a spreadsheet.
 
-        If values is a list of dicts, the keys of the first dict will be used as the header row.
-        Further, if the input is a list of dicts and align_columns is True, the columns of the spreadsheet
+        If `values` is a list of dicts, the keys of the first dict will be used as the header row.
+        Further, if the input is a list of dicts and `align_columns` is True, the columns of the spreadsheet
         will be aligned with the keys of the first dict.
 
         Args:
@@ -255,7 +255,7 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
-        """Updates a range of values in a spreadsheet. Much faster version of calling `update` multiple times.
+        """Updates a series of range values in a spreadsheet. Much faster version of calling `update` multiple times.
         See `update` for more details.
 
         Args:
@@ -303,7 +303,8 @@ class Sheets:
         align_columns: bool = True,
     ):
         """Appends values to a spreadsheet. Like `update`, but appends instead of overwrites.
-        This means rows will be added to the spreadsheet if the input values are longer than the existing rows.
+        This means rows will be added to the spreadsheet if the input values are longer than the
+        number of existing rows.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.

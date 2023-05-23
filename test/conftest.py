@@ -31,7 +31,6 @@ def sheets(creds: Credentials):
 
 @pytest.fixture(scope="session", autouse=True)
 def google_folders(drive: Drive):
-
     test_folder_path = Path(os.environ.get("GOOGLE_API_TEST_PATH", "googleapiutils2"))
 
     sheets_folder = test_folder_path / "sheets"

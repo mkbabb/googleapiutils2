@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import *
 
-from googleapiutils2 import Drive, Sheets
+from googleapiutils2 import Drive, Sheets, SheetSlice
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
@@ -48,3 +48,34 @@ def test_create_copy_to(test_sheet: File, sheets: Sheets, drive: Drive):
     assert old_df.equals(new_df)
 
     drive.delete(new_sheet["spreadsheetId"])
+
+
+def test_update_align_columns(test_sheet: File, sheets: Sheets, drive: Drive):
+    sheet_id = test_sheet["id"]
+
+    updates = [["a", "b", "c"], [1, 2, 3]]
+    sheets.update(sheet_id, "Sheet1", updates)
+
+    slc = SheetSlice["Sheet1", 2:, ...]
+
+    updates = [
+        {
+            "c": 6,
+        }
+    ]
+    sheets.update(sheet_id, slc, updates)
+    values = sheets.values(sheet_id, slc)["values"]
+
+    assert values[0][2] == 6
+
+    sheets.update(sheet_id, SheetSlice["Sheet1", 1:, ...], [["a", "b", "c", "d"]])
+
+    updates = [
+        {
+            "d": 7,
+        }
+    ]
+    sheets.update(sheet_id, slc, updates)
+    values = sheets.values(sheet_id, slc)["values"]
+
+    assert values[0][3] == 7
