@@ -141,7 +141,11 @@ def get_oauth2_creds(
 
     is_service_account = client_config.get("type", "") == "service_account"
 
-    if not is_service_account:
+    if is_service_account:
+        return service_account.Credentials.from_service_account_info(
+            client_config, scopes=scopes
+        )
+    else:
         creds: Credentials = None
 
         if token_path.exists():
@@ -157,10 +161,6 @@ def get_oauth2_creds(
             token_path.write_bytes(pickle.dumps(creds))
 
         return creds
-    else:
-        return service_account.Credentials.from_service_account_info(
-            client_config, scopes=scopes
-        )
 
 
 def download_large_file(

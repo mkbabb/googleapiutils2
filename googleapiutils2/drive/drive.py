@@ -108,6 +108,15 @@ class Drive:
             GoogleMimeTypes, tuple[GoogleMimeTypes, str]
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ) -> Path:
+        """Download a file from Google Drive. If the file is larger than 10MB, it will be downloaded in chunks.
+
+        Args:
+            out_filepath (FilePath): The path to the file to download to.
+            file_id (str): The ID of the file to download.
+            mime_type (GoogleMimeTypes): The mime type of the file to download.
+            recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
+            conversion_map (dict[GoogleMimeTypes, tuple[GoogleMimeTypes, str]], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
+        """
         file_id = parse_file_id(file_id)
         out_filepath = Path(out_filepath)
 
@@ -204,12 +213,28 @@ class Drive:
 
     def list(
         self,
-        query: str,
+        query: str = "",
         fields: str = "*",
         order_by: str = "modifiedTime desc",
         team_drives: bool = True,
         **kwargs: Any,
     ) -> Iterable[File]:
+        """List files in Google Drive.
+
+        Example:
+            query = "name contains 'hello'"
+            fields = "files(id, name, mimeType, size, modifiedTime)"
+            order_by = "modifiedTime desc"
+            team_drives = True
+
+            files = drive.list(query=query, fields=fields, order_by=order_by, team_drives=team_drives)
+
+        Args:
+            query (str): The query to use to filter files. For more information see https://developers.google.com/drive/api/v3/search-files.
+            fields (str, optional): The fields to return. Defaults to "*". For more information see https://developers.google.com/drive/api/v3/reference/files/list.
+            order_by (str, optional): The order to return files in. Defaults to "modifiedTime desc".
+            team_drives (bool, optional): Whether to include files from Team Drives. Defaults to True.
+        """
         if team_drives:
             kwargs.update(
                 {"includeItemsFromAllDrives": True, "supportsAllDrives": True}
@@ -229,6 +254,12 @@ class Drive:
     def list_children(
         self, parent_id: str, fields: str = "*", **kwargs: Any
     ) -> Iterable[File]:
+        """List files in a folder.
+
+        Args:
+            parent_id (str): The ID of the folder to list files in.
+            fields (str, optional): The fields to return. Defaults to "*". For more information see https://developers.google.com/drive/api/v3/reference/files/list.
+        """
         parent_id = parse_file_id(parent_id)
         return self.list(
             query=f"{q_escape(parent_id)} in parents", fields=fields, **kwargs
@@ -269,6 +300,14 @@ class Drive:
     def _create_nested_folders(
         self, filepath: Path, parents: List[str], update: bool = True
     ) -> List[str]:
+        """Create nested folders in Google Drive. Walks up the filepath creating folders as it goes.
+
+        Args:
+            filepath (Path): The filepath to create folders for.
+            parents (List[str]): The parent folders to create the folders in.
+            update (bool, optional): Whether to update the folder if it already exists. Defaults to True.
+        """
+
         def create_or_get_if_exists(name: str, parents: List[str]):
             folders = self._query_children(
                 name=name,
@@ -389,7 +428,6 @@ class Drive:
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
-            **kwargs: Additional keyword arguments to pass to the underlying Google Drive API call.
         """
         filepath = Path(filepath)
         mime_type = (
@@ -492,6 +530,15 @@ class Drive:
         update: bool = False,
         **kwargs: Any,
     ) -> Permission:
+        """Creates a permission for a file. Defaults to a reader permission of type user.
+
+        Args:
+            file_id (str): The ID of the file.
+            email_address (str): The email address of the user to give permission to.
+            permission (Permission, optional): The permission to give. Defaults to None, which will give a reader permission of type user.
+            sendNotificationEmail (bool, optional): Whether to send a notification email. Defaults to True.
+            update (bool, optional): Whether to update the permission if it already exists. Defaults to False.
+        """
         file_id = parse_file_id(file_id)
 
         user_permission: Permission = {
