@@ -30,7 +30,7 @@ def test_create_copy_to(test_sheet: File, sheets: Sheets, drive: Drive):
     updates = [["a", "b", "c"], [1, 2, 3]]
     sheets.update(sheet_id, "Sheet1", updates)
 
-    sheet_obj = sheets.get_by_sheet_name(sheet_id, name="Sheet1")
+    sheet_obj = sheets.get_sheet(sheet_id, name="Sheet1")
     new_sheet = sheets.create("My Sheet")
 
     copied_sheet = sheets.copy_to(

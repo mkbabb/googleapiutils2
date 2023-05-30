@@ -236,7 +236,7 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
     return y[::-1]
 
 
-def nested_defaultdict(existing: dict | Any | None = None, **kwargs: Any):
+def nested_defaultdict(existing: dict | Any | None = None, **kwargs: Any) -> dict[Any, Any]:
     if existing is None:
         existing = {}
     elif not isinstance(existing, dict):

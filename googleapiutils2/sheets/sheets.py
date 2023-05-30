@@ -56,15 +56,16 @@ class Sheets:
         self,
         title: str,
         sheet_names: list[str] | None = None,
-        body: Spreadsheet | None = None,
+        body: Spreadsheet | None = None,  # type: ignore
     ):
-        body = nested_defaultdict(body if body else {})
+        body: Spreadsheet = nested_defaultdict(body if body else {})  # type: ignore
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
 
-        body["properties"]["title"] = title
+        body["properties"]["title"] = title  # type: ignore
         for n, sheet_name in enumerate(sheet_names):
-            body["sheets"][n]["properties"]["title"] = sheet_name
-        body["sheets"] = list(body["sheets"].values())
+            body["sheets"][n]["properties"]["title"] = sheet_name  # type: ignore
+
+        body["sheets"] = list(body["sheets"].values())  # type: ignore
 
         return self.sheets.create(body=body).execute()
 
@@ -102,16 +103,23 @@ class Sheets:
     def get(
         self,
         spreadsheet_id: str,
-    ):
+    ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         return self.sheets.get(spreadsheetId=spreadsheet_id).execute()
 
-    def get_by_sheet_name(
+    def get_sheet(
         self,
         spreadsheet_id: str,
         name: str | None = None,
         sheet_id: int | None = None,
-    ):
+    ) -> Sheet | None:
+        """Get a sheet from a spreadsheet. Either the name or the ID of the sheet must be provided.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to get.
+            name (str, optional): The name of the sheet to get. Defaults to None.
+            sheet_id (int, optional): The ID of the sheet to get. Defaults to None.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         spreadsheet = self.get(spreadsheet_id)
 
@@ -122,6 +130,114 @@ class Sheets:
                 return sheet
 
         return None
+
+    def rename_sheet(
+        self,
+        spreadsheet_id: str,
+        sheet_id: int,
+        new_name: str,
+    ):
+        """Rename a sheet in a spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to rename.
+            sheet_id (int): The ID of the sheet to rename.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "updateSheetProperties": {
+                        "properties": {"sheetId": sheet_id, "title": new_name},
+                        "fields": "title",
+                    }
+                }
+            ]
+        }
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
+
+    def add_sheet(
+        self,
+        spreadsheet_id: str,
+        names: str | list[str],
+        rows: int = 1000,
+        cols: int = 26,
+        index: int | None = None,
+        **kwargs: Any,
+    ):
+        """Add one or more sheets to a spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet to add sheets to.
+            names (str | list[str]): The name(s) of the sheet(s) to add.
+            rows (int, optional): The number of rows to add to each sheet. Defaults to 1000.
+            cols (int, optional): The number of columns to add to each sheet. Defaults to 26.
+            index (int, optional): The index at which to insert the sheet(s). Defaults to None.
+            **kwargs: Additional keyword arguments to pass to the API request."""
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        if isinstance(names, str):
+            names = [names]
+
+        def make_body(name: str) -> Sheet:
+            body: Sheet = {
+                "properties": {
+                    "title": name,
+                    "gridProperties": {
+                        "rowCount": rows,
+                        "columnCount": cols,
+                    },
+                },
+            }
+            if index is not None:
+                body["properties"]["index"] = index
+            return body
+
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "addSheet": make_body(name),
+                }
+                for name in names
+            ],
+        }
+
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=body,
+            **kwargs,
+        ).execute()
+
+    def delete_sheet(
+        self,
+        spreadsheet_id: str,
+        sheet_id: int,
+        **kwargs: Any,
+    ):
+        """Deletes a sheet from a spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet to delete the sheet from.
+            sheet_id (str): The ID of the sheet to delete.
+            **kwargs: Additional keyword arguments to pass to the API request.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "deleteSheet": {
+                        "sheetId": sheet_id,
+                    },
+                },
+            ],
+        }
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=body,
+            **kwargs,
+        ).execute()
 
     def values(
         self,
@@ -179,7 +295,7 @@ class Sheets:
 
             if len(diff := frame.columns.difference(header)):
                 # only align columns if there are new columns
-                header: pd.Index = header.append(diff)
+                header = header.append(diff)
                 sheet_name, _ = reverse_sheet_range(range_name)
                 self.update(
                     spreadsheet_id,
@@ -206,7 +322,7 @@ class Sheets:
             return self._dict_to_values_align_columns(
                 spreadsheet_id=spreadsheet_id,
                 range_name=range_name,
-                rows=values,
+                rows=values,  # type: ignore
                 align_columns=align_columns,
             )
         else:
@@ -243,7 +359,7 @@ class Sheets:
             .update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                body={"values": values},
+                body={"values": values},  # type: ignore
                 valueInputOption=value_input_option.value,
             )
             .execute()
@@ -279,7 +395,7 @@ class Sheets:
                 ),
             }
             for range_name, values in data.items()
-        ]
+        ]  # type: ignore
 
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option.value,
@@ -317,11 +433,12 @@ class Sheets:
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        body = {
+        body: ValueRange = {
             "values": self._process_values(
                 spreadsheet_id, range_name, values, align_columns
-            )
+            )  # type: ignore
         }
+
         return (
             self.sheets.values()
             .append(
@@ -349,29 +466,6 @@ class Sheets:
             .clear(spreadsheetId=spreadsheet_id, range=range_name)
             .execute()
         )
-
-    def rename_sheet(
-        self,
-        spreadsheet_id: str,
-        curr_name: str,
-        new_name: str,
-    ):
-        spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet = self.get(spreadsheet_id, curr_name)
-        sheet_id = sheet["properties"]["sheetId"]
-        body = {
-            "requests": [
-                {
-                    "updateSheetProperties": {
-                        "properties": {"sheetId": sheet_id, "title": new_name},
-                        "fields": "title",
-                    }
-                }
-            ]
-        }
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
 
     @staticmethod
     def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
@@ -472,7 +566,7 @@ class Sheets:
             width (int, optional): The width to set the columns to. Defaults to 100. If None, will auto-resize.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet = self.get_by_sheet_name(spreadsheet_id, name=sheet_name)
+        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
         if not sheet:
             raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
 
