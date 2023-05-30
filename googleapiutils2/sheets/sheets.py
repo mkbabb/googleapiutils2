@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import (
         AppendValuesResponse,
+        BatchUpdateSpreadsheetRequest,
         BatchUpdateValuesRequest,
         BatchUpdateValuesResponse,
         ClearValuesResponse,
@@ -425,7 +426,7 @@ class Sheets:
         return data
 
     @staticmethod
-    def _resize_columns(sheet: Sheet, widths: int | list[int] | None = None):
+    def _resize_columns(sheet: Sheet, widths: int | list[int] | None = None) -> list:
         sheet_id = sheet["properties"]["sheetId"]
         num_columns = sheet["properties"]["gridProperties"]["columnCount"]
 
@@ -475,7 +476,7 @@ class Sheets:
         if not sheet:
             raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
 
-        body: BatchUpdateValuesRequest = {
+        body: BatchUpdateSpreadsheetRequest = {
             "requests": self._resize_columns(sheet, width)
         }
         return (

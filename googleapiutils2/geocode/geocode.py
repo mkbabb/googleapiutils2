@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import *
 
 import requests
 from requests.exceptions import JSONDecodeError
 
 from ..utils import update_url_params
-from .misc import *
+from .misc import GeocodeResult
 
 
 class Geocode:

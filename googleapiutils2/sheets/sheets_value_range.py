@@ -72,14 +72,13 @@ class SheetsValueRange:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
-        for sheet in self.sheets.get(self.spreadsheet_id)["sheets"]:
-            properties = sheet["properties"]
-
-            if properties["title"] == self.sheet_name:
-                grid_properties = properties["gridProperties"]
+        for sheet in self.sheets.get(self.spreadsheet_id).get("sheets", []):
+            properties = sheet.get("properties", {})
+            if properties.get("title") == self.sheet_name:
+                grid_properties = properties.get("gridProperties", {})
                 return (
-                    grid_properties["rowCount"],
-                    grid_properties["columnCount"],
+                    grid_properties.get("rowCount", 0),
+                    grid_properties.get("columnCount", 0),
                 )
         return DEFAULT_SHEET_SHAPE
 
@@ -110,8 +109,8 @@ class SheetsValueRange:
     def rename(self, new_sheet_name: str):
         return self.sheets.rename_sheet(
             spreadsheet_id=self.spreadsheet_id,
-            sheet_name=self.sheet_name,
-            new_sheet_name=new_sheet_name,
+            curr_name=self.sheet_name,
+            new_name=new_sheet_name,
         )
 
     def append(
@@ -135,7 +134,7 @@ class SheetsValueRange:
             spreadsheet_id=self.spreadsheet_id, range_name=str(self)
         )
 
-    def to_frame(self, **kwargs) -> pd.DataFrame:
+    def to_frame(self, **kwargs) -> pd.DataFrame | None:
         return self.sheets.to_frame(self.values(), **kwargs)
 
     def __getitem__(self, ixs: Any) -> SheetsValueRange:

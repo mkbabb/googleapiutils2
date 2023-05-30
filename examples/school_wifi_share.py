@@ -22,11 +22,15 @@ responses_sheet_url = "https://docs.google.com/spreadsheets/d/1hjeVzc_WsEVyth8lj
 responses_df = sheets.to_frame(
     sheets.values(responses_sheet_url, "Validated Responses")
 )
+if responses_df is None:
+    raise ValueError("No responses found")
 
 PSU_ID_RE = re.compile("\[(.*)\]")
 responses_df["psu_id"] = responses_df[psu_col].map(
     lambda x: re.findall(PSU_ID_RE, x)[0]
 )
+
+
 responses_df["emails"] = responses_df[email_col].str.split(",")
 responses_df["emails"] = responses_df["emails"].map(
     lambda emails: [i.strip().lower() for i in emails]

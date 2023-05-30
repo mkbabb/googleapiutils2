@@ -119,7 +119,7 @@ def get_oauth2_creds(
     client_config: FilePath | dict = CONFIG_PATH,
     token_path: FilePath = TOKEN_PATH,
     scopes: List[str] = SCOPES,
-) -> Optional[Credentials]:
+) -> Credentials:
     """Get OAuth2 credentials for Google API.
 
     This will automatically detect if the credentials are for a service account.
@@ -139,14 +139,14 @@ def get_oauth2_creds(
         path = Path(client_config)
         client_config = json.loads(path.read_bytes())
 
-    is_service_account = client_config.get("type", "") == "service_account"
+    is_service_account = client_config.get("type", "") == "service_account"  # type: ignore
 
     if is_service_account:
         return service_account.Credentials.from_service_account_info(
             client_config, scopes=scopes
-        )
+        )  # type: ignore
     else:
-        creds: Credentials = None
+        creds: Credentials = None  # type: ignore
 
         if token_path.exists():
             creds = pickle.loads(token_path.read_bytes())
@@ -157,10 +157,10 @@ def get_oauth2_creds(
 
         elif creds is None:
             flow = InstalledAppFlow.from_client_config(client_config, scopes)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0)  # type: ignore
             token_path.write_bytes(pickle.dumps(creds))
 
-        return creds
+        return creds  # type: ignore
 
 
 def download_large_file(
