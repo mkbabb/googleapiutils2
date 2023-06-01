@@ -8,7 +8,6 @@ from typing import *
 
 from ..utils import to_base
 
-
 VERSION = "v4"
 
 DEFAULT_SHEET_NAME = "Sheet1"
