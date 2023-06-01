@@ -72,7 +72,7 @@ class SheetsValueRange:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
-        for sheet in self.sheets.get(self.spreadsheet_id).get("sheets", []):
+        for sheet in self.sheets.get_spreadsheet(self.spreadsheet_id).get("sheets", []):
             properties = sheet.get("properties", {})
             if properties.get("title") == self.sheet_name:
                 grid_properties = properties.get("gridProperties", {})
@@ -81,6 +81,14 @@ class SheetsValueRange:
                     grid_properties.get("columnCount", 0),
                 )
         return DEFAULT_SHEET_SHAPE
+
+    @cachedmethod(operator.attrgetter("_cache"))
+    def sheet_id(self) -> int:
+        for sheet in self.sheets.get_spreadsheet(self.spreadsheet_id).get("sheets", []):
+            properties = sheet.get("properties", {})
+            if properties.get("title") == self.sheet_name:
+                return properties.get("sheetId", 0)
+        return 0
 
     def values(
         self,
@@ -106,11 +114,11 @@ class SheetsValueRange:
             align_columns=align_columns,
         )
 
-    def rename(self, new_sheet_name: str):
-        return self.sheets.rename_sheet(
+    def rename(self, new_name: str):
+        return self.sheets.rename(
             spreadsheet_id=self.spreadsheet_id,
-            curr_name=self.sheet_name,
-            new_name=new_sheet_name,
+            sheet_id=self.sheet_id(),
+            new_name=new_name,
         )
 
     def append(

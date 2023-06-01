@@ -28,6 +28,18 @@ pytest = "^7.3.1"
 pandas-stubs = "^2.0.1.230501"
 black = "^23.3.0"
 
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = false
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+
+[[tool.mypy.overrides]]
+module = "google.*"
+ignore_missing_imports = true
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

@@ -11,6 +11,7 @@ from typing import *
 
 import googleapiclient.http
 import requests
+
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
@@ -18,11 +19,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 FilePath = str | Path
 
-
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import Spreadsheet
 
+
+THROTTLE_TIME = 30
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -236,7 +238,9 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
     return y[::-1]
 
 
-def nested_defaultdict(existing: dict | Any | None = None, **kwargs: Any) -> dict[Any, Any]:
+def nested_defaultdict(
+    existing: dict | Any | None = None, **kwargs: Any
+) -> dict[Any, Any]:
     if existing is None:
         existing = {}
     elif not isinstance(existing, dict):

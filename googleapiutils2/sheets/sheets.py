@@ -1,7 +1,9 @@
 from __future__ import annotations
+from collections import defaultdict
 
 import logging
 import operator
+import time
 from typing import *
 
 import pandas as pd
@@ -9,13 +11,14 @@ from cachetools import TTLCache, cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import nested_defaultdict, parse_file_id
+from ..utils import THROTTLE_TIME, nested_defaultdict, parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
     VERSION,
     InsertDataOption,
     SheetSlice,
     SheetSliceT,
+    SheetsValues,
     ValueInputOption,
     ValueRenderOption,
     reverse_sheet_range,
@@ -41,16 +44,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+SheetsRange = str | SheetSliceT | Any
+
 
 class Sheets:
-    def __init__(self, creds: Credentials):
+    def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
         self.creds = creds
         self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
         )
         self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
+        self.throttle_time = throttle_time
 
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
+
+        self._batched_data: DefaultDict[
+            str, dict[str | Any, SheetsValues]
+        ] = defaultdict(dict)
+        self._prev_time: Optional[float] = None
 
     def create(
         self,
@@ -67,7 +78,7 @@ class Sheets:
 
         body["sheets"] = list(body["sheets"].values())  # type: ignore
 
-        return self.sheets.create(body=body).execute()
+        return self.sheets.create(body=body).execute()  # type: ignore
 
     def copy_to(
         self,
@@ -92,7 +103,7 @@ class Sheets:
 
         return (
             self.sheets.sheets()
-            .copyTo(
+            .copyTo(  # type: ignore
                 spreadsheetId=from_spreadsheet_id,
                 sheetId=from_sheet_id,
                 body=body,
@@ -100,14 +111,14 @@ class Sheets:
             .execute()
         )
 
-    def get(
+    def get_spreadsheet(
         self,
         spreadsheet_id: str,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         return self.sheets.get(spreadsheetId=spreadsheet_id).execute()
 
-    def get_sheet(
+    def get(
         self,
         spreadsheet_id: str,
         name: str | None = None,
@@ -121,7 +132,7 @@ class Sheets:
             sheet_id (int, optional): The ID of the sheet to get. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        spreadsheet = self.get(spreadsheet_id)
+        spreadsheet = self.get_spreadsheet(spreadsheet_id)
 
         for sheet in spreadsheet["sheets"]:
             if sheet_id is not None and sheet["properties"]["sheetId"] == sheet_id:
@@ -131,7 +142,7 @@ class Sheets:
 
         return None
 
-    def rename_sheet(
+    def rename(
         self,
         spreadsheet_id: str,
         sheet_id: int,
@@ -159,7 +170,7 @@ class Sheets:
             spreadsheetId=spreadsheet_id, body=body
         ).execute()
 
-    def add_sheet(
+    def add(
         self,
         spreadsheet_id: str,
         names: str | list[str],
@@ -210,7 +221,7 @@ class Sheets:
             **kwargs,
         ).execute()
 
-    def delete_sheet(
+    def delete(
         self,
         spreadsheet_id: str,
         sheet_id: int,
@@ -242,7 +253,7 @@ class Sheets:
     def values(
         self,
         spreadsheet_id: str,
-        range_name: str | Any = DEFAULT_SHEET_NAME,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
     ):
@@ -250,7 +261,7 @@ class Sheets:
 
         Args:
             spreadsheet_id (str): The spreadsheet ID.
-            range_name (str | Any, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
+            range_name (SheetsRange, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
             value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -268,7 +279,7 @@ class Sheets:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
-        """Get the header of a sheet; cache the result"""
+        """Get the header of a sheet; cache the result."""
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
@@ -278,46 +289,53 @@ class Sheets:
     def _dict_to_values_align_columns(
         self,
         spreadsheet_id: str,
-        range_name: str,
-        rows: list[dict],
+        range_name: SheetsRange,
+        rows: list[dict[SheetsRange, Any]],
         align_columns: bool = True,
     ):
-        if align_columns:
-            sheet_name, _ = reverse_sheet_range(range_name)
-            header = self._header(spreadsheet_id, sheet_name)
-            header = pd.Index(header).astype(str)
+        """Transforms a list of dictionaries into a list of lists, aligning the columns with the header.
+        If new columns were added, the header is appended to the right; the header of the sheet is updated.
 
-            frame = pd.DataFrame(rows)
-            frame = frame.reindex(
-                list(rows[0].keys()), axis=1
-            )  # preserve the insertion order
-            frame.index = frame.index.astype(str)
-
-            if len(diff := frame.columns.difference(header)):
-                # only align columns if there are new columns
-                header = header.append(diff)
-                sheet_name, _ = reverse_sheet_range(range_name)
-                self.update(
-                    spreadsheet_id,
-                    SheetSlice[sheet_name, 1, ...],
-                    [header.tolist()],
-                )
-                self._cache[(spreadsheet_id, sheet_name)] = list(header)
-
-            other = pd.DataFrame(columns=header)
-            frame = pd.concat([other, frame], ignore_index=True).fillna("")
-            return frame.values.tolist()
-        else:
+        Args:
+            spreadsheet_id (str): The spreadsheet ID.
+            range_name (SheetsRange): The range to update.
+            rows (list[dict[SheetsRange, Any]]): The rows to update.
+            align_columns (bool, optional): Whether to align the columns with the header. Defaults to True.
+        """
+        if not align_columns:
             logger.debug("align_columns is False, skipping column alignment")
             return [list(row.values()) for row in rows]
 
-    def _process_values(
+        sheet_name, _ = reverse_sheet_range(range_name)
+        header = self._header(spreadsheet_id, sheet_name)
+        header = pd.Index(header).astype(str)
+
+        frame = pd.DataFrame(rows)
+        frame = frame.reindex(
+            list(rows[0].keys()), axis=1
+        )  # preserve the insertion order
+        frame.index = frame.index.astype(str)
+
+        if len(diff := frame.columns.difference(header)):
+            header = header.append(diff)
+            sheet_name, _ = reverse_sheet_range(range_name)
+            self.update(
+                spreadsheet_id,
+                SheetSlice[sheet_name, 1, ...],
+                [header.tolist()],
+            )
+            self._cache[(spreadsheet_id, sheet_name)] = list(header)
+
+        frame = frame.reindex(columns=header)
+        return frame.fillna("").values.tolist()  # fill null values with an empty string
+
+    def _process_sheets_values(
         self,
         spreadsheet_id: str,
-        range_name: str,
-        values: list[list[Any]] | list[dict],
+        range_name: SheetsRange,
+        values: SheetsValues,
         align_columns: bool = True,
-    ) -> list[list[Any]] | list[dict]:
+    ) -> list[list[Any]]:
         if all(isinstance(value, dict) for value in values):
             return self._dict_to_values_align_columns(
                 spreadsheet_id=spreadsheet_id,
@@ -326,13 +344,13 @@ class Sheets:
                 align_columns=align_columns,
             )
         else:
-            return values
+            return values  # type: ignore
 
     def update(
         self,
         spreadsheet_id: str,
-        range_name: str | Any,
-        values: list[list[Any]] | list[dict] | list[Any],
+        range_name: SheetsRange,
+        values: SheetsValues,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
@@ -344,15 +362,16 @@ class Sheets:
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
-            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
-            values (list[list[Any]] | list[dict]): The values to update.
+            range_name (SheetsRange): The range to update.
+            values (SheetsValues): The values to update.
             value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
             align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
-
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
-        values = self._process_values(spreadsheet_id, range_name, values, align_columns)
+        values = self._process_sheets_values(
+            spreadsheet_id, range_name, values, align_columns
+        )
 
         return (
             self.sheets.values()
@@ -365,29 +384,18 @@ class Sheets:
             .execute()
         )
 
-    def batch_update(
+    def _batch_update(
         self,
         spreadsheet_id: str,
-        data: dict[str | Any, list[list[Any]] | list[dict]],
+        data: dict[SheetsRange, SheetsValues],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
-        """Updates a series of range values in a spreadsheet. Much faster version of calling `update` multiple times.
-        See `update` for more details.
-
-        Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            data (dict): A dict of {range_name: values} to update;
-                        values: list[list[Any]] | list[dict].
-            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
-            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
-        """
-        spreadsheet_id = parse_file_id(spreadsheet_id)
-
-        batch: list[ValueRange] = [
+        """Internal method for batch updating values. Use `batch_update` instead."""
+        new_data: list[ValueRange] = [
             {
                 "range": (str_range_name := str(range_name)),
-                "values": self._process_values(
+                "values": self._process_sheets_values(
                     spreadsheet_id=spreadsheet_id,
                     range_name=str_range_name,
                     values=values,
@@ -395,11 +403,11 @@ class Sheets:
                 ),
             }
             for range_name, values in data.items()
-        ]  # type: ignore
+        ]
 
         body: BatchUpdateValuesRequest = {
             "valueInputOption": value_input_option.value,
-            "data": batch,
+            "data": new_data,
         }
         return (
             self.sheets.values()
@@ -410,22 +418,94 @@ class Sheets:
             .execute()
         )
 
+    def batch_update(
+        self,
+        spreadsheet_id: str,
+        data: dict[SheetsRange, SheetsValues],
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
+        batch_size: int | None = None,
+    ):
+        """Updates a series of range values in a spreadsheet. Much faster version of calling `update` multiple times.
+        See `update` for more details.
+
+        If the `batch_size` is None, all updates will be batched together. Otherwise, the updates will be batched by the following
+        rules:
+        -   If the number of updates is greater than `batch_size` AND
+        -   If the time between the first update and the last update is greater than `THROTTLE_TIME` OR
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            data (dict[SheetsRange, SheetsValues]): The data to update.
+            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
+            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+            batch_size (int | None, optional): The number of updates to batch together. If None, all updates will be batched together. Defaults to None.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        if batch_size is None:
+            return self._batch_update(
+                spreadsheet_id=spreadsheet_id,
+                data=data,
+                value_input_option=value_input_option,
+                align_columns=align_columns,
+            )
+
+        batched_data = self._batched_data[spreadsheet_id]
+
+        if data is not None:
+            self._batched_data[spreadsheet_id] |= data
+
+        curr_time = time.perf_counter()
+        dt = (
+            curr_time - self._prev_time
+            if self._prev_time is not None
+            else self.throttle_time
+        )
+
+        # If the conditions for a batch update are not met, simply return
+        if not (dt >= self.throttle_time and len(batched_data) >= batch_size):
+            return None
+
+        self._prev_time = curr_time
+        res = self._batch_update(
+            spreadsheet_id=spreadsheet_id,
+            data=batched_data,
+            value_input_option=value_input_option,
+            align_columns=align_columns,
+        )
+        self._batched_data[spreadsheet_id].clear()
+
+        return res
+
+    def batched_update_remaining(self, spreadsheet_id: str):
+        """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        batched_data = self._batched_data[spreadsheet_id]
+
+        res = self._batch_update(
+            spreadsheet_id=spreadsheet_id,
+            data=batched_data,
+        )
+        self._batched_data[spreadsheet_id].clear()
+        return res
+
     def append(
         self,
         spreadsheet_id: str,
-        range_name: str | Any,
-        values: list[list[Any]],
+        range_name: SheetsRange,
+        values: SheetsValues,
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
-        """Appends values to a spreadsheet. Like `update`, but appends instead of overwrites.
+        """Appends values to a spreadsheet. Like `update`, but searches for the next available row to append to.
         This means rows will be added to the spreadsheet if the input values are longer than the
-        number of existing rows.
+        number of existing rows. See: https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
-            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
+            range_name (SheetsRange): The range to update.
             values (list[list[Any]]): The values to append.
             insert_data_option (InsertDataOption, optional): How the input data should be inserted. Defaults to InsertDataOption.overwrite.
             value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
@@ -434,9 +514,12 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         body: ValueRange = {
-            "values": self._process_values(
-                spreadsheet_id, range_name, values, align_columns
-            )  # type: ignore
+            "values": self._process_sheets_values(
+                spreadsheet_id=spreadsheet_id,
+                range_name=range_name,
+                values=values,
+                align_columns=align_columns,
+            )
         }
 
         return (
@@ -451,12 +534,16 @@ class Sheets:
             .execute()
         )
 
-    def clear(self, spreadsheet_id: str, range_name: str | Any):
+    def clear(
+        self,
+        spreadsheet_id: str,
+        range_name: SheetsRange,
+    ):
         """Clears a range of values in a spreadsheet.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
-            range_name (str | Any): The range to update. Can be a string or a SheetSlice.
+            range_name (SheetsRange): The range to clear.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
@@ -470,6 +557,7 @@ class Sheets:
     @staticmethod
     def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
         """Converts a ValueRange to a DataFrame.
+
         Useful for working with the data in Pandas after a call to sheets.values().
         If one of the keyword arguments to the dataframe is "columns",
         the first row of the values will be used as the column names, aligned to the data.
@@ -540,20 +628,19 @@ class Sheets:
                 }
                 for i in range(num_columns)
             ]
-        else:
-            if isinstance(widths, int):
-                widths = [widths] * num_columns
 
-            return [
-                {
-                    "updateDimensionProperties": {
-                        "range": make_range(i),
-                        "properties": {"pixelSize": widths[i]},
-                        "fields": "pixelSize",
-                    }
+        if isinstance(widths, int):
+            widths = [widths] * num_columns
+        return [
+            {
+                "updateDimensionProperties": {
+                    "range": make_range(i),
+                    "properties": {"pixelSize": widths[i]},
+                    "fields": "pixelSize",
                 }
-                for i in range(num_columns)
-            ]
+            }
+            for i in range(num_columns)
+        ]
 
     def resize_columns(
         self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
@@ -566,15 +653,28 @@ class Sheets:
             width (int, optional): The width to set the columns to. Defaults to 100. If None, will auto-resize.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet = self.get_sheet(spreadsheet_id, name=sheet_name)
-        if not sheet:
+        sheet = self.get(spreadsheet_id, name=sheet_name)
+        if sheet is None:
             raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
 
-        body: BatchUpdateSpreadsheetRequest = {
-            "requests": self._resize_columns(sheet, width)
-        }
-        return (
-            self.service.spreadsheets()
-            .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
-            .execute()
-        )
+        def resize():
+            body: BatchUpdateSpreadsheetRequest = {
+                "requests": self._resize_columns(sheet, width)  # type: ignore
+            }
+            return (
+                self.service.spreadsheets()
+                .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
+                .execute()
+            )
+
+        if width is None:
+            header = self._header(spreadsheet_id, sheet_name)
+            res = self.append(spreadsheet_id, sheet_name, [header])
+            updated_range = res["updates"]["updatedRange"]
+
+            res = resize()
+
+            self.clear(spreadsheet_id, updated_range)
+            return res
+        else:
+            return resize()

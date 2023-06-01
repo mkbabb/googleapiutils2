@@ -8,33 +8,52 @@ from typing import *
 
 from ..utils import to_base
 
+
 VERSION = "v4"
 
 DEFAULT_SHEET_NAME = "Sheet1"
 
 DEFAULT_SHEET_SHAPE = (1000, 26)
 
+SheetsValues = list[list[Any]] | list[dict[str | Any, Any]]
+
 
 class ValueInputOption(Enum):
+    """How the input data should be interpreted."""
+
+    # The values the user has entered will not be parsed and will be stored as-is.
     unspecified = "INPUT_VALUE_OPTION_UNSPECIFIED"
+    # The values will be parsed as if the user typed them into the UI. Numbers will stay as
     raw = "RAW"
+    # The values will be parsed as if the user typed them into the UI, but numbers will be
     user_entered = "USER_ENTERED"
 
 
 class ValueRenderOption(Enum):
+    """How values should be represented in the output."""
+
+    # The values will be represented as they are formatted in the sheet.
     formatted = "FORMATTED_VALUE"
+    # The values will be represented as they are in the sheet, without formatting.
     unformatted = "UNFORMATTED_VALUE"
+    # The values will be represented as the formula (e.g. "=A1+B1") that is stored in the sheet.
     formula = "FORMULA"
 
 
 class InsertDataOption(Enum):
+    """How the input data should be inserted."""
+
+    # Rows are inserted for the new data.
     insert = "INSERT_ROWS"
+    # Rows are overwritten with the new data.
     overwrite = "OVERWRITE"
 
 
 def format_range_name(
     sheet_name: str | None = None, range_name: str | None = None
 ) -> str:
+    """Format a range name for use in a Google Sheets API request."""
+
     if sheet_name is not None and range_name is not None:
         if not (sheet_name.startswith("'") and sheet_name.endswith("'")):
             sheet_name = f"'{sheet_name}'"
@@ -74,8 +93,8 @@ def A1_to_rc(a1: str | int) -> tuple[int, int | None]:
         row, col = a1.split(":")
         return finder(row), finder(col)
     else:
-        row = finder(a1)
-        return row, row
+        new_row = finder(a1)
+        return new_row, new_row
 
 
 def slices_to_A1(row_ix: slice, col_ix: slice) -> tuple[str, str]:
@@ -133,6 +152,7 @@ def expand_slices(
     row_ix, col_ix = to_slice(row_ix, col_ix, shape=shape)
     row_ix, col_ix = slices_to_A1(row_ix, col_ix)
     range_name = f"{row_ix}:{col_ix}" if row_ix != "" and col_ix != "" else None
+
     return range_name
 
 
@@ -152,7 +172,9 @@ def parse_sheets_ixs(
             raise IndexError(f"Invalid index: {ixs}")
 
 
-def reverse_sheet_range(range_name: str) -> tuple[str, str]:
+def reverse_sheet_range(range_name: Any) -> tuple[str, str]:
+    range_name = str(range_name)
+
     if "!" in range_name:
         sheet_name, range_name = range_name.split("!")
         return sheet_name, range_name

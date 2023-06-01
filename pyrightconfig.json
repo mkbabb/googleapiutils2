@@ -1,3 +1,4 @@
 {
-    "reportTypedDictNotRequiredAccess": "none"
+    "reportTypedDictNotRequiredAccess": "none",
+    "reportGeneralTypeIssues": "information"
 }
