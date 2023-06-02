@@ -5,6 +5,7 @@ from typing import *
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
+
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
 
@@ -30,7 +31,7 @@ def test_sheet_slice():
         if (row_slice is None) ^ (col_slice is None):
             continue
 
-        ixs = []
+        ixs: list = []
         if sheet is not None:
             ixs = [sheet]
         if row_slice is not None and col_slice is not None:
@@ -39,10 +40,11 @@ def test_sheet_slice():
         if len(ixs) == 1:
             ixs = ixs[0]
         else:
-            ixs = tuple(ixs)
+            ixs = tuple(ixs)  # type: ignore
 
         try:
-            slc = SheetSlice.__getitem__(ixs)
+            slc = SheetSlice.__getitem__(ixs)  # type: ignore
+            print(slc)
         except IndexError:
             continue
         except:

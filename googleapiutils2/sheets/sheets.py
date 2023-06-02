@@ -11,9 +11,10 @@ from cachetools import TTLCache, cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import THROTTLE_TIME, nested_defaultdict, parse_file_id
+from ..utils import THROTTLE_TIME, hex_to_rgb, nested_defaultdict, parse_file_id
 from .misc import (
     DEFAULT_SHEET_NAME,
+    DEFAULT_SHEET_SHAPE,
     VERSION,
     InsertDataOption,
     SheetSlice,
@@ -21,7 +22,8 @@ from .misc import (
     SheetsValues,
     ValueInputOption,
     ValueRenderOption,
-    reverse_sheet_range,
+    split_sheet_range,
+    A1_to_slices,
 )
 
 if TYPE_CHECKING:
@@ -40,6 +42,8 @@ if TYPE_CHECKING:
         SpreadsheetProperties,
         UpdateValuesResponse,
         ValueRange,
+        CellFormat,
+        TextFormat,
     )
 
 logger = logging.getLogger(__name__)
@@ -123,7 +127,7 @@ class Sheets:
         spreadsheet_id: str,
         name: str | None = None,
         sheet_id: int | None = None,
-    ) -> Sheet | None:
+    ) -> Sheet:
         """Get a sheet from a spreadsheet. Either the name or the ID of the sheet must be provided.
 
         Args:
@@ -134,13 +138,16 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         spreadsheet = self.get_spreadsheet(spreadsheet_id)
 
+        if name is not None and name.startswith("'") and name.endswith("'"):
+            name = name[1:-1]
+
         for sheet in spreadsheet["sheets"]:
             if sheet_id is not None and sheet["properties"]["sheetId"] == sheet_id:
                 return sheet
             if name is not None and sheet["properties"]["title"] == name:
                 return sheet
 
-        return None
+        raise ValueError(f"Sheet {name or sheet_id} not found in spreadsheet.")
 
     def rename(
         self,
@@ -306,7 +313,7 @@ class Sheets:
             logger.debug("align_columns is False, skipping column alignment")
             return [list(row.values()) for row in rows]
 
-        sheet_name, _ = reverse_sheet_range(range_name)
+        sheet_name, _ = split_sheet_range(range_name)
         header = self._header(spreadsheet_id, sheet_name)
         header = pd.Index(header).astype(str)
 
@@ -318,7 +325,7 @@ class Sheets:
 
         if len(diff := frame.columns.difference(header)):
             header = header.append(diff)
-            sheet_name, _ = reverse_sheet_range(range_name)
+            sheet_name, _ = split_sheet_range(range_name)
             self.update(
                 spreadsheet_id,
                 SheetSlice[sheet_name, 1, ...],
@@ -553,6 +560,225 @@ class Sheets:
             .clear(spreadsheetId=spreadsheet_id, range=range_name)
             .execute()
         )
+
+    def resize(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        rows: int = DEFAULT_SHEET_SHAPE[0],
+        cols: int = DEFAULT_SHEET_SHAPE[1],
+    ):
+        """Resizes a sheet to the given number of rows and columns.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            sheet_name (str): The name of the sheet to resize.
+            rows (int, optional): The number of rows to resize to. Defaults to DEFAULT_SHEET_SHAPE[0].
+            cols (int, optional): The number of columns to resize to. Defaults to DEFAULT_SHEET_SHAPE[1].
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "gridProperties": {
+                                "rowCount": rows,
+                                "columnCount": cols,
+                            },
+                        },
+                        "fields": "gridProperties.rowCount,gridProperties.columnCount",
+                    }
+                }
+            ]
+        }
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
+
+    def clear_formatting(self, spreadsheet_id: str, sheet_name: str):
+        """Clears all formatting from a sheet.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            sheet_name (str): The name of the sheet to clear formatting from.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "updateCells": {
+                        "range": {
+                            "sheetId": sheet_id,
+                        },
+                        "fields": "userEnteredFormat",
+                    }
+                }
+            ]
+        }
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
+
+    def reset_sheet(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+    ):
+        """Resets a sheet back to a default state. This includes clearing all values and formatting.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            sheet_name (str): The name of the sheet to reset.
+        """
+        # first clear all of the values, and set the bounds of the sheet to have 26 columns, and 1000 rows
+        self.clear(spreadsheet_id, sheet_name)
+        self.resize(spreadsheet_id, sheet_name, rows=1000, cols=26)
+        # then clear all of the formatting
+        self.clear_formatting(spreadsheet_id, sheet_name)
+
+    @staticmethod
+    def _create_format_body(
+        sheet_id: int,
+        start_row: int,
+        start_col: int,
+        cell_format: CellFormat,
+        end_row: int | None = None,
+        end_col: int | None = None,
+    ) -> BatchUpdateSpreadsheetRequest:
+        """Creates a batch update request body for formatting a range of cells.
+        The ranges herein are 1-indexed.
+
+        Args:
+            sheet_id (int): The ID of the sheet to format.
+            start_row (int): The starting row of the range to format.
+            start_col (int): The starting column of the range to format.
+            cell_format (CellFormat): The format to apply to the range.
+            end_row (int, optional): The ending row of the range to format. Defaults to None.
+            end_col (int, optional): The ending column of the range to format. Defaults to None.
+        """
+        end_row = end_row if end_row is not None else start_row + 1
+        end_col = end_col if end_col is not None else start_col + 1
+
+        return {
+            "requests": [
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": start_row - 1,
+                            "endRowIndex": end_row,
+                            "startColumnIndex": start_col - 1,
+                            "endColumnIndex": end_col,
+                        },
+                        "cell": {
+                            "userEnteredFormat": cell_format,
+                        },
+                        "fields": f"userEnteredFormat",
+                    }
+                }
+            ]
+        }
+
+    @staticmethod
+    def _create_cell_format(
+        bold: bool | None = None,
+        italic: bool | None = None,
+        underline: bool | None = None,
+        strikethrough: bool | None = None,
+        font_size: int | None = None,
+        font_family: str | None = None,
+        text_color: str | None = None,
+        background_color: str | None = None,
+        cell_format: CellFormat | None = None,
+    ) -> CellFormat:
+        text_format: TextFormat = {}
+        if bold is not None:
+            text_format["bold"] = bold
+        if italic is not None:
+            text_format["italic"] = italic
+        if underline is not None:
+            text_format["underline"] = underline
+        if strikethrough is not None:
+            text_format["strikethrough"] = strikethrough
+        if font_size is not None:
+            text_format["fontSize"] = font_size
+        if font_family is not None:
+            text_format["fontFamily"] = font_family
+        if text_color is not None:
+            text_format["foregroundColor"] = hex_to_rgb(text_color)
+
+        cell_format_dict: CellFormat = {}
+        if background_color is not None:
+            cell_format_dict["backgroundColor"] = hex_to_rgb(background_color)
+        if cell_format is not None:
+            cell_format_dict.update(cell_format)
+
+        return {"textFormat": text_format, **cell_format_dict}  # type: ignore
+
+    def format(
+        self,
+        spreadsheet_id: str,
+        range_name: SheetsRange,
+        bold: bool | None = None,
+        italic: bool | None = None,
+        underline: bool | None = None,
+        strikethrough: bool | None = None,
+        font_size: int | None = None,
+        font_family: str | None = None,
+        text_color: str | None = None,
+        background_color: str | None = None,
+        cell_format: CellFormat | None = None,
+    ):
+        """Formats a range of cells in a spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            range_name (str): The range to format.
+            ...
+            cell_format (CellFormat, optional): A cell format to merge with the default format. Defaults to None.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        cell_format = self._create_cell_format(
+            bold=bold,
+            italic=italic,
+            underline=underline,
+            strikethrough=strikethrough,
+            font_size=font_size,
+            font_family=font_family,
+            text_color=text_color,
+            background_color=background_color,
+            cell_format=cell_format,
+        )
+
+        sheet_name, range_name = split_sheet_range(str(range_name))  # type: ignore
+
+        properties = self.get(spreadsheet_id, sheet_name)["properties"]
+        sheet_id = properties["sheetId"]
+        shape = (
+            properties["gridProperties"]["rowCount"],
+            properties["gridProperties"]["columnCount"],
+        )
+
+        row_slc, col_slc = A1_to_slices(range_name, shape=shape)
+
+        body = self._create_format_body(
+            sheet_id,
+            start_row=row_slc.start,
+            end_row=row_slc.stop,
+            start_col=col_slc.start,
+            end_col=col_slc.stop,
+            cell_format=cell_format,
+        )
+
+        return self.sheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
 
     @staticmethod
     def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:

@@ -16,10 +16,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F1
 
 Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1")
 
-sheets.clear(
-    SHEET_URL,
-    Sheet1,
-)
+sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)
 
 rows = [
     {
@@ -30,9 +27,9 @@ rows = [
         "Column 5": "ok",
     },
 ]
+
 Sheet1[2:3, ...].update(rows)
 Sheet1[4:5, ...].update(rows)
-
 Sheet1[4, "A"].update([["Frunk!"]])
 
 sheets.update(
@@ -84,4 +81,7 @@ if df is None:
 df[8] = "Frunk!"
 
 Sheet1.update(sheets.from_frame(df))
+
+sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
+
 sheets.resize_columns(SHEET_URL, Sheet1.sheet_name, width=None)

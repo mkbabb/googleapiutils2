@@ -72,14 +72,13 @@ class SheetsValueRange:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
-        for sheet in self.sheets.get_spreadsheet(self.spreadsheet_id).get("sheets", []):
-            properties = sheet.get("properties", {})
-            if properties.get("title") == self.sheet_name:
-                grid_properties = properties.get("gridProperties", {})
-                return (
-                    grid_properties.get("rowCount", 0),
-                    grid_properties.get("columnCount", 0),
-                )
+        sheet = self.sheets.get(self.spreadsheet_id, name=self.sheet_name)
+        if sheet is not None:
+            grid_properties = sheet.get("properties", {}).get("gridProperties", {})
+            return (
+                grid_properties.get("rowCount", 0),
+                grid_properties.get("columnCount", 0),
+            )
         return DEFAULT_SHEET_SHAPE
 
     @cachedmethod(operator.attrgetter("_cache"))

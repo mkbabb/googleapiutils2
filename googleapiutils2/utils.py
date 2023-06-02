@@ -21,7 +21,7 @@ FilePath = str | Path
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
-    from googleapiclient._apis.sheets.v4.resources import Spreadsheet
+    from googleapiclient._apis.sheets.v4.resources import Spreadsheet, Color
 
 
 THROTTLE_TIME = 30
@@ -38,6 +38,30 @@ CONFIG_PATH = "auth/credentials.json"
 
 
 class GoogleMimeTypes(Enum):
+    """Enum representing the MIME types used by Google Drive API.
+
+    Each member of this enum represents a MIME type used by Google Drive API.
+    These MIME types are used to identify the type of a file or folder in Google Drive.
+
+    Attributes:
+        audio (str): MIME type for audio files.
+        docs (str): MIME type for Google Docs files.
+        drive_sdk (str): MIME type for Google Drive SDK files.
+        drawing (str): MIME type for Google Drawings files.
+        file (str): MIME type for generic files.
+        folder (str): MIME type for folders.
+        form (str): MIME type for Google Forms files.
+        fusiontable (str): MIME type for Google Fusion Tables files.
+        jam (str): MIME type for Google Jamboard files.
+        map (str): MIME type for Google My Maps files.
+        photo (str): MIME type for Google Photos files.
+        slides (str): MIME type for Google Slides files.
+        script (str): MIME type for Google Apps Script files.
+        shortcut (str): MIME type for Google Drive shortcut files.
+        site (str): MIME type for Google Sites files.
+        sheets (str): MIME type for Google Sheets files.
+    """
+
     audio = "application/vnd.google-apps.audio"
     docs = "application/vnd.google-apps.document"
     drive_sdk = "application/vnd.google-apps.drive-sdk"
@@ -88,6 +112,16 @@ class GoogleMimeTypes(Enum):
     json = "application/vnd.google-apps.script+json"
 
     default = "application/octet-stream"
+
+
+def hex_to_rgb(hex_code: str) -> Color:
+    """Converts a hex color code to RGB."""
+    hex_code = hex_code.lstrip("#")
+    return {
+        "red": int(hex_code[:2], 16),
+        "green": int(hex_code[2:4], 16),
+        "blue": int(hex_code[4:], 16),
+    }
 
 
 def url_components(url: str) -> dict[str, List[str]]:
