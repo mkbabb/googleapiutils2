@@ -159,15 +159,16 @@ def expand_slices(
     col_ix: slice | int | EllipsisType,
     shape: tuple[int, int] = DEFAULT_SHEET_SHAPE,
 ) -> str | None:
-    # TODO! optimize row ellipsis and col ellipsis types
-    # TODO! like 1:1, B:B, etc.
-
     def to_slice(ix: slice | int) -> slice:
         if isinstance(ix, slice):
             return ix
         elif isinstance(ix, str):
-            ix = A1_to_int(ix)
-            return slice(ix, ix)
+            if ":" in ix:
+                ix = ix.split(":")
+                return slice(A1_to_int(ix[0]), A1_to_int(ix[1]))
+            else:
+                ix = A1_to_int(ix)
+                return slice(ix, ix)
         elif isinstance(ix, int):
             return slice(ix, ix)
         elif ix is ...:
@@ -191,10 +192,19 @@ def expand_slices(
         stop = max_dim + stop if stop < 0 else stop
         return slice(start, stop, step)
 
+    row_is_ellipsis = row_ix is ...
+    col_is_ellipsis = col_ix is ...
+
     row_ix, col_ix = to_slice(row_ix), to_slice(col_ix)  # type: ignore
     row_ix, col_ix = normalize_ix(row_ix, shape[0]), normalize_ix(col_ix, shape[1])  # type: ignore
-    row_ix, col_ix = slices_to_A1(row_ix, col_ix)  # type: ignore
 
+    if col_is_ellipsis:
+        return f"{row_ix.start}:{row_ix.stop}"
+    if row_is_ellipsis:
+        start, stop = int_to_A1(col_ix.start), int_to_A1(col_ix.stop)
+        return f"{start}:{stop}"
+
+    row_ix, col_ix = slices_to_A1(row_ix, col_ix)  # type: ignore
     return f"{row_ix}:{col_ix}" if row_ix != "" and col_ix != "" else None  # type: ignore
 
 
