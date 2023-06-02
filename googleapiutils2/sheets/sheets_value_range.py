@@ -17,7 +17,7 @@ from .misc import (
     ValueRenderOption,
     format_range_name,
 )
-from .sheets import Sheets
+from .sheets import Sheets, SheetsValues, SheetsRange
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -101,7 +101,7 @@ class SheetsValueRange:
 
     def update(
         self,
-        values: list[list[Any]] | list[dict],
+        values: SheetsValues,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
@@ -122,7 +122,7 @@ class SheetsValueRange:
 
     def append(
         self,
-        values: list[list[Any]],
+        values: SheetsValues,
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,

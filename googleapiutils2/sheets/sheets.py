@@ -319,6 +319,7 @@ class Sheets:
         range_name: SheetsRange,
         rows: list[dict[SheetsRange, Any]],
         align_columns: bool = True,
+        insert_header: bool = True,
     ):
         """Transforms a list of dictionaries into a list of lists, aligning the columns with the header.
         If new columns were added, the header is appended to the right; the header of the sheet is updated.
@@ -328,12 +329,14 @@ class Sheets:
             range_name (SheetsRange): The range to update.
             rows (list[dict[SheetsRange, Any]]): The rows to update.
             align_columns (bool, optional): Whether to align the columns with the header. Defaults to True.
+            insert_header (bool, optional): Whether to insert the header if the range starts at the first row. Defaults to True.
         """
         if not align_columns:
-            logger.debug("align_columns is False, skipping column alignment")
             return [list(row.values()) for row in rows]
 
-        sheet_name, _ = split_sheet_range(range_name)
+        sheet_name, t_range_name = split_sheet_range(range_name)
+        row_slc, _ = A1_to_slices(t_range_name)
+
         header = self._header(spreadsheet_id, sheet_name)
         header = pd.Index(header).astype(str)
 
@@ -354,7 +357,13 @@ class Sheets:
             self._cache[(spreadsheet_id, sheet_name)] = list(header)
 
         frame = frame.reindex(columns=header)
-        return frame.fillna("").values.tolist()  # fill null values with an empty string
+        values = frame.fillna("").values.tolist()
+
+        # insert the header if the range starts at the first row
+        if insert_header and row_slc.start == 1:
+            values.insert(0, header.tolist())
+
+        return values
 
     def _process_sheets_values(
         self,
@@ -362,6 +371,7 @@ class Sheets:
         range_name: SheetsRange,
         values: SheetsValues,
         align_columns: bool = True,
+        insert_header: bool = True,
     ) -> list[list[Any]]:
         if all(isinstance(value, dict) for value in values):
             return self._dict_to_values_align_columns(
@@ -369,6 +379,7 @@ class Sheets:
                 range_name=range_name,
                 rows=values,  # type: ignore
                 align_columns=align_columns,
+                insert_header=insert_header,
             )
         else:
             return values  # type: ignore
@@ -546,6 +557,7 @@ class Sheets:
                 range_name=range_name,
                 values=values,
                 align_columns=align_columns,
+                insert_header=False,
             )
         }
 
@@ -833,14 +845,20 @@ class Sheets:
         return df
 
     @staticmethod
-    def from_frame(df: pd.DataFrame) -> list[list[Any]]:
+    def from_frame(
+        df: pd.DataFrame, as_dict: bool = False
+    ) -> list[list[Any]] | list[dict[Hashable, Any]]:
         """Converts a DataFrame to a list of lists to be used with sheets.update() & c.
 
         Args:
             df (pd.DataFrame): The DataFrame to convert.
+            as_dict (bool, optional): Whether to return a list of dicts instead of a list of lists. Defaults to False.
         """
         df = df.fillna("")
         df = df.astype(str)
+
+        if as_dict:
+            return df.to_dict(orient="records")
 
         data: list = df.values.tolist()
         data.insert(0, list(df.columns))

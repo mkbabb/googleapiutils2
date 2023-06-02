@@ -78,8 +78,18 @@ if df is None:
     raise ValueError("df is None")
 
 df[8] = "Frunk!"
+data = sheets.from_frame(df, True)
+Sheet1.update(data)
 
-Sheet1.update(sheets.from_frame(df))
+sheets.append(
+    SHEET_URL,
+    "Sheet1",
+    values=[
+        {
+            "Column 1": "99",
+        }
+    ],
+)
 
 sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
 
