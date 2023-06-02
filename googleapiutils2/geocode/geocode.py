@@ -21,7 +21,7 @@ class Geocode:
     def _return_if_200(r: requests.Response) -> list[GeocodeResult] | None:
         if r.status_code == 200:
             try:
-                return r.json()
+                return r.json().get("results", None)
             except JSONDecodeError:
                 return None
         else:
