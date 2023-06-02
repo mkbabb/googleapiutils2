@@ -1,9 +1,9 @@
 from __future__ import annotations
-from collections import defaultdict
 
 import logging
 import operator
 import time
+from collections import defaultdict
 from typing import *
 
 import pandas as pd
@@ -16,6 +16,7 @@ from .misc import (
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
     VERSION,
+    A1_to_slices,
     InsertDataOption,
     SheetSlice,
     SheetSliceT,
@@ -23,7 +24,6 @@ from .misc import (
     ValueInputOption,
     ValueRenderOption,
     split_sheet_range,
-    A1_to_slices,
 )
 
 if TYPE_CHECKING:
@@ -31,19 +31,21 @@ if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
         AppendValuesResponse,
         BatchUpdateSpreadsheetRequest,
+        BatchUpdateSpreadsheetResponse,
         BatchUpdateValuesRequest,
         BatchUpdateValuesResponse,
+        CellFormat,
         ClearValuesResponse,
         CopySheetToAnotherSpreadsheetRequest,
+        Request,
         Sheet,
         SheetProperties,
         SheetsResource,
         Spreadsheet,
         SpreadsheetProperties,
+        TextFormat,
         UpdateValuesResponse,
         ValueRange,
-        CellFormat,
-        TextFormat,
     )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,9 @@ class Sheets:
         self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
         )
-        self.sheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
+        self.spreadsheets: SheetsResource.SpreadsheetsResource = (
+            self.service.spreadsheets()
+        )
         self.throttle_time = throttle_time
 
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
@@ -66,6 +70,24 @@ class Sheets:
             str, dict[str | Any, SheetsValues]
         ] = defaultdict(dict)
         self._prev_time: Optional[float] = None
+
+    def batch_update_spreadsheet(
+        self,
+        spreadsheet_id: str,
+        body: BatchUpdateSpreadsheetRequest,
+        **kwargs: Any,
+    ) -> BatchUpdateSpreadsheetResponse:
+        """Executes a batch update spreadsheet request.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            body (BatchUpdateSpreadsheetRequest): The request body.
+            **kwargs: Additional arguments to pass to self.sheets.batchUpdate.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        return self.spreadsheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body, **kwargs
+        ).execute()
 
     def create(
         self,
@@ -82,7 +104,7 @@ class Sheets:
 
         body["sheets"] = list(body["sheets"].values())  # type: ignore
 
-        return self.sheets.create(body=body).execute()  # type: ignore
+        return self.spreadsheets.create(body=body).execute()  # type: ignore
 
     def copy_to(
         self,
@@ -106,7 +128,7 @@ class Sheets:
         }
 
         return (
-            self.sheets.sheets()
+            self.spreadsheets.sheets()
             .copyTo(  # type: ignore
                 spreadsheetId=from_spreadsheet_id,
                 sheetId=from_sheet_id,
@@ -120,7 +142,7 @@ class Sheets:
         spreadsheet_id: str,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.sheets.get(spreadsheetId=spreadsheet_id).execute()
+        return self.spreadsheets.get(spreadsheetId=spreadsheet_id).execute()
 
     def get(
         self,
@@ -173,9 +195,7 @@ class Sheets:
                 }
             ]
         }
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
+        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
     def add(
         self,
@@ -222,11 +242,11 @@ class Sheets:
             ],
         }
 
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id,
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id,
             body=body,
             **kwargs,
-        ).execute()
+        )
 
     def delete(
         self,
@@ -251,11 +271,11 @@ class Sheets:
                 },
             ],
         }
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id,
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id,
             body=body,
             **kwargs,
-        ).execute()
+        )
 
     def values(
         self,
@@ -274,7 +294,7 @@ class Sheets:
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
         return (
-            self.sheets.values()
+            self.spreadsheets.values()
             .get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -381,7 +401,7 @@ class Sheets:
         )
 
         return (
-            self.sheets.values()
+            self.spreadsheets.values()
             .update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -417,7 +437,7 @@ class Sheets:
             "data": new_data,
         }
         return (
-            self.sheets.values()
+            self.spreadsheets.values()
             .batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body,
@@ -530,7 +550,7 @@ class Sheets:
         }
 
         return (
-            self.sheets.values()
+            self.spreadsheets.values()
             .append(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -556,7 +576,7 @@ class Sheets:
         range_name = str(range_name)
 
         return (
-            self.sheets.values()
+            self.spreadsheets.values()
             .clear(spreadsheetId=spreadsheet_id, range=range_name)
             .execute()
         )
@@ -595,9 +615,7 @@ class Sheets:
                 }
             ]
         }
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
+        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
     def clear_formatting(self, spreadsheet_id: str, sheet_name: str):
         """Clears all formatting from a sheet.
@@ -621,9 +639,7 @@ class Sheets:
                 }
             ]
         }
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
+        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
     def reset_sheet(
         self,
@@ -650,7 +666,7 @@ class Sheets:
         cell_format: CellFormat,
         end_row: int | None = None,
         end_col: int | None = None,
-    ) -> BatchUpdateSpreadsheetRequest:
+    ) -> Request:
         """Creates a batch update request body for formatting a range of cells.
         The ranges herein are 1-indexed.
 
@@ -666,23 +682,19 @@ class Sheets:
         end_col = end_col if end_col is not None else start_col + 1
 
         return {
-            "requests": [
-                {
-                    "repeatCell": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "startRowIndex": start_row - 1,
-                            "endRowIndex": end_row,
-                            "startColumnIndex": start_col - 1,
-                            "endColumnIndex": end_col,
-                        },
-                        "cell": {
-                            "userEnteredFormat": cell_format,
-                        },
-                        "fields": f"userEnteredFormat",
-                    }
-                }
-            ]
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": start_row - 1,
+                    "endRowIndex": end_row,
+                    "startColumnIndex": start_col - 1,
+                    "endColumnIndex": end_col,
+                },
+                "cell": {
+                    "userEnteredFormat": cell_format,
+                },
+                "fields": f"userEnteredFormat",
+            }
         }
 
     @staticmethod
@@ -767,18 +779,19 @@ class Sheets:
 
         row_slc, col_slc = A1_to_slices(range_name, shape=shape)
 
-        body = self._create_format_body(
-            sheet_id,
-            start_row=row_slc.start,
-            end_row=row_slc.stop,
-            start_col=col_slc.start,
-            end_col=col_slc.stop,
-            cell_format=cell_format,
-        )
-
-        return self.sheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                self._create_format_body(
+                    sheet_id,
+                    start_row=row_slc.start,
+                    end_row=row_slc.stop,
+                    start_col=col_slc.start,
+                    end_col=col_slc.stop,
+                    cell_format=cell_format,
+                )
+            ]
+        }
+        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
     @staticmethod
     def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
