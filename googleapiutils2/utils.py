@@ -128,7 +128,6 @@ def hex_to_rgb(hex_code: str) -> Color:
         "red": int(hex_code[:2], 16),
         "green": int(hex_code[2:4], 16),
         "blue": int(hex_code[4:6], 16),
-        "alpha": 1.0,
     }
 
     if len(hex_code) == 8:
