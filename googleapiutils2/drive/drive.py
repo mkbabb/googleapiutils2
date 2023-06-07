@@ -481,7 +481,7 @@ class Drive:
         self,
         file_id: str,
         mime_type: GoogleMimeTypes,
-    ):
+    ) -> bytes:
         """Exports a Google Drive file to a different mime type. The exported content is limited to 10MB.
 
         See https://developers.google.com/drive/api/reference/rest/v3/files/export for more information.
