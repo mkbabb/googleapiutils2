@@ -58,25 +58,28 @@ class Drive:
         return next(self._query_children(name=name, parents=parents, q=q), None)
 
     def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
-        request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)
+        request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)  # type: ignore
         with out_filepath.open("wb") as out_file:
             downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
             done = False
             while done is False:
                 status, done = downloader.next_chunk()
+
         return out_filepath
 
     def _download_nested_filepath(
         self,
         out_filepath: FilePath,
         file_id: str,
-    ) -> None:
+    ) -> Path:
         """Internal usage function. Download a folder given by "out_filepath" and its contents recursively.
 
         Args:
             out_filepath (FilePath): The path to the folder to download to.
             file_id (str): The ID of the folder to download.
         """
+        out_filepath = Path(out_filepath)
+
         for file in self.list_children(file_id):
             t_name, t_file_id, t_mime_type = (
                 file["name"],
@@ -379,21 +382,21 @@ class Drive:
 
         kwargs |= {
             "body": body if body is not None else {},
+            "media_body": uploader(mime_type),
         }
+
+        if update and (file := self.get_by_filename(name, parents=parents)):
+            kwargs["fileId"] = file["id"]
+            return self.files.update(**kwargs).execute()
+
         if name is not None:
             kwargs["body"]["name"] = name
         if parents is not None:
             kwargs["body"]["parents"] = parents
         if mime_type is not None:
-            kwargs["body"]["mimeType"] = mime_type
+            kwargs["body"]["mimeType"] = mime_type.value
 
-        kwargs["media_body"] = uploader(mime_type)
-
-        if update and (file := self.get_by_filename(name, parents=parents)):
-            kwargs["fileId"] = file["id"]
-            return self.files.update(**kwargs).execute()
-        else:
-            return self.files.create(**kwargs).execute()
+        return self.files.create(**kwargs).execute()
 
     def upload_file(
         self,
@@ -479,7 +482,7 @@ class Drive:
         file_id: str,
         mime_type: GoogleMimeTypes,
     ):
-        """Exports a Google Drive file to a different mime type. Limited to 10MB.
+        """Exports a Google Drive file to a different mime type. The exported content is limited to 10MB.
 
         See https://developers.google.com/drive/api/reference/rest/v3/files/export for more information.
 
@@ -493,6 +496,12 @@ class Drive:
     def permissions_get(
         self, file_id: str, permission_id: str, **kwargs: Any
     ) -> Permission:
+        """Gets a permission by ID.
+
+        Args:
+            file_id (str): The ID of the file.
+            permission_id (str): The ID of the permission.
+        """
         file_id = parse_file_id(file_id)
         return (
             self.service.permissions()

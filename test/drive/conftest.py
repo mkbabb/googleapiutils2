@@ -18,7 +18,7 @@ def test_folder(drive: Drive, google_folders: dict[str, File]):
         filepath="test_folder",
         mime_type=GoogleMimeTypes.folder,
         parents=[drive_folder["id"]],
-        update=True,
+        get_extant=True,
     )
 
     yield test_folder

@@ -54,7 +54,7 @@ def test_nested_files(test_folder: File, drive: Drive):
         create_folders=True,
         parents=[folder_id],
         mime_type=GoogleMimeTypes.folder,
-        update=True,
+        get_extant=True,
     )
     assert parent_folder["name"] == filepath.name
 
@@ -65,7 +65,7 @@ def test_nested_files(test_folder: File, drive: Drive):
         create_folders=True,
         parents=[parent_folder["id"]],
         mime_type=GoogleMimeTypes.sheets,
-        update=True,
+        get_extant=True,
     )
     assert t_file["name"] == name
 
@@ -76,6 +76,6 @@ def test_nested_files(test_folder: File, drive: Drive):
         create_folders=True,
         parents=[parent_folder["id"]],
         mime_type=GoogleMimeTypes.sheets,
-        update=True,
+        get_extant=True,
     )
     assert t_file["name"] == name

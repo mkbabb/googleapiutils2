@@ -36,7 +36,7 @@ disallow_untyped_defs = false
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "google.*"
+module = "google.*,google_auth_oauthlib.*"
 ignore_missing_imports = true
 
 [build-system]

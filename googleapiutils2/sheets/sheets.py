@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import operator
 import time
 from collections import defaultdict
@@ -48,7 +47,6 @@ if TYPE_CHECKING:
         ValueRange,
     )
 
-logger = logging.getLogger(__name__)
 
 SheetsRange = str | SheetSliceT | Any
 

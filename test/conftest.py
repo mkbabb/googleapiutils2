@@ -42,7 +42,7 @@ def google_folders(drive: Drive):
         folder_path.name: drive.create(
             filepath=folder_path,
             mime_type=GoogleMimeTypes.folder,
-            update=True,
+            get_extant=True,
             create_folders=True,
         )
         for folder_path in folder_paths
