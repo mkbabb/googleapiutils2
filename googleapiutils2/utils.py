@@ -114,7 +114,7 @@ class GoogleMimeTypes(Enum):
 
 
 def hex_to_rgb(hex_code: str) -> Color:
-    """Converts a hex color code to RGB(A).
+    """Converts a hex color code to RGB(A), where each value is between 0 and 1.
 
     Args:
         hex_code (str): Hex color code to convert. Can be 3, 4, 6, or 8 characters long (optional alpha is supported).
@@ -132,11 +132,11 @@ def hex_to_rgb(hex_code: str) -> Color:
     }
 
     if len(hex_code) == 8:
-        rgb["alpha"] = round(int(hex_code[6:8], 16) / 255.0, 2)
+        rgb["alpha"] = int(hex_code[6:8], 16)
     elif len(hex_code) != 6:
         raise ValueError("Invalid hex code")
 
-    return rgb
+    return {k: v / 255.0 for k, v in rgb.items()}  # type: ignore
 
 
 def url_components(url: str) -> dict[str, List[str]]:
