@@ -11,7 +11,6 @@ from typing import *
 
 import googleapiclient.http
 import requests
-
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
@@ -21,7 +20,7 @@ FilePath = str | Path
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
-    from googleapiclient._apis.sheets.v4.resources import Spreadsheet, Color
+    from googleapiclient._apis.sheets.v4.resources import Color, Spreadsheet
 
 
 THROTTLE_TIME = 30
@@ -115,13 +114,29 @@ class GoogleMimeTypes(Enum):
 
 
 def hex_to_rgb(hex_code: str) -> Color:
-    """Converts a hex color code to RGB."""
+    """Converts a hex color code to RGB(A).
+
+    Args:
+        hex_code (str): Hex color code to convert. Can be 3, 4, 6, or 8 characters long (optional alpha is supported).
+    """
     hex_code = hex_code.lstrip("#")
-    return {
+
+    if len(hex_code) == 3 or len(hex_code) == 4:
+        hex_code = "".join([2 * c for c in hex_code])
+
+    rgb: Color = {
         "red": int(hex_code[:2], 16),
         "green": int(hex_code[2:4], 16),
-        "blue": int(hex_code[4:], 16),
+        "blue": int(hex_code[4:6], 16),
+        "alpha": 1.0,
     }
+
+    if len(hex_code) == 8:
+        rgb["alpha"] = round(int(hex_code[6:8], 16) / 255.0, 2)
+    elif len(hex_code) != 6:
+        raise ValueError("Invalid hex code")
+
+    return rgb
 
 
 def url_components(url: str) -> dict[str, List[str]]:
@@ -158,9 +173,9 @@ def get_oauth2_creds(
 ) -> Credentials:
     """Get OAuth2 credentials for Google API.
 
-    This will automatically detect if the credentials are for a service account.
-    If it's not, it will try to load the token from the token path (defaults to TOKEN_PATH)
-    and refresh it. The token will be saved to the token path.
+    If the client config provided is for a service account, we return the credentials.
+    Otherwise, we return the credentials from the token file if it exists, or we
+    authenticate the user and save the credentials to the token file.
 
     Args:
         client_config: Path to client config file or dict with client config.
