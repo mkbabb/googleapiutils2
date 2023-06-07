@@ -34,7 +34,7 @@ class Drive:
         self.creds = creds
         self.service: DriveResource = discovery.build(
             "drive", VERSION, credentials=self.creds
-        )
+        )  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
 
     def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
@@ -108,7 +108,7 @@ class Drive:
             GoogleMimeTypes, tuple[GoogleMimeTypes, str]
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ) -> Path:
-        """Download a file from Google Drive. If the file is larger than 10MB, it will be downloaded in chunks.
+        """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
 
         Args:
             out_filepath (FilePath): The path to the file to download to.
@@ -135,58 +135,36 @@ class Drive:
         else:
             return self._download(file_id, out_filepath, mime_type)
 
-    @staticmethod
-    def _upload_file_body(
-        name: str,
-        parents: List[str] | None = None,
-        body: File | None = None,
-        **kwargs: Any,
-    ) -> dict[str, File | Any]:
-        body = body if body is not None else {}
-        body = {"name": name, **body, **kwargs}
-        kwargs = {"body": body}
-
-        if parents is not None:
-            kwargs["body"].setdefault("parents", parents)
-
-        return kwargs
-
     def copy(
         self,
-        file_id: str,
-        to_filename: str,
+        from_file_id: str,
         to_folder_id: str,
+        to_filename: str | None = None,
         body: File | None = None,
         **kwargs: Any,
     ) -> File:
-        file_id = parse_file_id(file_id)
+        """Copy a file on Google Drive.
+
+        Args:
+            from_file_id (str): The ID of the file to copy.
+            to_folder_id (str): The ID of the folder to copy the file to.
+            to_filename (str, optional): The name of the copied file. Defaults to None, results in the same name as the original file.
+            body (File, optional): The body of the copied file. Defaults to None.
+            **kwargs (Any): Additional keyword arguments to pass to the API call.
+        """
+        from_file_id = parse_file_id(from_file_id)
         to_folder_id = parse_file_id(to_folder_id)
 
         kwargs = {
-            "fileId": file_id,
-            **self._upload_file_body(
-                name=to_filename, parents=[to_folder_id], body=body
-            ),
+            "fileId": from_file_id,
+            "body": body if body is not None else {},
             **kwargs,
         }
+
+        if to_filename is not None:
+            kwargs["body"]["name"] = to_filename
+
         return self.files.copy(**kwargs).execute()
-
-    def update(
-        self,
-        file_id: str,
-        filepath: FilePath,
-        body: File | None = None,
-        **kwargs: Any,
-    ) -> File:
-        file_id = parse_file_id(file_id)
-        body = body if body is not None else {}
-
-        return self.files.update(
-            fileId=file_id,
-            media_body=str(filepath),
-            body=body,
-            **kwargs,
-        ).execute()
 
     @staticmethod
     def _list_fields(fields: str) -> str:
@@ -249,7 +227,7 @@ class Drive:
         ).execute()
 
         for response in self._list(list_func):
-            yield from response.get("files", [])
+            yield from response.get("files", [])  # type: ignore
 
     def list_children(
         self, parent_id: str, fields: str = "*", **kwargs: Any
@@ -284,19 +262,6 @@ class Drive:
         query = " and ".join((f"({i})" for i in queries))
         return self.list(query=query)
 
-    def _update_if_exists(
-        self,
-        name: str,
-        filepath: FilePath,
-        parents: List[str] | None = None,
-        team_drives: bool = True,
-    ) -> File | None:
-        if parents is None:
-            return None
-        for file in self._query_children(name=name, parents=parents):
-            return self.update(file["id"], filepath, supportsAllDrives=team_drives)
-        return None
-
     def _create_nested_folders(
         self, filepath: Path, parents: List[str], update: bool = True
     ) -> List[str]:
@@ -317,12 +282,13 @@ class Drive:
             if update and (folder := next(folders, None)) is not None:
                 return folder
 
+            body: File = {
+                "name": dirname,
+                "parents": parents,
+                "mimeType": GoogleMimeTypes.folder.value,
+            }
             return self.files.create(
-                **self._upload_file_body(
-                    name=dirname,
-                    parents=parents,
-                    mimeType=GoogleMimeTypes.folder.value,
-                )
+                body=body,
             ).execute()
 
         for dirname in filepath.parts[:-1]:
@@ -337,18 +303,20 @@ class Drive:
         mime_type: GoogleMimeTypes,
         parents: List[str] | None = None,
         create_folders: bool = False,
-        update: bool = False,
+        get_extant: bool = False,
         fields: str = "*",
         **kwargs: Any,
     ) -> File:
         """Create's a file on Google Drive.
+
+        For more information, see: https://developers.google.com/drive/api/v3/reference/files/create
 
         Args:
             filepath (FilePath): Filepath to the file to be uploaded.
             mime_type (GoogleMimeTypes): Mime type of the file.
             parents (List[str], optional): List of parent folder IDs wherein the file will be created. Defaults to None.
             create_folders (bool, optional): Create parent folders if they don't exist. Defaults to False.
-            update (bool, optional): Update the file if it already exists. Defaults to False.
+            get_extant (bool, optional): If a file with the same name already exists, return it. Defaults to False.
             fields (str, optional): Fields to be returned. Defaults to "*".
         """
         filepath = Path(filepath)
@@ -356,31 +324,43 @@ class Drive:
 
         if create_folders:
             parents = self._create_nested_folders(
-                filepath=filepath, parents=parents, update=update
+                filepath=filepath, parents=parents, update=get_extant
             )
+
         if (
-            update
-            and (file := next(self._query_children(filepath.name, parents), None))
+            get_extant
+            and (file := self.get_by_filename(filepath.name, parents=parents))
             is not None
         ):
             return file
 
-        kwargs = {
-            **self._upload_file_body(
-                name=filepath.name, parents=parents, mimeType=mime_type.value
-            ),
-            **kwargs,
+        kwargs |= {
+            "body": {
+                "name": filepath.name,
+            },
             "fields": fields,
         }
+        if parents is not None:
+            kwargs["body"]["parents"] = parents
+        if mime_type is not None:
+            kwargs["body"]["mimeType"] = mime_type.value
+
         file = self.files.create(**kwargs).execute()
         return file
 
     def delete(self, file_id: str, **kwargs: Any):
+        """Delete a file from Google Drive.
+        For more information, see: https://developers.google.com/drive/api/v3/reference/files/delete
+
+        Args:
+            file_id (str): The ID of the file to delete.
+        """
+        file_id = parse_file_id(file_id)
         return self.files.delete(fileId=file_id, **kwargs).execute()
 
     def _upload(
         self,
-        uploader: Callable,
+        uploader: Callable[[GoogleMimeTypes], Any],
         name: str,
         filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
@@ -391,20 +371,29 @@ class Drive:
     ) -> File:
         filepath = Path(filepath)
         parents = list(map(parse_file_id, parents)) if parents is not None else []
-        if (
-            update
-            and (file := self._update_if_exists(name, filepath, parents)) is not None
-        ):
-            return file
+        mime_type = (
+            mime_type
+            if mime_type is not None
+            else GoogleMimeTypes[filepath.suffix.lstrip(".")]
+        )
 
-        kwargs = {
-            **self._upload_file_body(
-                name=name, parents=parents, body=body, mimeType=mime_type.value
-            ),
-            **kwargs,
+        kwargs |= {
+            "body": body if body is not None else {},
         }
-        kwargs["media_body"] = uploader()
-        return self.files.create(**kwargs).execute()
+        if name is not None:
+            kwargs["body"]["name"] = name
+        if parents is not None:
+            kwargs["body"]["parents"] = parents
+        if mime_type is not None:
+            kwargs["body"]["mimeType"] = mime_type
+
+        kwargs["media_body"] = uploader(mime_type)
+
+        if update and (file := self.get_by_filename(name, parents=parents)):
+            kwargs["fileId"] = file["id"]
+            return self.files.update(**kwargs).execute()
+        else:
+            return self.files.create(**kwargs).execute()
 
     def upload_file(
         self,
@@ -430,14 +419,11 @@ class Drive:
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
         filepath = Path(filepath)
-        mime_type = (
-            mime_type
-            if mime_type is not None
-            else GoogleMimeTypes[filepath.suffix.lstrip(".")]
-        )
 
-        def uploader():
-            return googleapiclient.http.MediaFileUpload(str(filepath), resumable=True)
+        def uploader(mime_type: GoogleMimeTypes):
+            return googleapiclient.http.MediaFileUpload(
+                str(filepath), resumable=True, mimetype=mime_type.value
+            )
 
         return self._upload(
             uploader=uploader,
@@ -462,8 +448,6 @@ class Drive:
     ) -> File:
         """Uploads data to Google Drive. Bytes variant of `upload_file`
 
-        For more information on the File object (for the body, etc.), see https://developers.google.com/drive/api/v3/reference/files#resource
-
         Args:
             data (bytes): Data to upload
             name (str): Name of the file
@@ -474,8 +458,10 @@ class Drive:
         """
         with BytesIO(data) as tio:
 
-            def uploader():
-                return googleapiclient.http.MediaIoBaseUpload(tio, resumable=True)
+            def uploader(mime_type: GoogleMimeTypes):
+                return googleapiclient.http.MediaIoBaseUpload(
+                    tio, resumable=True, mimetype=mime_type.value
+                )
 
             return self._upload(
                 uploader=uploader,
@@ -487,6 +473,22 @@ class Drive:
                 update=update,
                 **kwargs,
             )
+
+    def export(
+        self,
+        file_id: str,
+        mime_type: GoogleMimeTypes,
+    ):
+        """Exports a Google Drive file to a different mime type. Limited to 10MB.
+
+        See https://developers.google.com/drive/api/reference/rest/v3/files/export for more information.
+
+        Args:
+            file_id (str): The ID of the file to export.
+            mime_type (GoogleMimeTypes): The mime type to export to.
+        """
+        file_id = parse_file_id(file_id)
+        return self.files.export(fileId=file_id, mimeType=mime_type.value).execute()
 
     def permissions_get(
         self, file_id: str, permission_id: str, **kwargs: Any
@@ -501,6 +503,12 @@ class Drive:
     def permissions_list(
         self, file_id: str, fields: str = "*", **kwargs: Any
     ) -> Iterable[Permission]:
+        """Lists permissions for a file.
+
+        Args:
+            file_id (str): The ID of the file.
+            fields (str, optional): The fields to return. Defaults to "*".
+        """
         file_id = parse_file_id(file_id)
         list_func = (
             lambda x: self.service.permissions()
@@ -510,7 +518,7 @@ class Drive:
             .execute()
         )
         for response in self._list(list_func):
-            yield from response.get("permissions", [])
+            yield from response.get("permissions", [])  # type: ignore
 
     def _permission_update_if_exists(
         self, file_id: str, user_permission: Permission
@@ -570,6 +578,12 @@ class Drive:
         )
 
     def permissions_delete(self, file_id: str, permission_id: str, **kwargs: Any):
+        """Deletes a permission from a file.
+
+        Args:
+            file_id (str): The ID of the file.
+            permission_id (str): The ID of the permission.
+        """
         file_id = parse_file_id(file_id)
         return (
             self.service.permissions()
