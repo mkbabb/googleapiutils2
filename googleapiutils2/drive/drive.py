@@ -141,8 +141,8 @@ class Drive:
     def copy(
         self,
         from_file_id: str,
-        to_folder_id: str,
-        to_filename: str | None = None,
+        parents: List[str],
+        name: str | None = None,
         body: File | None = None,
         **kwargs: Any,
     ) -> File:
@@ -150,22 +150,21 @@ class Drive:
 
         Args:
             from_file_id (str): The ID of the file to copy.
-            to_folder_id (str): The ID of the folder to copy the file to.
-            to_filename (str, optional): The name of the copied file. Defaults to None, results in the same name as the original file.
+            parents (List[str]): The ID(s) of the parent folder(s).
+            name (str, optional): The name of the copied file. Defaults to None, results in the same name as the original file.
             body (File, optional): The body of the copied file. Defaults to None.
             **kwargs (Any): Additional keyword arguments to pass to the API call.
         """
         from_file_id = parse_file_id(from_file_id)
-        to_folder_id = parse_file_id(to_folder_id)
+        parents = list(map(parse_file_id, parents)) if parents is not None else []
 
-        kwargs = {
+        kwargs |= {
             "fileId": from_file_id,
             "body": body if body is not None else {},
-            **kwargs,
         }
-
-        if to_filename is not None:
-            kwargs["body"]["name"] = to_filename
+        kwargs["body"]["parents"] = parents
+        if name is not None:
+            kwargs["body"]["name"] = name
 
         return self.files.copy(**kwargs).execute()
 
