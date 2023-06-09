@@ -350,15 +350,25 @@ class Drive:
         file = self.files.create(**kwargs).execute()
         return file
 
-    def delete(self, file_id: str, **kwargs: Any):
+    def delete(self, file_id: str, trash: bool = True, **kwargs: Any):
         """Delete a file from Google Drive.
-        For more information, see: https://developers.google.com/drive/api/v3/reference/files/delete
+        If `trash` is True, the file will be moved to the trash. Otherwise, it will be deleted permanently.
+
+        For more information on deleting files, see: https://developers.google.com/drive/api/v3/reference/files/delete
 
         Args:
             file_id (str): The ID of the file to delete.
+            trash (bool, optional): Whether to trash the file instead of deleting it. Defaults to True.
         """
         file_id = parse_file_id(file_id)
-        return self.files.delete(fileId=file_id, **kwargs).execute()
+
+        if trash:
+            return self.files.update(
+                fileId=file_id,
+                body={"trashed": True},
+            )
+        else:
+            return self.files.delete(fileId=file_id, **kwargs).execute()
 
     def _upload(
         self,
