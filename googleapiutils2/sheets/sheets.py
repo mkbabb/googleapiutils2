@@ -358,7 +358,7 @@ class Sheets:
         values = frame.fillna("").values.tolist()
 
         # insert the header if the range starts at the first row
-        if insert_header and row_slc.start == 1:
+        if not len(header) and insert_header and row_slc.start == 1:
             values.insert(0, header.tolist())
 
         return values
