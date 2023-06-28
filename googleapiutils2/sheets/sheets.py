@@ -1,28 +1,34 @@
 from __future__ import annotations
 
+import atexit
 import operator
-import time
 from collections import defaultdict
+from functools import partial
 from typing import *
 
 import pandas as pd
-from cachetools import TTLCache, cachedmethod
+from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import THROTTLE_TIME, hex_to_rgb, nested_defaultdict, parse_file_id
+from ..utils import (
+    THROTTLE_TIME,
+    DriveBase,
+    hex_to_rgb,
+    nested_defaultdict,
+    parse_file_id,
+    named_methodkey,
+)
 from .misc import (
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
     VERSION,
-    A1_to_slices,
     InsertDataOption,
     SheetSlice,
     SheetSliceT,
     SheetsValues,
     ValueInputOption,
     ValueRenderOption,
-    split_sheet_range,
 )
 
 if TYPE_CHECKING:
@@ -51,23 +57,22 @@ if TYPE_CHECKING:
 SheetsRange = str | SheetSliceT | Any
 
 
-class Sheets:
+class Sheets(DriveBase):
     def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
-        self.creds = creds
+        super().__init__(creds=creds, throttle_time=throttle_time)
+
         self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
         )
         self.spreadsheets: SheetsResource.SpreadsheetsResource = (
             self.service.spreadsheets()
         )
-        self.throttle_time = throttle_time
-
-        self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
 
         self._batched_data: DefaultDict[
             str, dict[str | Any, SheetsValues]
         ] = defaultdict(dict)
-        self._prev_time: Optional[float] = None
+
+        atexit.register(self._batch_update_remaining_auto)
 
     def batch_update_spreadsheet(
         self,
@@ -302,7 +307,7 @@ class Sheets:
             .execute()
         )
 
-    @cachedmethod(operator.attrgetter("_cache"))
+    @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("header"))
     def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         """Get the header of a sheet; cache the result."""
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -310,6 +315,24 @@ class Sheets:
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
             "values", [[]]
         )[0]
+
+    @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("shape"))
+    def _shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        """Get the shape of a sheet; cache the result."""
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        properties = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)[
+            "properties"
+        ]
+        shape = (
+            properties["gridProperties"]["rowCount"],
+            properties["gridProperties"]["columnCount"],
+        )
+        return shape
+
+    @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("id"))
+    def _id(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME) -> int:
+        sheet = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)
+        return sheet["properties"]["sheetId"]
 
     def _dict_to_values_align_columns(
         self,
@@ -332,8 +355,8 @@ class Sheets:
         if not align_columns:
             return [list(row.values()) for row in rows]
 
-        sheet_name, t_range_name = split_sheet_range(range_name)
-        row_slc, _ = A1_to_slices(t_range_name)
+        sheet_slice = SheetSlice[range_name]
+        sheet_name = sheet_slice.sheet_name
 
         header = self._header(spreadsheet_id, sheet_name)
         header = pd.Index(header).astype(str)
@@ -346,20 +369,25 @@ class Sheets:
 
         if len(diff := frame.columns.difference(header)):
             header = header.append(diff)
-            sheet_name, _ = split_sheet_range(range_name)
+            header = list(header)
+
+            header_slc = SheetSlice[sheet_name, 1, ...]
+
             self.update(
                 spreadsheet_id,
-                SheetSlice[sheet_name, 1, ...],
-                [header.tolist()],
+                header_slc,
+                [header],
             )
-            self._cache[(spreadsheet_id, sheet_name)] = list(header)
+            # update the header cache
+            self._cache[("header", spreadsheet_id, sheet_name)] = header
 
+        header = list(header)
         frame = frame.reindex(columns=header)
         values = frame.fillna("").values.tolist()
 
         # insert the header if the range starts at the first row
-        if not len(header) and insert_header and row_slc.start == 1:
-            values.insert(0, header.tolist())
+        if insert_header and sheet_slice.rows().start == 1:
+            values.insert(0, header)
 
         return values
 
@@ -382,13 +410,47 @@ class Sheets:
         else:
             return values  # type: ignore
 
+    def _ensure_sheet_shape(self, spreadsheet_id: str, ranges: List[SheetsRange]):
+        """For a given sheet, ensure that every range is within the sheet's size.
+        If it's not, resize the sheet to fit the ranges.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet ID.
+            ranges (List[SheetsRange]): The ranges to check.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        sheet_slices = [SheetSlice[range_name] for range_name in ranges]
+        sheets = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
+
+        shapes = {
+            sheet_name: self._shape(spreadsheet_id, sheet_name) for sheet_name in sheets
+        }
+        sheet_slices = [
+            sheet_slice.with_shape(shapes[sheet_slice.sheet_name])
+            for sheet_slice in sheet_slices
+        ]
+
+        for sheet_slice in sheet_slices:
+            sheet_name = sheet_slice.sheet_name
+            rows, cols = shapes[sheet_name]
+
+            if sheet_slice.rows().stop > rows or sheet_slice.columns().stop > cols:
+                rows, cols = max(sheet_slice.rows().stop, rows), max(
+                    sheet_slice.columns().stop, cols
+                )
+                self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
+                # update the shape cache
+                self._cache[("shape", spreadsheet_id, sheet_name)] = (rows, cols)
+
     def update(
         self,
         spreadsheet_id: str,
-        range_name: SheetsRange,
-        values: SheetsValues,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
+        values: SheetsValues | None = None,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
+        ensure_shape: bool = False,
     ):
         """Updates a range of values in a spreadsheet.
 
@@ -405,6 +467,11 @@ class Sheets:
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+
+        if ensure_shape:
+            self._ensure_sheet_shape(spreadsheet_id, [range_name])
+
+        values = values if values is not None else [[]]
         values = self._process_sheets_values(
             spreadsheet_id, range_name, values, align_columns
         )
@@ -426,8 +493,12 @@ class Sheets:
         data: dict[SheetsRange, SheetsValues],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
+        ensure_shape: bool = False,
     ):
         """Internal method for batch updating values. Use `batch_update` instead."""
+        if ensure_shape:
+            self._ensure_sheet_shape(spreadsheet_id, list(data.keys()))
+
         new_data: list[ValueRange] = [
             {
                 "range": (str_range_name := str(range_name)),
@@ -461,6 +532,7 @@ class Sheets:
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
         batch_size: int | None = None,
+        ensure_shape: bool = False,
     ):
         """Updates a series of range values in a spreadsheet. Much faster version of calling `update` multiple times.
         See `update` for more details.
@@ -468,7 +540,7 @@ class Sheets:
         If the `batch_size` is None, all updates will be batched together. Otherwise, the updates will be batched by the following
         rules:
         -   If the number of updates is greater than `batch_size` AND
-        -   If the time between the first update and the last update is greater than `THROTTLE_TIME` OR
+        -   If the time between the first update and the last update is greater than `THROTTLE_TIME`.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
@@ -485,34 +557,33 @@ class Sheets:
                 data=data,
                 value_input_option=value_input_option,
                 align_columns=align_columns,
+                ensure_shape=ensure_shape,
             )
 
-        batched_data = self._batched_data[spreadsheet_id]
+        def on_every_call():
+            batched_data = self._batched_data[spreadsheet_id]
 
-        if data is not None:
-            self._batched_data[spreadsheet_id] |= data
+            if data is not None:
+                self._batched_data[spreadsheet_id] |= data
 
-        curr_time = time.perf_counter()
-        dt = (
-            curr_time - self._prev_time
-            if self._prev_time is not None
-            else self.throttle_time
-        )
+            return len(batched_data) >= batch_size
 
-        # If the conditions for a batch update are not met, simply return
-        if not (dt >= self.throttle_time and len(batched_data) >= batch_size):
-            return None
+        def on_final_call():
+            self._batch_update(
+                spreadsheet_id=spreadsheet_id,
+                data=self._batched_data[spreadsheet_id],
+                value_input_option=value_input_option,
+                align_columns=align_columns,
+                ensure_shape=ensure_shape,
+            )
+            self._batched_data[spreadsheet_id].clear()
 
-        self._prev_time = curr_time
-        res = self._batch_update(
-            spreadsheet_id=spreadsheet_id,
-            data=batched_data,
-            value_input_option=value_input_option,
-            align_columns=align_columns,
-        )
-        self._batched_data[spreadsheet_id].clear()
+        return self.throttle_fn(on_every_call, on_final_call)
 
-        return res
+    def _batch_update_remaining_auto(self):
+        """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
+        for spreadsheet_id in self._batched_data:
+            self.batched_update_remaining(spreadsheet_id)
 
     def batched_update_remaining(self, spreadsheet_id: str):
         """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
@@ -529,8 +600,8 @@ class Sheets:
     def append(
         self,
         spreadsheet_id: str,
-        range_name: SheetsRange,
-        values: SheetsValues,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
+        values: SheetsValues | None = None,
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
@@ -549,6 +620,8 @@ class Sheets:
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(range_name)
+        values = values if values is not None else [[]]
+
         body: ValueRange = {
             "values": self._process_sheets_values(
                 spreadsheet_id=spreadsheet_id,
@@ -574,7 +647,7 @@ class Sheets:
     def clear(
         self,
         spreadsheet_id: str,
-        range_name: SheetsRange,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
     ):
         """Clears a range of values in a spreadsheet.
 
@@ -594,7 +667,7 @@ class Sheets:
     def resize(
         self,
         spreadsheet_id: str,
-        sheet_name: str,
+        sheet_name: str = DEFAULT_SHEET_NAME,
         rows: int = DEFAULT_SHEET_SHAPE[0],
         cols: int = DEFAULT_SHEET_SHAPE[1],
     ):
@@ -627,7 +700,9 @@ class Sheets:
         }
         return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
-    def clear_formatting(self, spreadsheet_id: str, sheet_name: str):
+    def clear_formatting(
+        self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME
+    ):
         """Clears all formatting from a sheet.
 
         Args:
@@ -654,7 +729,7 @@ class Sheets:
     def reset_sheet(
         self,
         spreadsheet_id: str,
-        sheet_name: str,
+        sheet_name: str = DEFAULT_SHEET_NAME,
     ):
         """Resets a sheet back to a default state. This includes clearing all values and formatting.
 
@@ -663,8 +738,15 @@ class Sheets:
             sheet_name (str): The name of the sheet to reset.
         """
         # first clear all of the values, and set the bounds of the sheet to have 26 columns, and 1000 rows
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
         self.clear(spreadsheet_id, sheet_name)
-        self.resize(spreadsheet_id, sheet_name, rows=1000, cols=26)
+        self.resize(
+            spreadsheet_id,
+            sheet_name,
+            rows=DEFAULT_SHEET_SHAPE[0],
+            cols=DEFAULT_SHEET_SHAPE[1],
+        )
         # then clear all of the formatting
         self.clear_formatting(spreadsheet_id, sheet_name)
 
@@ -777,17 +859,16 @@ class Sheets:
             background_color=background_color,
             cell_format=cell_format,
         )
+        sheet_slice = SheetSlice[range_name]
+        sheet_id = self.get(spreadsheet_id, name=sheet_slice.sheet_name)["properties"][
+            "sheetId"
+        ]
 
-        sheet_name, range_name = split_sheet_range(str(range_name))  # type: ignore
+        shape = self._shape(spreadsheet_id, sheet_slice.sheet_name)
+        sheet_slice = sheet_slice.with_shape(shape)
 
-        properties = self.get(spreadsheet_id, sheet_name)["properties"]
-        sheet_id = properties["sheetId"]
-        shape = (
-            properties["gridProperties"]["rowCount"],
-            properties["gridProperties"]["columnCount"],
-        )
-
-        row_slc, col_slc = A1_to_slices(range_name, shape=shape)
+        row_slc = sheet_slice.rows()
+        col_slc = sheet_slice.columns()
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
@@ -898,7 +979,10 @@ class Sheets:
         ]
 
     def resize_columns(
-        self, spreadsheet_id: str, sheet_name: str, width: int | None = 100
+        self,
+        spreadsheet_id: str,
+        sheet_name: str = DEFAULT_SHEET_NAME,
+        width: int | None = 100,
     ):
         """Resizes the columns of a sheet.
 
@@ -909,8 +993,6 @@ class Sheets:
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet = self.get(spreadsheet_id, name=sheet_name)
-        if sheet is None:
-            raise ValueError(f"Sheet '{sheet_name}' not found in the given spreadsheet")
 
         def resize():
             body: BatchUpdateSpreadsheetRequest = {

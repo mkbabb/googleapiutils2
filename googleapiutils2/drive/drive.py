@@ -10,6 +10,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
 from ..utils import (
+    THROTTLE_TIME,
+    DriveBase,
     FilePath,
     GoogleMimeTypes,
     download_large_file,
@@ -29,9 +31,10 @@ if TYPE_CHECKING:
     )
 
 
-class Drive:
-    def __init__(self, creds: Credentials):
-        self.creds = creds
+class Drive(DriveBase):
+    def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
+        super().__init__(creds=creds, throttle_time=throttle_time)
+
         self.service: DriveResource = discovery.build(
             "drive", VERSION, credentials=self.creds
         )  # type: ignore

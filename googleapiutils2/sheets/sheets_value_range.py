@@ -17,7 +17,7 @@ from .misc import (
     ValueRenderOption,
     format_range_name,
 )
-from .sheets import Sheets, SheetsValues, SheetsRange
+from .sheets import Sheets, SheetsRange, SheetsValues
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -65,6 +65,7 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
+    @cachedmethod(operator.attrgetter("_cache"))
     def header(self) -> list[str]:
         return self.sheets._header(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
@@ -72,22 +73,15 @@ class SheetsValueRange:
 
     @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
-        sheet = self.sheets.get(self.spreadsheet_id, name=self.sheet_name)
-        if sheet is not None:
-            grid_properties = sheet.get("properties", {}).get("gridProperties", {})
-            return (
-                grid_properties.get("rowCount", 0),
-                grid_properties.get("columnCount", 0),
-            )
-        return DEFAULT_SHEET_SHAPE
+        return self.sheets._shape(
+            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
+        )
 
     @cachedmethod(operator.attrgetter("_cache"))
     def sheet_id(self) -> int:
-        for sheet in self.sheets.get_spreadsheet(self.spreadsheet_id).get("sheets", []):
-            properties = sheet.get("properties", {})
-            if properties.get("title") == self.sheet_name:
-                return properties.get("sheetId", 0)
-        return 0
+        return self.sheets._id(
+            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
+        )
 
     def values(
         self,
@@ -104,6 +98,7 @@ class SheetsValueRange:
         values: SheetsValues,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
+        ensure_shape: bool = False,
     ):
         return self.sheets.update(
             spreadsheet_id=self.spreadsheet_id,
@@ -111,6 +106,7 @@ class SheetsValueRange:
             values=values,
             value_input_option=value_input_option,
             align_columns=align_columns,
+            ensure_shape=ensure_shape,
         )
 
     def rename(self, new_name: str):

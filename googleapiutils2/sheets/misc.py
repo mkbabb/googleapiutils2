@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import operator
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from types import EllipsisType
 from typing import *
 
+from cachetools import TTLCache, cachedmethod
+
 from ..utils import to_base
+
 
 VERSION = "v4"
 
-DEFAULT_SHEET_NAME = "Sheet1"
+DEFAULT_SHEET_NAME = "'Sheet1'"
 
 DEFAULT_SHEET_SHAPE = (1000, 26)
 
@@ -64,6 +68,7 @@ def format_range_name(
     if sheet_name is not None and range_name is not None:
         if not (sheet_name.startswith("'") and sheet_name.endswith("'")):
             sheet_name = f"'{sheet_name}'"
+
         return f"{sheet_name}!{range_name}"
     elif range_name is not None:
         return range_name
@@ -215,9 +220,9 @@ def parse_sheet_slice_ixs(
         # sheet name and a string range
         case str(sheet_name), str(range_name):
             return sheet_name, range_name
-        # only a sheet name
+        # only a sheet name, but this may be sheet_name!range_name
         case str(sheet_name):
-            return sheet_name, None
+            return split_sheet_range(sheet_name)
         # sheet name name, row, and column indices
         case str(sheet_name), row_ix, col_ix:
             return sheet_name, expand_slices(row_ix, col_ix, shape=shape)
@@ -268,13 +273,47 @@ class SheetSliceT:
     sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
     shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
+    _cache: TTLCache = field(
+        hash=False, default_factory=lambda: TTLCache(maxsize=128, ttl=80)
+    )
+
+    @cachedmethod(operator.attrgetter("_cache"))
+    def slices(self) -> tuple[slice, slice]:
+        return (
+            A1_to_slices(self.range_name, shape=self.shape)
+            if self.range_name is not None
+            else (
+                slice(1, self.shape[0] + 1),
+                slice(1, self.shape[1] + 1),
+            )
+        )
+
+    def rows(self) -> slice:
+        return self.slices()[0]
+
+    def columns(self) -> slice:
+        return self.slices()[1]
+
+    def with_shape(self, shape: tuple[int, int]) -> SheetSliceT:
+        return SheetSliceT(
+            sheet_name=self.sheet_name, range_name=self.range_name, shape=shape
+        )
 
     def __repr__(self) -> str:
         return format_range_name(self.sheet_name, self.range_name)
 
-    def __getitem__(self, ixs: str | tuple[Any, ...]) -> SheetSliceT:
+    def __getitem__(self, ixs: str | tuple[Any, ...] | Any) -> SheetSliceT:
         if isinstance(ixs, SheetSliceT):
             return ixs
+        elif (
+            hasattr(ixs, "sheet_name")
+            and hasattr(ixs, "range_name")
+            and hasattr(ixs, "shape")
+        ):
+            return SheetSliceT(
+                sheet_name=ixs.sheet_name, range_name=ixs.range_name, shape=ixs.shape()
+            )
+
         if isinstance(ixs, tuple) and not len(ixs):
             raise IndexError("Empty index")
 

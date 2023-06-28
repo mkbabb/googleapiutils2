@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import json
 import pickle
+import time
 import urllib.parse
 from collections import defaultdict
 from enum import Enum
 from functools import cache
 from pathlib import Path
 from typing import *
+from cachetools.keys import hashkey
 
 import googleapiclient.http
 import requests
+from cachetools import TTLCache
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
@@ -111,6 +114,59 @@ class GoogleMimeTypes(Enum):
     json = "application/vnd.google-apps.script+json"
 
     default = "application/octet-stream"
+
+
+class DriveBase:
+    def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
+        # Google Drive API service creds
+        self.creds = creds
+
+        # throttle time in seconds; used in throttled_fn
+        self.throttle_time = throttle_time
+        # used to throttle calls to throttled_fn
+        self._prev_time: Optional[float] = None
+
+        # TTL cache for various functions; used by way of "@cachedmethod(operator.attrgetter("_cache"))"
+        self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
+
+    def throttle_fn(
+        self,
+        on_every_call: Callable[[], bool | None],
+        on_final_call: Callable[[], None],
+    ):
+        """Throttles a function to be called at most once every throttle_time seconds.
+
+        Args:
+            on_every_call (Callable[[], bool | None]): Function that is called on every call to throttled_fn.
+                If this function returns False, throttled_fn will not call on_final_call.
+                If this function returns None, throttled_fn will call on_final_call.
+            on_final_call (Callable[[], None]): Function that is called on the final call to throttled_fn.
+        """
+        can_call = on_every_call()
+        can_call = can_call if can_call is not None else True
+
+        curr_time = time.perf_counter()
+        dt = (
+            curr_time - self._prev_time
+            if self._prev_time is not None
+            else self.throttle_time
+        )
+
+        if not (dt >= self.throttle_time and can_call):
+            return None
+
+        self._prev_time = curr_time
+
+        return on_final_call()
+
+
+def named_methodkey(name: str):
+    """Hash key that ignores the first argument of a method, but is named for the method."""
+
+    def _key(self, *args, **kwargs):
+        return tuple([name] + list(args) + list(kwargs.values()))
+
+    return _key
 
 
 def hex_to_rgb(hex_code: str) -> Color:
