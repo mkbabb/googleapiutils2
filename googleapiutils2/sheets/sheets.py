@@ -11,6 +11,13 @@ from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
+from googleapiutils2.sheets.sheets_slice import (
+    SheetSlice,
+    SheetSliceT,
+    SheetsRange,
+    to_sheets_range,
+)
+
 from ..utils import (
     THROTTLE_TIME,
     DriveBase,
@@ -24,8 +31,6 @@ from .misc import (
     DEFAULT_SHEET_SHAPE,
     VERSION,
     InsertDataOption,
-    SheetSlice,
-    SheetSliceT,
     SheetsValues,
     ValueInputOption,
     ValueRenderOption,
@@ -52,9 +57,6 @@ if TYPE_CHECKING:
         UpdateValuesResponse,
         ValueRange,
     )
-
-
-SheetsRange = str | SheetSliceT | Any
 
 
 class Sheets(DriveBase):
@@ -355,7 +357,7 @@ class Sheets(DriveBase):
         if not align_columns:
             return [list(row.values()) for row in rows]
 
-        sheet_slice = SheetSlice[range_name]
+        sheet_slice = to_sheets_range(range_name)
         sheet_name = sheet_slice.sheet_name
 
         header = self._header(spreadsheet_id, sheet_name)
@@ -386,7 +388,7 @@ class Sheets(DriveBase):
         values = frame.fillna("").values.tolist()
 
         # insert the header if the range starts at the first row
-        if insert_header and sheet_slice.rows().start == 1:
+        if insert_header and sheet_slice.rows.start == 1:
             values.insert(0, header)
 
         return values
@@ -420,11 +422,12 @@ class Sheets(DriveBase):
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        sheet_slices = [SheetSlice[range_name] for range_name in ranges]
-        sheets = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
+        sheet_slices = [to_sheets_range(range_name) for range_name in ranges]
+        sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
 
         shapes = {
-            sheet_name: self._shape(spreadsheet_id, sheet_name) for sheet_name in sheets
+            sheet_name: self._shape(spreadsheet_id, sheet_name)
+            for sheet_name in sheet_names
         }
         sheet_slices = [
             sheet_slice.with_shape(shapes[sheet_slice.sheet_name])
@@ -435,10 +438,10 @@ class Sheets(DriveBase):
             sheet_name = sheet_slice.sheet_name
             rows, cols = shapes[sheet_name]
 
-            if sheet_slice.rows().stop > rows or sheet_slice.columns().stop > cols:
-                rows, cols = max(sheet_slice.rows().stop, rows), max(
-                    sheet_slice.columns().stop, cols
-                )
+            t_rows, t_cols = sheet_slice.rows.stop, sheet_slice.columns.stop
+
+            if t_rows > rows or t_cols > cols:
+                rows, cols = max(t_rows, rows), max(t_cols, cols)
                 self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
                 # update the shape cache
                 self._cache[("shape", spreadsheet_id, sheet_name)] = (rows, cols)
@@ -859,25 +862,22 @@ class Sheets(DriveBase):
             background_color=background_color,
             cell_format=cell_format,
         )
-        sheet_slice = SheetSlice[range_name]
-        sheet_id = self.get(spreadsheet_id, name=sheet_slice.sheet_name)["properties"][
-            "sheetId"
-        ]
+        sheet_slice = to_sheets_range(range_name)
 
+        sheet_id = self._id(spreadsheet_id, sheet_slice.sheet_name)
         shape = self._shape(spreadsheet_id, sheet_slice.sheet_name)
-        sheet_slice = sheet_slice.with_shape(shape)
 
-        row_slc = sheet_slice.rows()
-        col_slc = sheet_slice.columns()
+        sheet_slice = sheet_slice.with_shape(shape)
+        rows, cols = sheet_slice.rows, sheet_slice.columns
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 self._create_format_body(
                     sheet_id,
-                    start_row=row_slc.start,
-                    end_row=row_slc.stop,
-                    start_col=col_slc.start,
-                    end_col=col_slc.stop,
+                    start_row=rows.start,
+                    end_row=rows.stop,
+                    start_col=cols.start,
+                    end_col=cols.stop,
                     cell_format=cell_format,
                 )
             ]

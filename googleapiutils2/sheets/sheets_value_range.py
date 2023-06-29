@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import operator
 from dataclasses import dataclass, field
 from typing import *
 
 import pandas as pd
-from cachetools import TTLCache, cachedmethod
 
 from ..utils import parse_file_id
 from .misc import (
@@ -17,7 +15,7 @@ from .misc import (
     ValueRenderOption,
     format_range_name,
 )
-from .sheets import Sheets, SheetsRange, SheetsValues
+from .sheets import Sheets, SheetsValues
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
@@ -48,13 +46,11 @@ class SheetsValueRange:
     no values are stored. Make as many as you want, they're cheap."""
 
     sheets: Sheets = field(hash=False)
+
     spreadsheet_id: str
     sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
     spreadsheet: Spreadsheet | None = field(init=False, default=None, hash=False)
-    _cache: TTLCache = field(
-        hash=False, default_factory=lambda: TTLCache(maxsize=128, ttl=80)
-    )
 
     def __post_init__(self) -> None:
         self.spreadsheet_id = parse_file_id(self.spreadsheet_id)
@@ -65,19 +61,16 @@ class SheetsValueRange:
         )
         return format_range_name(sheet_name, self.range_name)
 
-    @cachedmethod(operator.attrgetter("_cache"))
     def header(self) -> list[str]:
         return self.sheets._header(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
         )
 
-    @cachedmethod(operator.attrgetter("_cache"))
     def shape(self) -> tuple[int, int]:
         return self.sheets._shape(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
         )
 
-    @cachedmethod(operator.attrgetter("_cache"))
     def sheet_id(self) -> int:
         return self.sheets._id(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
@@ -140,7 +133,12 @@ class SheetsValueRange:
     def to_frame(self, **kwargs) -> pd.DataFrame | None:
         return self.sheets.to_frame(self.values(), **kwargs)
 
-    def __getitem__(self, ixs: Any) -> SheetsValueRange:
+    def __getitem__(
+        self, ixs: str | tuple[Any, ...] | SheetSliceT | SheetsValueRange | Any
+    ) -> SheetsValueRange:
+        if isinstance(ixs, SheetsValueRange):
+            ixs = str(ixs)
+
         slc = SheetSliceT(
             sheet_name=self.sheet_name, range_name=self.range_name, shape=self.shape()
         )[ixs]

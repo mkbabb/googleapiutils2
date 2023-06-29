@@ -4,13 +4,13 @@ import operator
 import string
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cache
 from types import EllipsisType
 from typing import *
 
 from cachetools import TTLCache, cachedmethod
 
 from ..utils import to_base
-
 
 VERSION = "v4"
 
@@ -55,6 +55,32 @@ class InsertDataOption(Enum):
     overwrite = "OVERWRITE"
 
 
+def normalize_sheet_name(sheet_name: str) -> str:
+    """Normalize a sheet name for use in a Google Sheets API request.
+    Quotes sheet names if they're not already quoted.
+
+    Args:
+        sheet_name (str): The name of the sheet.
+    """
+    if not (sheet_name.startswith("'") and sheet_name.endswith("'")):
+        sheet_name = f"'{sheet_name}'"
+
+    return sheet_name
+
+
+def split_sheet_range(range_name: Any) -> tuple[str, str]:
+    range_name = str(range_name)
+
+    if "!" in range_name:
+        sheet_name, range_name = range_name.split("!")
+        return normalize_sheet_name(sheet_name), range_name
+
+    if ":" in range_name:
+        return DEFAULT_SHEET_NAME, range_name
+    else:
+        return range_name, ""
+
+
 def format_range_name(
     sheet_name: str | None = None, range_name: str | None = None
 ) -> str:
@@ -66,9 +92,7 @@ def format_range_name(
         range_name (str | None): The range name.
     """
     if sheet_name is not None and range_name is not None:
-        if not (sheet_name.startswith("'") and sheet_name.endswith("'")):
-            sheet_name = f"'{sheet_name}'"
-
+        sheet_name = normalize_sheet_name(sheet_name)
         return f"{sheet_name}!{range_name}"
     elif range_name is not None:
         return range_name
@@ -108,19 +132,6 @@ def A1_to_rc(a1: str) -> tuple[int | None, int | None]:
     row = int(row_part) if row_part else None  # return None if no row part
 
     return row, col
-
-
-def split_sheet_range(range_name: Any) -> tuple[str, str]:
-    range_name = str(range_name)
-
-    if "!" in range_name:
-        sheet_name, range_name = range_name.split("!")
-        return sheet_name, range_name
-
-    if ":" in range_name:
-        return DEFAULT_SHEET_NAME, range_name
-    else:
-        return range_name, ""
 
 
 def A1_to_slices(
@@ -216,24 +227,31 @@ def expand_slices(
 def parse_sheet_slice_ixs(
     ixs: str | tuple[Any, ...], shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
 ) -> tuple[str | None, str | None]:
-    match ixs:
-        # sheet name and a string range
-        case str(sheet_name), str(range_name):
-            return sheet_name, range_name
-        # only a sheet name, but this may be sheet_name!range_name
-        case str(sheet_name):
-            return split_sheet_range(sheet_name)
-        # sheet name name, row, and column indices
-        case str(sheet_name), row_ix, col_ix:
-            return sheet_name, expand_slices(row_ix, col_ix, shape=shape)
-        # row and column indices
-        case row_ix, col_ix:
-            return None, expand_slices(row_ix, col_ix, shape=shape)
-        case _:
-            raise IndexError(f"Invalid index: {ixs}")
+    def parse():
+        match ixs:
+            # sheet name and a string range
+            case str(sheet_name), str(range_name):
+                return sheet_name, range_name
+            # only a sheet name, but this may be sheet_name!range_name
+            case str(sheet_name):
+                return split_sheet_range(sheet_name)
+            # sheet name name, row, and column indices
+            case str(sheet_name), row_ix, col_ix:
+                return sheet_name, expand_slices(row_ix, col_ix, shape=shape)
+            # row and column indices
+            case row_ix, col_ix:
+                return None, expand_slices(row_ix, col_ix, shape=shape)
+            case _:
+                raise IndexError(f"Invalid index: {ixs}")
+
+    sheet_name, range_name = parse()
+    return (
+        normalize_sheet_name(sheet_name) if sheet_name is not None else sheet_name,
+        range_name,
+    )
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class SheetSliceT:
     """For better indexing of a Sheet-like object, e.g. a Google Sheet.
     Allows you to index into a sheet using numpy-like syntax.
@@ -273,13 +291,11 @@ class SheetSliceT:
     sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
     shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
-    _cache: TTLCache = field(
-        hash=False, default_factory=lambda: TTLCache(maxsize=128, ttl=80)
-    )
 
-    @cachedmethod(operator.attrgetter("_cache"))
-    def slices(self) -> tuple[slice, slice]:
-        return (
+    slices: tuple[slice, slice] = field(init=False, repr=False, hash=False)
+
+    def __post_init__(self) -> None:
+        self.slices = (
             A1_to_slices(self.range_name, shape=self.shape)
             if self.range_name is not None
             else (
@@ -288,11 +304,13 @@ class SheetSliceT:
             )
         )
 
+    @property
     def rows(self) -> slice:
-        return self.slices()[0]
+        return self.slices[0]
 
+    @property
     def columns(self) -> slice:
-        return self.slices()[1]
+        return self.slices[1]
 
     def with_shape(self, shape: tuple[int, int]) -> SheetSliceT:
         return SheetSliceT(
@@ -302,17 +320,11 @@ class SheetSliceT:
     def __repr__(self) -> str:
         return format_range_name(self.sheet_name, self.range_name)
 
-    def __getitem__(self, ixs: str | tuple[Any, ...] | Any) -> SheetSliceT:
+    def __getitem__(
+        self, ixs: str | tuple[Any, ...] | SheetSliceT | Any
+    ) -> SheetSliceT:
         if isinstance(ixs, SheetSliceT):
             return ixs
-        elif (
-            hasattr(ixs, "sheet_name")
-            and hasattr(ixs, "range_name")
-            and hasattr(ixs, "shape")
-        ):
-            return SheetSliceT(
-                sheet_name=ixs.sheet_name, range_name=ixs.range_name, shape=ixs.shape()
-            )
 
         if isinstance(ixs, tuple) and not len(ixs):
             raise IndexError("Empty index")
@@ -323,6 +335,3 @@ class SheetSliceT:
             range_name if range_name is not None else self.range_name,
             self.shape,
         )
-
-
-SheetSlice = SheetSliceT()

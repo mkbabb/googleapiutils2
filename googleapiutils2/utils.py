@@ -9,7 +9,6 @@ from enum import Enum
 from functools import cache
 from pathlib import Path
 from typing import *
-from cachetools.keys import hashkey
 
 import googleapiclient.http
 import requests

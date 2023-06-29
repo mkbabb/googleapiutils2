@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.9.6"
+version = "0.9.9"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
