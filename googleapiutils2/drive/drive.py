@@ -18,7 +18,14 @@ from ..utils import (
     parse_file_id,
     q_escape,
 )
-from .misc import DEFAULT_DOWNLOAD_CONVERSION_MAP, DOWNLOAD_LIMIT, VERSION
+from .misc import (
+    DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    DEFAULT_FIELDS,
+    DOWNLOAD_LIMIT,
+    VERSION,
+    create_listing_fields,
+    list_drive_items,
+)
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -40,27 +47,67 @@ class Drive(DriveBase):
         )  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
 
-    def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
-        # TODO: Condense into one fn for both name and id.
-
-        """Get a file by its ID."""
-        file_id = parse_file_id(file_id)
-        return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
-
-    def get_by_filename(
-        self, name: str, parents: List[str], q: str | None = None
-    ) -> Optional[File]:
-        """Get a file by its name and its parent folder(s).
+    def get(
+        self,
+        file_id: str | None = None,
+        name: str | None = None,
+        parents: List[str] | None = None,
+        fields: str = DEFAULT_FIELDS,
+        q: str | None = None,
+        **kwargs: Any,
+    ) -> File:
+        """Get a file by its:
+            - ID
+            - Name and parent folder(s)
         If multiple files are found, the first one is returned.
-        If no file is found, None is returned.
+        If no file is found
 
         Args:
-            name (str): The name of the file.
-            parents (List[str]): The ID(s) of the parent folder(s).
+            file_id (str, optional): The ID of the file to get. Defaults to None.
+            name (str, optional): The name of the file to get. Defaults to None.
+            parents (List[str], optional): The parent folder(s) of the file to get. Defaults to None.
+            fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS.
             q (str, optional): A query string to filter the results. Defaults to None.
         """
+        if file_id is not None:
+            file_id = parse_file_id(file_id)
+            return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
+        elif name is None:
+            raise ValueError("Either file_id or name must be specified.")
+
         parents = list(map(parse_file_id, parents)) if parents is not None else []
-        return next(self._query_children(name=name, parents=parents, q=q), None)
+
+        file = next(
+            self._query_children(name=name, parents=parents, fields=fields, q=q), None
+        )
+        if file is None:
+            raise FileNotFoundError(
+                f"File with name {name} and parents {parents} not found."
+            )
+
+        return file
+
+    def get_if_exists(
+        self,
+        file_id: str | None = None,
+        name: str | None = None,
+        parents: List[str] | None = None,
+        fields: str = DEFAULT_FIELDS,
+        q: str | None = None,
+        **kwargs: Any,
+    ) -> File | None:
+        """Get a file (if it exists). See `get` for more information."""
+        try:
+            return self.get(
+                file_id=file_id,
+                name=name,
+                parents=parents,
+                fields=fields,
+                q=q,
+                **kwargs,
+            )
+        except FileNotFoundError:
+            return None
 
     def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
         request = self.files.export_media(fileId=file_id, mimeType=mime_type.value)  # type: ignore
@@ -173,34 +220,10 @@ class Drive(DriveBase):
 
         return self.files.copy(**kwargs).execute()
 
-    @staticmethod
-    def _list_fields(fields: str) -> str:
-        if "*" in fields:
-            return fields
-
-        REQUIRED_FIELDS = ["nextPageToken", "kind"]
-
-        for r in REQUIRED_FIELDS:
-            if r not in fields:
-                fields += f",{r}"
-
-        return fields
-
-    @staticmethod
-    def _list(
-        list_func: Callable[[str | None], FileList | PermissionList]
-    ) -> Iterable[FileList | PermissionList]:
-        page_token = None
-        while True:
-            response = list_func(page_token)
-            yield response
-            if (page_token := response.get("nextPageToken", None)) is None:
-                break
-
     def list(
         self,
         query: str = "",
-        fields: str = "*",
+        fields: str = DEFAULT_FIELDS,
         order_by: str = "modifiedTime desc",
         team_drives: bool = True,
         **kwargs: Any,
@@ -217,7 +240,7 @@ class Drive(DriveBase):
 
         Args:
             query (str): The query to use to filter files. For more information see https://developers.google.com/drive/api/v3/search-files.
-            fields (str, optional): The fields to return. Defaults to "*". For more information see https://developers.google.com/drive/api/v3/reference/files/list.
+            fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS. For more information see https://developers.google.com/drive/api/v3/reference/files/list.
             order_by (str, optional): The order to return files in. Defaults to "modifiedTime desc".
             team_drives (bool, optional): Whether to include files from Team Drives. Defaults to True.
         """
@@ -229,22 +252,22 @@ class Drive(DriveBase):
         list_func = lambda x: self.files.list(
             q=query,
             pageToken=x,
-            fields=self._list_fields(fields),
+            fields=create_listing_fields(fields),
             orderBy=order_by,
             **kwargs,
         ).execute()
 
-        for response in self._list(list_func):
+        for response in list_drive_items(list_func):
             yield from response.get("files", [])  # type: ignore
 
     def list_children(
-        self, parent_id: str, fields: str = "*", **kwargs: Any
+        self, parent_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
     ) -> Iterable[File]:
         """List files in a folder.
 
         Args:
             parent_id (str): The ID of the folder to list files in.
-            fields (str, optional): The fields to return. Defaults to "*". For more information see https://developers.google.com/drive/api/v3/reference/files/list.
+            fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS. For more information see https://developers.google.com/drive/api/v3/reference/files/list.
         """
         parent_id = parse_file_id(parent_id)
         return self.list(
@@ -252,7 +275,11 @@ class Drive(DriveBase):
         )
 
     def _query_children(
-        self, name: str, parents: List[str], fields: str = "*", q: str | None = None
+        self,
+        name: str,
+        parents: List[str],
+        fields: str = DEFAULT_FIELDS,
+        q: str | None = None,
     ):
         filename = Path(name)
 
@@ -315,7 +342,7 @@ class Drive(DriveBase):
         parents: List[str] | None = None,
         create_folders: bool = False,
         get_extant: bool = False,
-        fields: str = "*",
+        fields: str = DEFAULT_FIELDS,
         **kwargs: Any,
     ) -> File:
         """Create's a file on Google Drive.
@@ -328,7 +355,7 @@ class Drive(DriveBase):
             parents (List[str], optional): List of parent folder IDs wherein the file will be created. Defaults to None.
             create_folders (bool, optional): Create parent folders if they don't exist. Defaults to False.
             get_extant (bool, optional): If a file with the same name already exists, return it. Defaults to False.
-            fields (str, optional): Fields to be returned. Defaults to "*".
+            fields (str, optional): Fields to be returned. Defaults to DEFAULT_FIELDS.
         """
         filepath = Path(filepath)
         parents = list(map(parse_file_id, parents)) if parents is not None else []
@@ -340,7 +367,7 @@ class Drive(DriveBase):
 
         if (
             get_extant
-            and (file := self.get_by_filename(filepath.name, parents=parents))
+            and (file := self.get_if_exists(name=filepath.name, parents=parents))
             is not None
         ):
             return file
@@ -403,7 +430,7 @@ class Drive(DriveBase):
             "media_body": uploader(mime_type),
         }
 
-        if update and (file := self.get_by_filename(name, parents=parents)):
+        if update and (file := self.get_if_exists(name=name, parents=parents)):
             kwargs["fileId"] = file["id"]
             return self.files.update(**kwargs).execute()
 
@@ -511,9 +538,13 @@ class Drive(DriveBase):
         file_id = parse_file_id(file_id)
         return self.files.export(fileId=file_id, mimeType=mime_type.value).execute()
 
-    def permissions_get(
-        self, file_id: str, permission_id: str, **kwargs: Any
-    ) -> Permission:
+
+class Permissions:
+    def __init__(self, drive: Drive):
+        self.drive = drive
+        self.permissions = drive.service.permissions()
+
+    def get(self, file_id: str, permission_id: str, **kwargs: Any) -> Permission:
         """Gets a permission by ID.
 
         Args:
@@ -521,42 +552,36 @@ class Drive(DriveBase):
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return (
-            self.service.permissions()
-            .get(fileId=file_id, permissionId=permission_id, **kwargs)
-            .execute()
-        )
+        return self.permissions.get(
+            fileId=file_id, permissionId=permission_id, **kwargs
+        ).execute()
 
-    def permissions_list(
-        self, file_id: str, fields: str = "*", **kwargs: Any
+    def list(
+        self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
     ) -> Iterable[Permission]:
         """Lists permissions for a file.
 
         Args:
             file_id (str): The ID of the file.
-            fields (str, optional): The fields to return. Defaults to "*".
+            fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS.
         """
         file_id = parse_file_id(file_id)
-        list_func = (
-            lambda x: self.service.permissions()
-            .list(
-                fileId=file_id, pageToken=x, fields=self._list_fields(fields), **kwargs
-            )
-            .execute()
-        )
-        for response in self._list(list_func):
+        list_func = lambda x: self.permissions.list(
+            fileId=file_id, pageToken=x, fields=create_listing_fields(fields), **kwargs
+        ).execute()
+        for response in list_drive_items(list_func):
             yield from response.get("permissions", [])  # type: ignore
 
     def _permission_update_if_exists(
         self, file_id: str, user_permission: Permission
     ) -> Permission | None:
-        for p in self.permissions_list(file_id):
+        for p in self.list(file_id):
             if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
                 return p
         else:
             return None
 
-    def permissions_create(
+    def create(
         self,
         file_id: str,
         email_address: str,
@@ -592,19 +617,15 @@ class Drive(DriveBase):
         ):
             return p
 
-        return (
-            self.service.permissions()
-            .create(
-                fileId=file_id,
-                body=user_permission,
-                fields="*",
-                sendNotificationEmail=sendNotificationEmail,
-                **kwargs,
-            )
-            .execute()
-        )
+        return self.permissions.create(
+            fileId=file_id,
+            body=user_permission,
+            fields=DEFAULT_FIELDS,
+            sendNotificationEmail=sendNotificationEmail,
+            **kwargs,
+        ).execute()
 
-    def permissions_delete(self, file_id: str, permission_id: str, **kwargs: Any):
+    def delete(self, file_id: str, permission_id: str, **kwargs: Any):
         """Deletes a permission from a file.
 
         Args:
@@ -612,8 +633,6 @@ class Drive(DriveBase):
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return (
-            self.service.permissions()
-            .delete(fileId=file_id, permissionId=permission_id, **kwargs)
-            .execute()
-        )
+        return self.permissions.delete(
+            fileId=file_id, permissionId=permission_id, **kwargs
+        ).execute()

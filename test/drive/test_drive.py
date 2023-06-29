@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import *
 
-from googleapiutils2 import Drive, GoogleMimeTypes
+from googleapiutils2 import Drive, GoogleMimeTypes, Permissions
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
@@ -14,11 +14,13 @@ def test_lists(drive: Drive):
         "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
     )
 
+    permissions = Permissions(drive=drive)
+
     files = drive.list_children(parent_id=test_folder_url)
     for file in files:
         print(file)
 
-    perms = drive.permissions_list(test_folder_url)
+    perms = permissions.list(test_folder_url)
     for p in perms:
         print(p)
 
