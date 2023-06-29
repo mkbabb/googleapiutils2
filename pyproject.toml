@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.9.9"
+version = "0.10.0"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
@@ -11,15 +11,15 @@ repository = "https://github.com/mkbabb/googleapiutils2"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pandas = "^2.0.2"
+pandas = "^2.0.3"
 mypy = "^1.4.1"
 google-api-python-client-stubs = "^1.17.0"
-google-api-python-client = "^2.90.0"
+google-api-python-client = "^2.91.0"
 google-auth-oauthlib = "^1.0.0"
 requests = "^2.31.0"
 cachetools = "^5.3.1"
 google-auth-httplib2 = "^0.1.0"
-google-auth = "^2.20.0"
+google-auth = "^2.21.0"
 
 [tool.poetry.group.dev.dependencies]
 types-requests = "^2.31.0.1"
