@@ -41,6 +41,8 @@ class Drive(DriveBase):
         self.files: DriveResource.FilesResource = self.service.files()
 
     def get(self, file_id: str, fields: str = "*", **kwargs: Any) -> File:
+        # TODO: Condense into one fn for both name and id.
+
         """Get a file by its ID."""
         file_id = parse_file_id(file_id)
         return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
@@ -181,6 +183,7 @@ class Drive(DriveBase):
         for r in REQUIRED_FIELDS:
             if r not in fields:
                 fields += f",{r}"
+
         return fields
 
     @staticmethod
@@ -248,7 +251,9 @@ class Drive(DriveBase):
             query=f"{q_escape(parent_id)} in parents", fields=fields, **kwargs
         )
 
-    def _query_children(self, name: str, parents: List[str], q: str | None = None):
+    def _query_children(
+        self, name: str, parents: List[str], fields: str = "*", q: str | None = None
+    ):
         filename = Path(name)
 
         parents_list = " or ".join(
@@ -265,7 +270,8 @@ class Drive(DriveBase):
         if q is not None:
             queries.append(q)
         query = " and ".join((f"({i})" for i in queries))
-        return self.list(query=query)
+
+        return self.list(query=query, fields=fields)
 
     def _create_nested_folders(
         self, filepath: Path, parents: List[str], update: bool = True

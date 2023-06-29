@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from typing import *
 
 from cachetools import cached
@@ -25,7 +24,7 @@ cache: dict[SheetSliceT, SheetSliceT] = {}
 
 
 @cached(cache=cache, key=sheets_rangekey)
-def to_sheets_range(sheets_range: SheetsRange) -> SheetSliceT:
+def normalize_sheets_range(sheets_range: SheetsRange) -> SheetSliceT:
     if isinstance(sheets_range, SheetSliceT):
         return sheets_range
     elif isinstance(sheets_range, SheetsValueRange):

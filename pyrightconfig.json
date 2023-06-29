@@ -1,4 +1,5 @@
 {
     "reportTypedDictNotRequiredAccess": "none",
-    "reportGeneralTypeIssues": "information"
+    "reportGeneralTypeIssues": "information",
+    "reportWildcardImportFromLibrary": "none"
 }

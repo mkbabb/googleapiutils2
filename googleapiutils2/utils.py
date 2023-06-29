@@ -284,6 +284,31 @@ def download_large_file(
 
 
 def get_id_from_url(url: str) -> str:
+    """
+    Extracts the ID from the URL provided.
+
+    This function supports URLs of the form:
+    - '.../folders/{id}/...'
+    - '.../d/{id}/...'
+    - With a query parameter named 'id': '...?id={id}...'
+
+    Args:
+        url (str): The URL string from which to extract the ID.
+
+    Raises:
+        ValueError: If the function can't parse the URL to find an ID.
+
+    Examples:
+    --------
+    >>> get_id_from_url('https://example.com/folders/123456789')
+    '123456789'
+
+    >>> get_id_from_url('https://example.com/d/123456789')
+    '123456789'
+
+    >>> get_id_from_url('https://example.com/?id=123456789')
+    '123456789'
+    """
     url_obj = urllib.parse.urlparse(url)
     path = url_obj.path
     paths = path.split("/")
@@ -310,6 +335,29 @@ def get_id_from_url(url: str) -> str:
 def parse_file_id(
     file_id: str,
 ) -> str:
+    """
+    Parse the given file_id which could be an ID string, URL string or a dictionary object.
+
+    This function supports the following formats:
+    - Direct ID string: '123456789'
+    - URL formats supported by 'get_id_from_url' function.
+    - Dictionary object with 'id' or 'spreadsheetId' as keys.
+
+    Args:
+        file_id (str): The ID string or URL or dictionary from which to extract the ID.
+
+    Examples:
+    --------
+    >>> parse_file_id('123456789')
+    '123456789'
+
+    >>> parse_file_id('https://example.com/d/123456789')
+    '123456789'
+
+    >>> parse_file_id({'id': '123456789'})
+    '123456789'
+    """
+
     def parse(file_id: str) -> str:
         if "http" in file_id:
             return get_id_from_url(file_id)
