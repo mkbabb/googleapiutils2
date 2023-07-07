@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import operator
 import string
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import cache
 from types import EllipsisType
 from typing import *
-
-from cachetools import TTLCache, cachedmethod
 
 from ..utils import to_base
 
@@ -21,7 +17,7 @@ DEFAULT_SHEET_SHAPE = (1000, 26)
 BASE = 26
 OFFSET = 1
 
-SheetsValues = list[list[Any]] | list[dict[str | Any, Any]]
+SheetsValues = list[list[Any]] | list[dict[str | Any, Any]] | list[object]
 
 
 class ValueInputOption(Enum):
@@ -68,7 +64,7 @@ def normalize_sheet_name(sheet_name: str) -> str:
     return sheet_name
 
 
-def split_sheet_range(range_name: Any) -> tuple[str, str]:
+def split_sheet_range(range_name: Any) -> tuple[str, str | None]:
     range_name = str(range_name)
 
     if "!" in range_name:
@@ -78,7 +74,7 @@ def split_sheet_range(range_name: Any) -> tuple[str, str]:
     if ":" in range_name:
         return DEFAULT_SHEET_NAME, range_name
     else:
-        return range_name, ""
+        return range_name, None
 
 
 def format_range_name(
@@ -204,8 +200,8 @@ def expand_slices(
         start = 1 if start is ... else start
         stop = max_dim if stop is ... else stop
         # handle negative indices
-        start = max_dim + start if start < 0 else start
-        stop = max_dim + stop if stop < 0 else stop
+        start = max_dim + start + 1 if start < 0 else start
+        stop = max_dim + stop + 1 if stop < 0 else stop
         return slice(start, stop, step)
 
     row_is_ellipsis = row_ix is ...

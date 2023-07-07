@@ -3,7 +3,6 @@ from __future__ import annotations
 import atexit
 import operator
 from collections import defaultdict
-from functools import partial
 from typing import *
 
 import pandas as pd

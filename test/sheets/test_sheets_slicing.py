@@ -5,7 +5,6 @@ from typing import *
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
-
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
 
