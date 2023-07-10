@@ -14,7 +14,7 @@ from googleapiutils2.sheets.sheets_slice import (
     SheetSlice,
     SheetSliceT,
     SheetsRange,
-    normalize_sheets_range,
+    to_sheet_slice,
 )
 
 from ..utils import (
@@ -361,7 +361,7 @@ class Sheets(DriveBase):
             value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(range_name)
+        sheet_slice = to_sheet_slice(range_name)
 
         return (
             self.spreadsheets.values()
@@ -459,7 +459,7 @@ class Sheets(DriveBase):
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        sheet_slices = [normalize_sheets_range(range_name) for range_name in ranges]
+        sheet_slices = [to_sheet_slice(range_name) for range_name in ranges]
         sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
 
         shapes = {
@@ -506,7 +506,7 @@ class Sheets(DriveBase):
             align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(range_name)
+        sheet_slice = to_sheet_slice(range_name)
 
         if ensure_shape:
             self._ensure_sheet_shape(spreadsheet_id, [sheet_slice])
@@ -544,7 +544,7 @@ class Sheets(DriveBase):
 
         new_data: list[ValueRange] = [
             {
-                "range": str(sheet_slice := normalize_sheets_range(range_name)),
+                "range": str(sheet_slice := to_sheet_slice(range_name)),
                 "values": self._process_sheets_values(
                     spreadsheet_id=spreadsheet_id,
                     sheet_slice=sheet_slice,
@@ -662,7 +662,7 @@ class Sheets(DriveBase):
             align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(range_name)
+        sheet_slice = to_sheet_slice(range_name)
         values = values if values is not None else [[]]
 
         body: ValueRange = {
@@ -699,7 +699,7 @@ class Sheets(DriveBase):
             range_name (SheetsRange): The range to clear.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(range_name)
+        sheet_slice = to_sheet_slice(range_name)
 
         return (
             self.spreadsheets.values()
@@ -723,7 +723,7 @@ class Sheets(DriveBase):
             cols (int, optional): The number of columns to resize to. Defaults to DEFAULT_SHEET_SHAPE[1].
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(sheet_name)
+        sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
         sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
@@ -755,7 +755,7 @@ class Sheets(DriveBase):
             sheet_name (str): The name of the sheet to clear formatting from.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(sheet_name)
+        sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
         sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
@@ -786,7 +786,7 @@ class Sheets(DriveBase):
         """
         # first clear all of the values, and set the bounds of the sheet to have 26 columns, and 1000 rows
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(sheet_name)
+        sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
         self.clear(spreadsheet_id, sheet_name)
@@ -897,7 +897,7 @@ class Sheets(DriveBase):
             cell_format (CellFormat, optional): A cell format to merge with the default format. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(range_name)
+        sheet_slice = to_sheet_slice(range_name)
 
         cell_format = self._create_cell_format(
             bold=bold,
@@ -1039,7 +1039,7 @@ class Sheets(DriveBase):
             width (int, optional): The width to set the columns to. Defaults to 100. If None, will auto-resize.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = normalize_sheets_range(sheet_name)
+        sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
         sheet = self.get(spreadsheet_id, name=sheet_name)

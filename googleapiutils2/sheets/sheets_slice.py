@@ -27,7 +27,7 @@ def sheets_rangekey(sheets_range: SheetsRange) -> SheetSliceT:
 
 
 @cached(cache=cache, key=sheets_rangekey)
-def normalize_sheets_range(sheets_range: SheetsRange) -> SheetSliceT:
+def to_sheet_slice(sheets_range: SheetsRange) -> SheetSliceT:
     if isinstance(sheets_range, SheetSliceT):
         return sheets_range
     else:
