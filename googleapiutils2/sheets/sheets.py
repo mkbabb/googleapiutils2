@@ -210,6 +210,25 @@ class Sheets(DriveBase):
 
         raise ValueError("Either the name or the ID of the sheet must be provided.")
 
+    def has(
+        self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
+    ):
+        """Check if a sheet exists in a spreadsheet.
+        Either the name or the ID of the sheet must be provided.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to check.
+            name (str, optional): The name of the sheet to check. Defaults to None.
+            sheet_id (int, optional): The ID of the sheet to check. Defaults to None.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        try:
+            self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+            return True
+        except ValueError:
+            return False
+
     def get(
         self,
         spreadsheet_id: str,
@@ -270,6 +289,7 @@ class Sheets(DriveBase):
         rows: int = DEFAULT_SHEET_SHAPE[0],
         cols: int = DEFAULT_SHEET_SHAPE[1],
         index: int | None = None,
+        ignore_existing: bool = True,
         **kwargs: Any,
     ):
         """Add one or more sheets to a spreadsheet.
@@ -280,10 +300,20 @@ class Sheets(DriveBase):
             rows (int, optional): The number of rows to add to each sheet. Defaults to DEFAULT_SHEET_SHAPE[0].
             cols (int, optional): The number of columns to add to each sheet. Defaults to DEFAULT_SHEET_SHAPE[1].
             index (int, optional): The index at which to insert the sheet(s). Defaults to None.
+            ignore_existing (bool, optional): Whether to ignore sheets that already exist. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         if isinstance(names, str):
             names = [names]
+
+        names = [
+            name
+            for name in names
+            if not ignore_existing or not self.has(spreadsheet_id, name=name)
+        ]
+
+        if len(names) == 0:
+            return
 
         def make_body(name: str) -> Sheet:
             body: Sheet = {
