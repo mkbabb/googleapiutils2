@@ -10,7 +10,7 @@ Currently supports sections of the following resources:
     `SpreadsheetsResource`, `ValuesResource`, `...`
 -   [Geocoding](https://developers.google.com/maps/documentation/geocoding/overview)
 
-## Quickstart
+## Quickstart 🚀
 
 This project requires Python `^3.10` to run.
 
@@ -26,7 +26,7 @@ Install poetry, then run
 
 And you're done.
 
-## Overview
+## Overview 📖
 
 The library was written to be consistent with Google's own Python API - just a little
 easier to use. Most `Drive` and `Sheets` operations are supported using explicit
@@ -37,7 +37,7 @@ A note on IDs: anytime a resource ID is needed, one can be provide the actual re
 ID, or the URL to the resource. If a URL is provided, this mapping is cached for future
 use.
 
-## Authentication
+## Authentication 🔑
 
 Before using a `Drive` or `Sheets` object, one must first authenticate. This is done via
 the `google.oauth2` library, creating a `Credentials` object.
@@ -69,7 +69,7 @@ account by way of the following discovery scheme:
 -   If the `GOOGLE_API_CREDENTIALS` environment variable is set, use the credentials
     file pointed to by the variable.
 
-## Drive
+## Drive 📁
 
 Example: copy a file to a folder.
 
@@ -96,7 +96,7 @@ What the above does is:
 -   Get the file with the given name, and delete it if it exists.
 -   Copy the file with the given ID to the given folder, and return the new file.
 
-## Sheets
+## Sheets 📊
 
 Example: update a range of cells in a sheet.
 
@@ -162,3 +162,7 @@ use in updating a sheet's range via `.update()`, for example). Further, a
 Sheet1[2:3, ...].update(rows)
 ...
 ```
+
+### Why "2" 🤔
+
+Don't ask :3
