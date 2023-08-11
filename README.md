@@ -42,6 +42,8 @@ use.
 Before using a `Drive` or `Sheets` object, one must first authenticate. This is done via
 the `google.oauth2` library, creating a `Credentials` object.
 
+### Custom Credentials
+
 The library supports two methods of authentication:
 
 -   via a Google service account (recommended, see more
@@ -52,23 +54,32 @@ The library supports two methods of authentication:
 With a service account, one can programmatically access resources without user input.
 This is by far the easiest route, but requires a bit of setup.
 
-If not using a service account, the library will attempt to open a browser window to
-authenticate using the provided credentials. This authentication is cached for future
+If one's not using a service account, the library will attempt to open a browser window
+to authenticate using the provided credentials. This authentication is cached for future
 usage (though it does expire on some interval) - so an valid token path is required.
 
 See the [`get_oauth2_creds`](googleapiutils2/utils.py) function for more information.
+
+### Default Credentials
+
+To expedite development, all credentials-based objects will default to using a service
+account by way of the following discovery scheme:
+
+-   If `./auth/credentials.json` exists, use that credentials file.
+-   If the `GOOGLE_API_CREDENTIALS` environment variable is set, use the credentials
+    file pointed to by the variable.
 
 ## Drive
 
 Example: copy a file to a folder.
 
 ```python
-creds = get_oauth2_creds(config_obj)
-drive = Drive(creds)
+from googleapiutils2 import Drive
+drive = Drive()
 
 filename = "Heyy"
 
-file = drive.get_name(filename, parents=[FOLDER_URL])
+file = drive.get(filename, parents=[FOLDER_URL])
 if file is not None:
     drive.delete(file["id"])
 
@@ -77,8 +88,8 @@ file = drive.copy(file_id=FILE_ID, to_filename=filename, to_folder_id=FOLDER_URL
 
 What the above does is:
 
--   Get the OAuth2 credentials from the `config_obj` object (JSON object representing
-    the requisite credentials, see
+-   Get the OAuth2 credentials using the default discvoery scheme (JSON object
+    representing the requisite credentials, see
     [here](https://developers.google.com/identity/protocols/oauth2/native-app#step-2:-send-a-request-to-googles-oauth-2.0-server)
     for more information).
 -   create a `Drive` object thereupon.
@@ -90,8 +101,7 @@ What the above does is:
 Example: update a range of cells in a sheet.
 
 ```python
-creds = get_oauth2_creds(config_path)
-sheets = Sheets(creds)
+sheets = Sheets()
 
 Sheet1 = SheetsValueRange(sheets, SHEET_ID, sheet_name="Sheet1")
 
@@ -105,7 +115,8 @@ Sheet1[2:3, ...].update(rows)
 
 What the above does is:
 
--   Get the OAuth2 credentials from the `config_path` file (see
+-   Get the OAuth2 credentials using the default discvoery scheme (JSON object
+    representing the requisite credentials, see
     [here](https://developers.google.com/identity/protocols/oauth2/native-app#step-2:-send-a-request-to-googles-oauth-2.0-server)
     for more information).
 -   create a `Sheets` object thereupon.
