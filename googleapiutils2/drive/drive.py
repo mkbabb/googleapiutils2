@@ -301,12 +301,13 @@ class Drive(DriveBase):
             parents = [parents] if isinstance(parents, str) else parents
             parents = list(map(parse_file_id, parents))
 
-            return self._query_children(
+            yield from self._query_children(
                 parents=parents,
                 fields=fields,
                 q=query,
                 team_drives=team_drives,
             )
+            return
 
         if query is None:
             query = "trashed = false"
@@ -336,10 +337,11 @@ class Drive(DriveBase):
         Only non-trashed files will be returned."""
         queries: List[str] = []
 
-        parents_list = " or ".join(
-            (f"{q_escape(parent)} in parents" for parent in parents)
-        )
-        queries.extend(parents_list)
+        if len(parents):
+            parents_list = " or ".join(
+                (f"{q_escape(parent)} in parents" for parent in parents)
+            )
+            queries.append(parents_list)
 
         if name is not None:
             filename = Path(name)
@@ -349,12 +351,11 @@ class Drive(DriveBase):
                     f"name = {q_escape(filename.stem)}",
                 )
             )
-            queries.extend(names_list)
-
-        queries.append("trashed = false")
-
+            queries.append(names_list)
         if q is not None:
             queries.append(q)
+
+        queries.append("trashed = false")
 
         query = " and ".join((f"({i})" for i in queries))
 
@@ -373,8 +374,8 @@ class Drive(DriveBase):
 
         def create_or_get_if_exists(name: str, parents: List[str]):
             folders = self._query_children(
-                name=name,
                 parents=parents,
+                name=name,
                 q=f"mimeType='{GoogleMimeTypes.folder.value}'",
             )
             if update and (folder := next(folders, None)) is not None:
@@ -400,7 +401,7 @@ class Drive(DriveBase):
         name: FilePath,
         mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
-        create_folders: bool = False,
+        recursive: bool = False,
         get_extant: bool = False,
         fields: str = DEFAULT_FIELDS,
         **kwargs: Any,
@@ -413,7 +414,7 @@ class Drive(DriveBase):
             name (FilePath): Filepath to the file to be uploaded.
             mime_type (GoogleMimeTypes): Mime type of the file.
             parents (List[str], optional): List of parent folder IDs wherein the file will be created. Defaults to None.
-            create_folders (bool, optional): Create parent folders if they don't exist. Defaults to False.
+            recursive (bool, optional): Create parent folders if they don't exist. Defaults to False.
             get_extant (bool, optional): If a file with the same name already exists, return it. Defaults to False.
             fields (str, optional): Fields to be returned. Defaults to DEFAULT_FIELDS.
         """
@@ -421,7 +422,7 @@ class Drive(DriveBase):
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
 
-        if create_folders:
+        if recursive:
             parents = self._create_nested_folders(
                 filepath=filepath, parents=parents, update=get_extant
             )

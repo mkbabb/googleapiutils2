@@ -15,7 +15,7 @@ def test_sheet(drive: Drive, google_folders: dict[str, File]):
     sheets_folder = google_folders["sheets"]
 
     test_sheet = drive.create(
-        filepath="test_sheet",
+        name="test_sheet",
         mime_type=GoogleMimeTypes.sheets,
         parents=[sheets_folder["id"]],
         get_extant=True,

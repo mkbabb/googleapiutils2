@@ -52,8 +52,8 @@ def test_nested_files(test_folder: File, drive: Drive):
 
     filepath = Path("toasting")
     parent_folder = drive.create(
-        filepath=filepath,
-        create_folders=True,
+        name=filepath,
+        recursive=True,
         parents=[folder_id],
         mime_type=GoogleMimeTypes.folder,
         get_extant=True,
@@ -63,8 +63,8 @@ def test_nested_files(test_folder: File, drive: Drive):
     name = "what"
     filepath = Path(f"hey/{name}")
     t_file = drive.create(
-        filepath=filepath,
-        create_folders=True,
+        name=filepath,
+        recursive=True,
         parents=[parent_folder["id"]],
         mime_type=GoogleMimeTypes.sheets,
         get_extant=True,
@@ -74,8 +74,8 @@ def test_nested_files(test_folder: File, drive: Drive):
     name = "b's a really cool thing"
     filepath = filepath / f"who!!!!/{name}"
     t_file = drive.create(
-        filepath=filepath,
-        create_folders=True,
+        name=filepath,
+        recursive=True,
         parents=[parent_folder["id"]],
         mime_type=GoogleMimeTypes.sheets,
         get_extant=True,

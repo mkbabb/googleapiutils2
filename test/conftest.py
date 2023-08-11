@@ -40,10 +40,10 @@ def google_folders(drive: Drive):
 
     google_folders = {
         folder_path.name: drive.create(
-            filepath=folder_path,
+            name=folder_path,
             mime_type=GoogleMimeTypes.folder,
             get_extant=True,
-            create_folders=True,
+            recursive=True,
         )
         for folder_path in folder_paths
     }

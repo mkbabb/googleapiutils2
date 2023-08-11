@@ -15,7 +15,7 @@ def test_folder(drive: Drive, google_folders: dict[str, File]):
     drive_folder = google_folders["drive"]
 
     test_folder = drive.create(
-        filepath="test_folder",
+        name="test_folder",
         mime_type=GoogleMimeTypes.folder,
         parents=[drive_folder["id"]],
         get_extant=True,
