@@ -16,7 +16,7 @@ def test_lists(drive: Drive):
 
     permissions = Permissions(drive=drive)
 
-    files = drive.list_children(parent_id=test_folder_url)
+    files = drive.list(parents=test_folder_url)
     for file in files:
         print(file)
 

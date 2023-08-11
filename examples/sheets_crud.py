@@ -1,15 +1,24 @@
-from __future__ import annotations
+"""
+Demonstrates a few of the features of the Sheets, SheetsValueRange, and SheetSlice classes.
 
-import os
-from pathlib import Path
+- Initialize a connection to a given Google Sheet.
+- Perform various operations, including:
+    - Resetting the sheet.
+    - Updating individual cells and ranges.
+    - Using batch updates to modify multiple rows simultaneously.
+    - Clearing specified rows.
+    - Formatting the sheet, including bolding text and resizing columns.
+    - Converting data to a DataFrame and updating the sheet from that DataFrame.
+    - Appending values to the sheet.
+    
+The examples encompass common CRUD operations (Create, Read, Update, Delete) 
+and illustrate advanced techniques such as slicing, batched updates, alignment, and formatting.
+"""
 from typing import *
 
-from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange, get_oauth2_creds
+from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
-config_path = Path(os.environ.get("GOOGLE_API_CREDENTIALS", ""))
-creds = get_oauth2_creds(client_config=config_path)
-
-sheets = Sheets(creds=creds)
+sheets = Sheets()
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F14RkeN-3GUyzvWepw/edit#gid=0"
 

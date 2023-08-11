@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import time
 import urllib.parse
@@ -36,6 +37,7 @@ SCOPES = [
 
 TOKEN_PATH = "auth/token.pickle"
 CONFIG_PATH = "auth/credentials.json"
+CONFIG_ENV_VAR = "GOOGLE_API_CREDENTIALS"
 
 
 class GoogleMimeTypes(Enum):
@@ -100,6 +102,8 @@ class GoogleMimeTypes(Enum):
     tmpl = "text/plain"
 
     doc = "application/msword"
+    docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
     pdf = "application/pdf"
     js = "text/js"
     swf = "application/x-shockwave-flash"
@@ -116,9 +120,16 @@ class GoogleMimeTypes(Enum):
 
 
 class DriveBase:
-    def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
+    """Args:
+    creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
+        - ~/auth/credentials.json
+        - env var: GOOGLE_API_CREDENTIALS
+    throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
+    """
+
+    def __init__(self, creds: Credentials | None, throttle_time: float = THROTTLE_TIME):
         # Google Drive API service creds
-        self.creds = creds
+        self.creds = creds if creds is not None else get_oauth2_creds()
 
         # throttle time in seconds; used in throttled_fn
         self.throttle_time = throttle_time
@@ -193,11 +204,13 @@ def hex_to_rgb(hex_code: str) -> Color:
     return {k: v / 255.0 for k, v in rgb.items()}  # type: ignore
 
 
-def url_components(url: str) -> dict[str, List[str]]:
+def get_url_params(url: str) -> dict[str, List[str]]:
+    """Get the components of the given URL."""
     return urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
 
 def update_url_params(url: str, params: dict) -> str:
+    """Update the query parameters of the given URL with the given params."""
     url_obj = urllib.parse.urlparse(url)
     params.update(urllib.parse.parse_qsl(url_obj.query))
 
@@ -231,6 +244,10 @@ def get_oauth2_creds(
     Otherwise, we return the credentials from the token file if it exists, or we
     authenticate the user and save the credentials to the token file.
 
+    If the client config is a path to a file, we first check if the file exists.
+    If it doesn't, we check if the GOOGLE_API_CREDENTIALS environment variable is set.
+    If it is, we use the path provided by the environment variable.
+
     Args:
         client_config: Path to client config file or dict with client config.
         token_path: Path to token file.
@@ -242,6 +259,15 @@ def get_oauth2_creds(
 
     if not isinstance(client_config, dict):
         path = Path(client_config)
+
+        if not path.exists():
+            path = Path(os.environ.get(CONFIG_ENV_VAR, ""))
+
+        if not path.exists():
+            raise Exception(
+                "No client config file found. Please provide a client config file path or set the GOOGLE_API_CREDENTIALS environment variable."
+            )
+
         client_config = json.loads(path.read_bytes())
 
     is_service_account = client_config.get("type", "") == "service_account"  # type: ignore
@@ -269,8 +295,12 @@ def get_oauth2_creds(
 
 
 def download_large_file(
-    url: str, filepath: FilePath, chunk_size=googleapiclient.http.DEFAULT_CHUNK_SIZE
+    url: str,
+    filepath: FilePath,
+    chunk_size: int = googleapiclient.http.DEFAULT_CHUNK_SIZE,
 ) -> Path:
+    """Download a large file from the given URL to the given filepath."""
+
     filepath = Path(filepath)
 
     with requests.get(url, stream=True) as r:
@@ -324,8 +354,8 @@ def get_id_from_url(url: str) -> str:
     if id is not None:
         return id
     else:
-        comps = url_components(url)
-        if (ids := comps.get("id")) is not None:
+        params = get_url_params(url)
+        if (ids := params.get("id")) is not None:
             return ids[0]
         else:
             raise ValueError(f"Could not parse file URL of {url}")
@@ -398,19 +428,3 @@ def nested_defaultdict(
         return existing
     existing = {key: nested_defaultdict(val) for key, val in existing.items()}
     return defaultdict(nested_defaultdict, existing, **kwargs)
-
-
-T = TypeVar("T")
-P = ParamSpec("P")
-
-
-def take_annotation_from(
-    this: Callable[P, Optional[T]]
-) -> Callable[[Callable], Callable[P, Optional[T]]]:
-    def decorator(real_function: Callable) -> Callable[P, Optional[T]]:
-        def new_function(*args: P.args, **kwargs: P.kwargs) -> Optional[T]:
-            return real_function(*args, **kwargs)
-
-        return new_function
-
-    return decorator

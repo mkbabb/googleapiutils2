@@ -59,7 +59,18 @@ if TYPE_CHECKING:
 
 
 class Sheets(DriveBase):
-    def __init__(self, creds: Credentials, throttle_time: float = THROTTLE_TIME):
+    """A wrapper around the Google Sheets API.
+
+    Args:
+        creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
+            - ~/auth/credentials.json
+            - env var: GOOGLE_API_CREDENTIALS
+        throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
+    """
+
+    def __init__(
+        self, creds: Credentials | None = None, throttle_time: float = THROTTLE_TIME
+    ):
         super().__init__(creds=creds, throttle_time=throttle_time)
 
         self.service: SheetsResource = discovery.build(  # type: ignore
