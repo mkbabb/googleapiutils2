@@ -1,17 +1,23 @@
+# OS generated files
 .DS_Store
 
+# Development environment and cache
 .vscode/
-.pytest_cache/
-vendor/
 .mypy_cache/
+.pytest_cache/
 .env
+__pycache__/
+
+# Project-related files and directories
 bootstrap/
 storage/
 auth/
 dist/
-___*
-
 data/
-__pycache__/
 log/
 
+# Vendor and external dependencies
+vendor/
+
+# Miscellaneous
+___*
