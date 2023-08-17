@@ -9,6 +9,7 @@ bootstrap/
 storage/
 auth/
 dist/
+___*
 
 data/
 __pycache__/

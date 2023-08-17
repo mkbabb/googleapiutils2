@@ -114,10 +114,10 @@ for file in drive.list(resumes_folder):
 sheets.update(candidates_sheet, "Sheet1", sheets.from_frame(candidates_df))
 
 # Download and store the resumes locally
-out_folder = Path("./resumes")
-for file in drive.list(resumes_folder):
-    out_filepath = out_folder / file["name"]
-    drive.download(
-        file["id"],
-        out_filepath,
-    )
+# out_folder = Path("./resumes")
+# for file in drive.list(resumes_folder):
+#     out_filepath = out_folder / file["name"]
+#     drive.download(
+#         file["id"],
+#         out_filepath,
+#     )
