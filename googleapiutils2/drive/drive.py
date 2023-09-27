@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 from io import BytesIO
 from pathlib import Path
-import tempfile
 from typing import *
 
 import googleapiclient
@@ -18,17 +18,17 @@ from ..utils import (
     FilePath,
     GoogleMimeTypes,
     download_large_file,
+    export_mime_type,
     parse_file_id,
     q_escape,
-    export_mime_type,
 )
 from .misc import (
     DEFAULT_FIELDS,
     DOWNLOAD_LIMIT,
     VERSION,
+    DataFrameExportFileTypes,
     create_listing_fields,
     list_drive_items,
-    DataFrameExportFileTypes,
 )
 
 if TYPE_CHECKING:
@@ -76,7 +76,7 @@ class Drive(DriveBase):
             - ID
             - Name and parent folder(s)
         If multiple files are found, the first one is returned.
-        If no file is found
+        If no file is found, a FileNotFoundError is raised.
 
         Args:
             file_id (str, optional): The ID of the file to get. Defaults to None.
@@ -132,8 +132,8 @@ class Drive(DriveBase):
         except FileNotFoundError:
             return None
 
-    def _download(self, file_id: str, out_filepath: Path, mime_type: GoogleMimeTypes):
-        """Internal usage function. Download a file given by "out_filepath" and its contents.
+    def _download(self, file_id: str, filepath: Path, mime_type: GoogleMimeTypes):
+        """Internal usage function. Download a file given by "filepath" and its contents.
 
         If the file is a Google Apps file, it's exported to the given mime type (export_media),
         else it's downloaded as-is (get_media)
@@ -145,13 +145,13 @@ class Drive(DriveBase):
             else self.files.get_media(fileId=file_id)  # type: ignore
         )
 
-        with out_filepath.open("wb") as out_file:
+        with filepath.open("wb") as out_file:
             downloader = googleapiclient.http.MediaIoBaseDownload(out_file, request)
             done = False
             while done is False:
                 status, done = downloader.next_chunk()
 
-        return out_filepath
+        return filepath
 
     def _download_nested_filepath(
         self,
@@ -180,14 +180,14 @@ class Drive(DriveBase):
                 )
             else:
                 self.download(
-                    out_filepath=t_out_filepath,
+                    filepath=t_out_filepath,
                     file_id=t_file_id,
                     mime_type=t_mime_type,
                     recursive=True,
                 )
         return out_filepath
 
-    def download(
+    def _download_file(
         self,
         file_id: str,
         out_filepath: FilePath,
@@ -230,6 +230,68 @@ class Drive(DriveBase):
         else:
             return self._download(
                 file_id=file_id, out_filepath=out_filepath, mime_type=mime_type  # type: ignore
+            )
+
+    def _download_data(
+        self,
+        file_id: str,
+        buf: BytesIO,
+        mime_type: GoogleMimeTypes | None = None,
+        recursive: bool = False,
+        conversion_map: dict[
+            GoogleMimeTypes, GoogleMimeTypes
+        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    ):
+        with tempfile.NamedTemporaryFile() as temp:
+            out = self._download_file(
+                file_id=file_id,
+                out_filepath=temp.name,
+                mime_type=mime_type,
+                recursive=recursive,
+                conversion_map=conversion_map,
+            )
+            buf.write(temp.read())
+            return out
+
+    def download(
+        self,
+        filepath: FilePath | BytesIO,
+        file_id: str,
+        mime_type: GoogleMimeTypes | None = None,
+        recursive: bool = False,
+        conversion_map: dict[
+            GoogleMimeTypes, GoogleMimeTypes
+        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    ):
+        """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
+
+        Args:
+            filepath (FilePath | BytesIO): The path to the file to download to, or a BytesIO to write to.
+            file_id (str): The ID of the file to download.
+            mime_type (GoogleMimeTypes, optional): The mime type of the file to download. Defaults to None, which will use the mime type of the file.
+            recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
+            conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
+        """
+        if isinstance(filepath, (str, Path)):
+            return self._download_file(
+                file_id=file_id,
+                out_filepath=filepath,
+                mime_type=mime_type,
+                recursive=recursive,
+                conversion_map=conversion_map,
+            )
+        elif isinstance(filepath, BytesIO):
+            return self._download_data(
+                file_id=file_id,
+                buf=filepath,
+                mime_type=mime_type,
+                recursive=recursive,
+                conversion_map=conversion_map,
+            )
+
+        else:
+            raise TypeError(
+                f"Expected a filepath or BytesIO, got {type(filepath)} instead."
             )
 
     def copy(
@@ -546,7 +608,7 @@ class Drive(DriveBase):
 
         return self.files.create(**kwargs).execute()
 
-    def upload_file(
+    def _upload_file(
         self,
         filepath: FilePath,
         name: str | None = None,
@@ -587,7 +649,7 @@ class Drive(DriveBase):
             **kwargs,
         )
 
-    def upload_data(
+    def _upload_data(
         self,
         data: bytes,
         name: str,
@@ -625,11 +687,11 @@ class Drive(DriveBase):
                 **kwargs,
             )
 
-    def upload_frame(
+    def _upload_frame(
         self,
         df: pd.DataFrame,
         name: str,
-        file_type: DataFrameExportFileTypes = DataFrameExportFileTypes.csv,
+        mime_type: GoogleMimeTypes,
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
@@ -646,11 +708,18 @@ class Drive(DriveBase):
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
-        mime_type = GoogleMimeTypes[file_type.value]
+        if mime_type.name not in DataFrameExportFileTypes.__members__:
+            raise ValueError(
+                f"Invalid export mime type {mime_type.value} for DataFrame. Must be one of {', '.join(DataFrameExportFileTypes.__members__.keys())}."
+            )
+
+        export_file_type = DataFrameExportFileTypes[mime_type.name]
         use_index = df.index.name is not None
 
-        with tempfile.NamedTemporaryFile(suffix=f".{file_type}") as tmp_file:
-            match file_type:
+        with tempfile.NamedTemporaryFile(
+            suffix=f".{export_file_type.value}"
+        ) as tmp_file:
+            match export_file_type:
                 case DataFrameExportFileTypes.csv:
                     df.to_csv(tmp_file.name, index=use_index)
                 case DataFrameExportFileTypes.sheets:
@@ -662,8 +731,68 @@ class Drive(DriveBase):
                 case DataFrameExportFileTypes.json:
                     df.to_json(tmp_file.name, orient="records")
 
-            return self.upload_file(
+            return self._upload_file(
                 filepath=tmp_file.name,
+                name=name,
+                mime_type=mime_type,
+                parents=parents,
+                body=body,
+                update=update,
+                **kwargs,
+            )
+
+    def upload(
+        self,
+        filepath: FilePath | pd.DataFrame | BytesIO,
+        name: str | None = None,
+        mime_type: GoogleMimeTypes | None = None,
+        parents: List[str] | str | None = None,
+        body: File | None = None,
+        update: bool = True,
+        **kwargs: Any,
+    ):
+        """Uploads a file to Google Drive.
+        A file can be either a filepath, a DataFrame, or bytes.
+
+        Args:
+            filepath (FilePath | DataFrame | BytesIO): The file to upload.
+            name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
+            mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
+            parents (List[str], optional): The list of parent IDs. Defaults to None.
+            body (File, optional): The body of the file. Defaults to None.
+            update (bool, optional): Whether to update the file if it already exists. Defaults to True.
+        """
+        if isinstance(filepath, (str, Path)):
+            return self._upload_file(
+                filepath=filepath,
+                name=name,
+                mime_type=mime_type,
+                parents=parents,
+                body=body,
+                update=update,
+                **kwargs,
+            )
+        elif isinstance(filepath, pd.DataFrame):
+            if name is None or mime_type is None:
+                raise ValueError(
+                    "If uploading a dataframe, both name and mime_type must be specified."
+                )
+            return self._upload_frame(
+                df=filepath,
+                name=name,
+                mime_type=mime_type,
+                parents=parents,
+                body=body,
+                update=update,
+                **kwargs,
+            )
+        elif isinstance(filepath, bytes):
+            if name is None or mime_type is None:
+                raise ValueError(
+                    "If uploading bytes, both name and mime_type must be specified."
+                )
+            return self._upload_data(
+                data=filepath,
                 name=name,
                 mime_type=mime_type,
                 parents=parents,

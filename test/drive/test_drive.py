@@ -30,7 +30,8 @@ def test_upload(drive: Drive):
         "https://drive.google.com/drive/u/0/folders/1fB2mj-hl7KIduiNidbWLlMAFXZ76GmN8"
     )
     filepath = "/Users/mkbabb/Programming/ecf-dedup/data/ECF Deduped.csv"
-    t_file = drive.upload_file(filepath=filepath, parents=[ECF_FOLDER], update=True)
+   
+    t_file = drive.upload(filepath=filepath, parents=[ECF_FOLDER], update=True)
 
     print(t_file)
 
