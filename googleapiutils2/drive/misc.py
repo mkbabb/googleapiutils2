@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import *
-
-from ..utils import GoogleMimeTypes
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
@@ -14,15 +13,18 @@ if TYPE_CHECKING:
         PermissionList,
     )
 
+
+class DataFrameExportFileTypes(Enum):
+    csv = "csv"
+    xlsx = "xlsx"
+    json = "json"
+    sheets = "sheets"
+
+
 VERSION = "v3"
 
 DOWNLOAD_LIMIT = 4 * 10**6  # size in bytes
 
-DEFAULT_DOWNLOAD_CONVERSION_MAP = {
-    GoogleMimeTypes.sheets: (GoogleMimeTypes.xlsx, ".xlsx"),
-    GoogleMimeTypes.docs: (GoogleMimeTypes.doc, ".docx"),
-    GoogleMimeTypes.slides: (GoogleMimeTypes.pdf, ".pdf"),
-}
 
 DEFAULT_FIELDS = "*"
 

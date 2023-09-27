@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import tempfile
 from typing import *
 
 import googleapiclient
 import googleapiclient.http
+import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
 from ..utils import (
+    DEFAULT_DOWNLOAD_CONVERSION_MAP,
     THROTTLE_TIME,
     DriveBase,
     FilePath,
@@ -17,14 +20,15 @@ from ..utils import (
     download_large_file,
     parse_file_id,
     q_escape,
+    export_mime_type,
 )
 from .misc import (
-    DEFAULT_DOWNLOAD_CONVERSION_MAP,
     DEFAULT_FIELDS,
     DOWNLOAD_LIMIT,
     VERSION,
     create_listing_fields,
     list_drive_items,
+    DataFrameExportFileTypes,
 )
 
 if TYPE_CHECKING:
@@ -190,7 +194,7 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         conversion_map: dict[
-            GoogleMimeTypes, tuple[GoogleMimeTypes, str]
+            GoogleMimeTypes, GoogleMimeTypes
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ) -> Path:
         """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
@@ -200,7 +204,7 @@ class Drive(DriveBase):
             out_filepath (FilePath): The path to the file to download to.
             mime_type (GoogleMimeTypes): The mime type of the file to download.
             recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
-            conversion_map (dict[GoogleMimeTypes, tuple[GoogleMimeTypes, str]], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
+            conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
         """
         file_id = parse_file_id(file_id)
         out_filepath = Path(out_filepath)
@@ -210,11 +214,10 @@ class Drive(DriveBase):
         mime_type = (
             mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
         )
-
         if recursive and mime_type == GoogleMimeTypes.folder:
             return self._download_nested_filepath(out_filepath, file_id)
 
-        mime_type, ext = conversion_map.get(mime_type, (mime_type, ""))
+        mime_type, ext = export_mime_type(mime_type, conversion_map)
 
         if not out_filepath.suffix or ext:
             out_filepath = out_filepath.with_suffix(ext)
@@ -615,6 +618,53 @@ class Drive(DriveBase):
                 uploader=uploader,
                 name=name,
                 filepath=tio.name,
+                mime_type=mime_type,
+                parents=parents,
+                body=body,
+                update=update,
+                **kwargs,
+            )
+
+    def upload_frame(
+        self,
+        df: pd.DataFrame,
+        name: str,
+        file_type: DataFrameExportFileTypes = DataFrameExportFileTypes.csv,
+        parents: List[str] | str | None = None,
+        body: File | None = None,
+        update: bool = True,
+        **kwargs: Any,
+    ) -> File:
+        """
+        Uploads a DataFrame to Google Drive.
+
+        Args:
+            df (DataFrame): The DataFrame to upload.
+            name (str): The name of the file.
+            file_format (str, optional): The file format ("csv", "xlsx", etc.). Defaults to "csv".
+            parents (List[str], optional): The list of parent IDs. Defaults to None.
+            body (File, optional): The body of the file. Defaults to None.
+            update (bool, optional): Whether to update the file if it already exists. Defaults to True.
+        """
+        mime_type = GoogleMimeTypes[file_type.value]
+        use_index = df.index.name is not None
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}") as tmp_file:
+            match file_type:
+                case DataFrameExportFileTypes.csv:
+                    df.to_csv(tmp_file.name, index=use_index)
+                case DataFrameExportFileTypes.sheets:
+                    mime_type = GoogleMimeTypes.sheets
+                    df.to_csv(tmp_file.name, index=use_index)
+                case DataFrameExportFileTypes.xlsx:
+                    with pd.ExcelWriter(tmp_file.name, engine="openpyxl") as writer:
+                        df.to_excel(writer, index=use_index)
+                case DataFrameExportFileTypes.json:
+                    df.to_json(tmp_file.name, orient="records")
+
+            return self.upload_file(
+                filepath=tmp_file.name,
+                name=name,
                 mime_type=mime_type,
                 parents=parents,
                 body=body,

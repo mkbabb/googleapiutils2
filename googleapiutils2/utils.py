@@ -119,6 +119,28 @@ class GoogleMimeTypes(Enum):
     default = "application/octet-stream"
 
 
+DEFAULT_DOWNLOAD_CONVERSION_MAP = {
+    GoogleMimeTypes.sheets: GoogleMimeTypes.xlsx,
+    GoogleMimeTypes.docs: GoogleMimeTypes.docx,
+    GoogleMimeTypes.slides: GoogleMimeTypes.pdf,
+}
+
+
+def export_mime_type(
+    mime_type: GoogleMimeTypes,
+    conversion_map: dict[
+        GoogleMimeTypes, GoogleMimeTypes
+    ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+) -> tuple[GoogleMimeTypes, str]:
+    """Get the MIME type to export a file to and the corresponding file extension."""
+    t_mime_type = conversion_map.get(mime_type)
+
+    if t_mime_type is None:
+        return mime_type, ""
+
+    return t_mime_type, t_mime_type.name
+
+
 class DriveBase:
     """Args:
     creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
