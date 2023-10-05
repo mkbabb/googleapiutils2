@@ -614,6 +614,7 @@ class Drive(DriveBase):
         name: str | None = None,
         mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        recursive: bool = False,
         body: File | None = None,
         update: bool = True,
         **kwargs: Any,
@@ -628,15 +629,40 @@ class Drive(DriveBase):
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
             mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
+            recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
-        filepath = Path(filepath)
 
         def uploader(mime_type: GoogleMimeTypes):
             return googleapiclient.http.MediaFileUpload(
                 str(filepath), resumable=True, mimetype=mime_type.value
             )
+
+        filepath = Path(filepath)
+
+        if recursive and filepath.is_dir():
+            folder = self.create(
+                name=filepath,
+                mime_type=GoogleMimeTypes.folder,
+                parents=parents,
+                recursive=recursive,
+                get_extant=update,
+                body=body,
+                **kwargs,
+            )
+            for file in filepath.glob("*"):
+                self._upload_file(
+                    filepath=file,
+                    name=file.name,
+                    mime_type=mime_type,
+                    parents=[folder["id"]],
+                    recursive=recursive,
+                    body=body,
+                    update=update,
+                    **kwargs,
+                )
+            return folder
 
         return self._upload(
             uploader=uploader,
@@ -747,6 +773,7 @@ class Drive(DriveBase):
         name: str | None = None,
         mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        recursive: bool = False,
         body: File | None = None,
         update: bool = True,
         **kwargs: Any,
@@ -759,6 +786,7 @@ class Drive(DriveBase):
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
             mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
+            recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
@@ -768,6 +796,7 @@ class Drive(DriveBase):
                 name=name,
                 mime_type=mime_type,
                 parents=parents,
+                recursive=recursive,
                 body=body,
                 update=update,
                 **kwargs,
