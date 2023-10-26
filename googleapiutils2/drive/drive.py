@@ -199,6 +199,9 @@ class Drive(DriveBase):
             )
             t_filepath = filepath.joinpath(t_name)
 
+            if t_mime_type == GoogleMimeTypes.folder:
+                t_filepath.mkdir(parents=True, exist_ok=True)
+
             self.download(
                 filepath=t_filepath,
                 file_id=t_file_id,
