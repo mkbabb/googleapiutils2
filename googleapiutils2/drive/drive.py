@@ -65,7 +65,7 @@ class Drive(DriveBase):
     def get(
         self,
         file_id: str | None = None,
-        name: str | None = None,
+        name: FilePath | None = None,
         parents: List[str] | str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
@@ -75,12 +75,14 @@ class Drive(DriveBase):
         """Get a file by its:
             - ID
             - Name and parent folder(s)
+
         If multiple files are found, the first one is returned.
         If no file is found, a FileNotFoundError is raised.
+        If the name is a Path, the file will be searched for parent-wise, starting at the root `parent`.
 
         Args:
             file_id (str, optional): The ID of the file to get. Defaults to None.
-            name (str, optional): The name of the file to get. Defaults to None.
+            name (FilePath, optional): The name of the file to get. Defaults to None.
             parents (List[str], optional): The parent folder(s) of the file to get. Defaults to None.
             fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS.
             q (str, optional): A query string to filter the results. Defaults to None.
@@ -96,6 +98,28 @@ class Drive(DriveBase):
 
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
+        name = Path(name) if name is not None else None
+
+        if name is not None:
+            for parent in name.parents:
+                if (
+                    t_parents := next(
+                        self._query_children(
+                            parents=parents,
+                            name=str(parent),
+                            fields=fields,
+                            q=q,
+                            team_drives=team_drives,
+                        ),
+                        None,
+                    )
+                ) is not None:
+                    parents = [t_parents["id"]]
+                else:
+                    raise FileNotFoundError(
+                        f"File with name {name} and direct parent of {parent} of {name.parents} not found."
+                    )
+            name = name.name
 
         file = next(
             self._query_children(
@@ -155,16 +179,17 @@ class Drive(DriveBase):
 
     def _download_nested_filepath(
         self,
-        out_filepath: FilePath,
+        filepath: FilePath,
         file_id: str,
+        overwrite: bool = True,
     ) -> Path:
-        """Internal usage function. Download a folder given by "out_filepath" and its contents recursively.
+        """Internal usage function. Download a folder given by "filepath" and its contents recursively.
 
         Args:
-            out_filepath (FilePath): The path to the folder to download to.
+            filepath (FilePath): The path to the folder to download to.
             file_id (str): The ID of the folder to download.
         """
-        out_filepath = Path(out_filepath)
+        filepath = Path(filepath)
 
         for file in self.list(parents=file_id):
             t_name, t_file_id, t_mime_type = (
@@ -172,27 +197,25 @@ class Drive(DriveBase):
                 file["id"],
                 GoogleMimeTypes(file["mimeType"]),
             )
-            t_out_filepath = out_filepath.joinpath(t_name)
+            t_filepath = filepath.joinpath(t_name)
 
-            if t_mime_type == GoogleMimeTypes.folder:
-                self._download_nested_filepath(
-                    out_filepath=t_out_filepath, file_id=t_file_id
-                )
-            else:
-                self.download(
-                    filepath=t_out_filepath,
-                    file_id=t_file_id,
-                    mime_type=t_mime_type,
-                    recursive=True,
-                )
-        return out_filepath
+            self.download(
+                filepath=t_filepath,
+                file_id=t_file_id,
+                mime_type=t_mime_type,
+                recursive=True,
+                overwrite=overwrite,
+            )
+
+        return filepath
 
     def _download_file(
         self,
         file_id: str,
-        out_filepath: FilePath,
+        filepath: FilePath,
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
+        overwrite: bool = True,
         conversion_map: dict[
             GoogleMimeTypes, GoogleMimeTypes
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
@@ -201,13 +224,16 @@ class Drive(DriveBase):
 
         Args:
             file_id (str): The ID of the file to download.
-            out_filepath (FilePath): The path to the file to download to.
+            filepath (FilePath): The path to the file to download to.
             mime_type (GoogleMimeTypes): The mime type of the file to download.
             recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
             conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
         """
         file_id = parse_file_id(file_id)
-        out_filepath = Path(out_filepath)
+        filepath = Path(filepath)
+
+        if filepath.exists() and not overwrite:
+            return filepath
 
         file = self.get(file_id=file_id)
 
@@ -215,21 +241,23 @@ class Drive(DriveBase):
             mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
         )
         if recursive and mime_type == GoogleMimeTypes.folder:
-            return self._download_nested_filepath(out_filepath, file_id)
+            return self._download_nested_filepath(
+                filepath=filepath, file_id=file_id, overwrite=overwrite
+            )
 
         mime_type, ext = export_mime_type(mime_type, conversion_map)
 
-        if not out_filepath.suffix or ext:
-            out_filepath = out_filepath.with_suffix(ext)
+        if not filepath.suffix or ext:
+            filepath = filepath.with_suffix(ext)
 
-        out_filepath.parent.mkdir(parents=True, exist_ok=True)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
 
         if float(file["size"]) >= DOWNLOAD_LIMIT:
             link = file["exportLinks"].get(mime_type.value, "")  # type: ignore
-            return download_large_file(url=link, filepath=out_filepath)
+            return download_large_file(url=link, filepath=filepath)
         else:
             return self._download(
-                file_id=file_id, out_filepath=out_filepath, mime_type=mime_type  # type: ignore
+                file_id=file_id, filepath=filepath, mime_type=mime_type  # type: ignore
             )
 
     def _download_data(
@@ -238,6 +266,7 @@ class Drive(DriveBase):
         buf: BytesIO,
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
+        overwrite: bool = True,
         conversion_map: dict[
             GoogleMimeTypes, GoogleMimeTypes
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
@@ -245,9 +274,10 @@ class Drive(DriveBase):
         with tempfile.NamedTemporaryFile() as temp:
             out = self._download_file(
                 file_id=file_id,
-                out_filepath=temp.name,
+                filepath=temp.name,
                 mime_type=mime_type,
                 recursive=recursive,
+                overwrite=overwrite,
                 conversion_map=conversion_map,
             )
             buf.write(temp.read())
@@ -259,6 +289,7 @@ class Drive(DriveBase):
         file_id: str,
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
+        overwrite: bool = True,
         conversion_map: dict[
             GoogleMimeTypes, GoogleMimeTypes
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
@@ -275,9 +306,10 @@ class Drive(DriveBase):
         if isinstance(filepath, (str, Path)):
             return self._download_file(
                 file_id=file_id,
-                out_filepath=filepath,
+                filepath=filepath,
                 mime_type=mime_type,
                 recursive=recursive,
+                overwrite=overwrite,
                 conversion_map=conversion_map,
             )
         elif isinstance(filepath, BytesIO):
@@ -286,6 +318,7 @@ class Drive(DriveBase):
                 buf=filepath,
                 mime_type=mime_type,
                 recursive=recursive,
+                overwrite=overwrite,
                 conversion_map=conversion_map,
             )
 
@@ -350,7 +383,7 @@ class Drive(DriveBase):
         fields: str = DEFAULT_FIELDS,
         order_by: str = "modifiedTime desc",
         team_drives: bool = True,
-    ) -> Iterable[File]:
+    ) -> Generator[File, None, None]:
         """List files in Google Drive.
 
         If `parents` is specified, only files in the given parent folder(s) will be returned.
@@ -427,14 +460,14 @@ class Drive(DriveBase):
         return self.list(query=query, fields=fields, team_drives=team_drives)
 
     def _create_nested_folders(
-        self, filepath: Path, parents: List[str], update: bool = True
+        self, filepath: Path, parents: List[str], get_extant: bool = True
     ) -> List[str]:
         """Create nested folders in Google Drive. Walks up the filepath creating folders as it goes.
 
         Args:
             filepath (Path): The filepath to create folders for.
             parents (List[str]): The parent folders to create the folders in.
-            update (bool, optional): Whether to update the folder if it already exists. Defaults to True.
+            get_extant (bool, optional): Whether to get the folder if it already exists. Defaults to True.
         """
 
         def create_or_get_if_exists(name: str, parents: List[str]):
@@ -443,7 +476,7 @@ class Drive(DriveBase):
                 name=name,
                 q=f"mimeType='{GoogleMimeTypes.folder.value}'",
             )
-            if update and (folder := next(folders, None)) is not None:
+            if get_extant and (folder := next(folders, None)) is not None:
                 return folder
 
             body: File = {
@@ -489,7 +522,7 @@ class Drive(DriveBase):
 
         if recursive:
             parents = self._create_nested_folders(
-                filepath=filepath, parents=parents, update=get_extant
+                filepath=filepath, parents=parents, get_extant=get_extant
             )
 
         if (
@@ -633,36 +666,42 @@ class Drive(DriveBase):
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
+        filepath = Path(filepath)
 
         def uploader(mime_type: GoogleMimeTypes):
             return googleapiclient.http.MediaFileUpload(
                 str(filepath), resumable=True, mimetype=mime_type.value
             )
 
-        filepath = Path(filepath)
-
         if recursive and filepath.is_dir():
-            folder = self.create(
-                name=filepath,
-                mime_type=GoogleMimeTypes.folder,
-                parents=parents,
-                recursive=recursive,
-                get_extant=update,
-                body=body,
-                **kwargs,
-            )
             for file in filepath.glob("*"):
+                t_file = file.relative_to(filepath)
+                t_parents = (
+                    self.create(
+                        name=t_file,
+                        mime_type=GoogleMimeTypes.folder,
+                        parents=parents,
+                        recursive=True,
+                        get_extant=True,
+                    )["id"]
+                    if file.is_dir()
+                    else parents
+                )
                 self._upload_file(
                     filepath=file,
-                    name=file.name,
+                    name=t_file.name,
                     mime_type=mime_type,
-                    parents=[folder["id"]],
+                    parents=t_parents,
                     recursive=recursive,
                     body=body,
                     update=update,
                     **kwargs,
                 )
-            return folder
+
+            parents = [parents] if isinstance(parents, str) else parents
+            file_id = parents[0] if parents is not None else None
+
+            return self.get(file_id=file_id)
 
         return self._upload(
             uploader=uploader,
@@ -845,6 +884,37 @@ class Drive(DriveBase):
         """
         file_id = parse_file_id(file_id)
         return self.files.export(fileId=file_id, mimeType=mime_type.value).execute()
+
+    def sync(
+        self,
+        filepath: Path,
+        folder_id: str,
+        recursive: bool = False,
+    ):
+        """Syncs a local folder to a Google Drive folder, and vice versa.
+        If a collision occurs, the file will be resolved based on the `collision` argument.
+
+        If `collision` is "newest", the newest file will be kept.
+        If `collision` is "local", the local file will be kept.
+        If `collision` is "drive", the Google Drive file will be kept.
+
+        Args:
+            filepath (Path): The local folder to sync.
+            folder_id (str): The ID of the Google Drive folder to sync.
+            recursive (bool, optional): Whether to sync recursively. Defaults to False.
+            collision (Literal["newest", "local", "drive"], optional): How to handle collisions. Defaults to "local".
+        """
+        filepath = Path(filepath)
+        folder_id = parse_file_id(folder_id)
+        self.upload(
+            filepath=filepath, parents=folder_id, recursive=recursive, update=True
+        )
+        self.download(
+            filepath=filepath,
+            file_id=folder_id,
+            recursive=recursive,
+            overwrite=False,
+        )
 
 
 class Permissions:

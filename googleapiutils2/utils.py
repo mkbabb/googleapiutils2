@@ -18,6 +18,9 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from threading import Thread
+from queue import Queue
+import atexit
 
 FilePath = str | Path
 
@@ -160,6 +163,23 @@ class DriveBase:
 
         # TTL cache for various functions; used by way of "@cachedmethod(operator.attrgetter("_cache"))"
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
+
+        self._request_queue: Queue[googleapiclient.http.HttpRequest] = Queue()
+
+        def _worker():
+            while True:
+                request = self._request_queue.get()
+                self._request_queue.task_done()
+                request.execute()
+
+        self._request_thread = Thread(target=_worker, daemon=True)
+        self._request_thread.start()
+
+        atexit.register(self._request_queue.join)
+
+    def execute(self, request: googleapiclient.http.HttpRequest) -> Any:
+        self._request_queue.put(request)
+        return None
 
     def throttle_fn(
         self,

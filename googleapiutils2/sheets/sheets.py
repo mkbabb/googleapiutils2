@@ -38,6 +38,7 @@ from .misc import (
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import (
+        AddSheetRequest,
         AppendValuesResponse,
         BatchUpdateSpreadsheetRequest,
         BatchUpdateSpreadsheetResponse,
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
         CellFormat,
         ClearValuesResponse,
         CopySheetToAnotherSpreadsheetRequest,
+        DeleteSheetRequest,
         Request,
         Sheet,
         SheetProperties,
@@ -301,7 +303,6 @@ class Sheets(DriveBase):
         cols: int = DEFAULT_SHEET_SHAPE[1],
         index: int | None = None,
         ignore_existing: bool = True,
-        **kwargs: Any,
     ):
         """Add one or more sheets to a spreadsheet.
 
@@ -314,9 +315,9 @@ class Sheets(DriveBase):
             ignore_existing (bool, optional): Whether to ignore sheets that already exist. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
+
         if isinstance(names, str):
             names = [names]
-
         names = [
             name
             for name in names
@@ -326,19 +327,21 @@ class Sheets(DriveBase):
         if len(names) == 0:
             return
 
-        def make_body(name: str) -> Sheet:
-            body: Sheet = {
-                "properties": {
-                    "title": name,
-                    "gridProperties": {
-                        "rowCount": rows,
-                        "columnCount": cols,
-                    },
+        def make_body(name: str):
+            body: SheetProperties = {
+                "title": name,
+                "gridProperties": {
+                    "rowCount": rows,
+                    "columnCount": cols,
                 },
             }
             if index is not None:
-                body["properties"]["index"] = index
-            return body
+                body["index"] = index
+
+            request: AddSheetRequest = {
+                "properties": body,
+            }
+            return request
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
@@ -352,15 +355,13 @@ class Sheets(DriveBase):
         return self.batch_update_spreadsheet(
             spreadsheet_id=spreadsheet_id,
             body=body,
-            **kwargs,
         )
 
     def delete(
         self,
         spreadsheet_id: str,
-        name: str | None = None,
-        sheet_id: int | None = None,
-        **kwargs: Any,
+        names: str | list[str],
+        ignore_not_existing: bool = True,
     ):
         """Deletes a sheet from a spreadsheet.
 
@@ -370,21 +371,43 @@ class Sheets(DriveBase):
             sheet_id (int, optional): The ID of the sheet to delete. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+
+        if isinstance(names, str):
+            names = [names]
+        names = [
+            name
+            for name in names
+            if not ignore_not_existing or self.has(spreadsheet_id, name=name)
+        ]
+        
+        if len(names) == 0:
+            return
+
+        def make_body(name: str):
+            sheet_id = self._get_sheet_id(spreadsheet_id, name=name)
+
+            key = ("sheet_id", spreadsheet_id, name)
+            self._cache.pop(key)
+
+            body: DeleteSheetRequest = {
+                "sheetId": sheet_id,
+            }
+
+            request = body
+            return request
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
-                    "deleteSheet": {
-                        "sheetId": sheet_id,  # type: ignore
-                    },
-                },
+                    "deleteSheet": make_body(name),
+                }
+                for name in names
             ],
         }
+
         return self.batch_update_spreadsheet(
             spreadsheet_id=spreadsheet_id,
             body=body,
-            **kwargs,
         )
 
     def values(

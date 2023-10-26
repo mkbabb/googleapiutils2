@@ -24,6 +24,10 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07HFq7wSbYPsuwBoJcd1E1R4F1
 
 Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet1")
 
+sheets.add(SHEET_URL, ["Sheet99", "Sheet100"])
+
+sheets.delete(SHEET_URL, ["Sheet99", "Sheet101"])
+
 sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)
 
 
