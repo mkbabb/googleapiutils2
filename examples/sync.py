@@ -73,8 +73,6 @@ for file in drive.list(folder_id):
 
 drive.upload(filepath=base_folder, parents=folder_id, recursive=True, update=True)
 
-tmp_dir = base_folder = Path("./data/sync_folder_tmp")
-clear_folder(tmp_dir)
 
 # download to a tmp dir, and then compare the two folders
 with tempfile.TemporaryDirectory() as tmp_dir:
