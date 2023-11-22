@@ -973,9 +973,6 @@ files = [
     {file = "pypdf-3.17.1.tar.gz", hash = "sha256:c79ad4db16c9a86071a3556fb5d619022b36b8880ba3ef416558ea95fbec4cb9"},
 ]
 
-[package.dependencies]
-typing_extensions = {version = ">=3.7.4.3", markers = "python_version < \"3.10\""}
-
 [package.extras]
 crypto = ["PyCryptodome", "cryptography"]
 dev = ["black", "flit", "pip-tools", "pre-commit (<2.18.0)", "pytest-cov", "pytest-socket", "pytest-timeout", "pytest-xdist", "wheel"]
@@ -1234,5 +1231,5 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = ">=3.9,<3.13"
-content-hash = "3235bcccebffd65fc5c6e1b563a57355324eba1b4aac4a4edd0b0519ad9dd8d2"
+python-versions = "^3.10"
+content-hash = "e168d9b24a28dd22c11194795d681c7c64c41ba5e0c835b115f6e8bc5a9b484e"

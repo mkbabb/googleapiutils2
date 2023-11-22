@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.11.5"
+version = "0.11.6"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
@@ -16,7 +16,7 @@ license = "MIT"
 repository = "https://github.com/mkbabb/googleapiutils2"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = "^3.10"
 mypy = "^1.7.0"
 google-api-python-client-stubs = "^1.23.0"
 google-api-python-client = "^2.108.0"
