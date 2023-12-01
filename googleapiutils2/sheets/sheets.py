@@ -1019,6 +1019,7 @@ class Sheets(DriveBase):
                 SHEET_ID, "Sheet1!A1:B2"))
             >>> df
         """
+        # No values
         if not len(rows := values.get("values", [])):
             return pd.DataFrame()
 
@@ -1027,12 +1028,14 @@ class Sheets(DriveBase):
 
         df = pd.DataFrame(rows, **kwargs)
 
+        # Only headers
         if not len(df) and len(columns):
-            df.columns = columns
-            return df
+            return pd.DataFrame(columns=columns)
 
         mapper = {i: col for i, col in enumerate(columns)}
         df.rename(columns=mapper, inplace=True)
+
+        # Replace empty strings with pd.NA; infer the data types
         df.select_dtypes(include=["object"]).replace(
             r"^\s*$", pd.NA, regex=True, inplace=True
         )
