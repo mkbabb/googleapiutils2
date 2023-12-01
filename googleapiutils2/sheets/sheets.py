@@ -996,7 +996,7 @@ class Sheets(DriveBase):
         return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
     @staticmethod
-    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame | None:
+    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
         """Converts a ValueRange to a DataFrame.
 
         Useful for working with the data in Pandas after a call to sheets.values().
@@ -1020,7 +1020,7 @@ class Sheets(DriveBase):
             >>> df
         """
         if not len(rows := values.get("values", [])):
-            return None
+            return pd.DataFrame()
 
         columns = kwargs.pop("columns", []) + rows[0]
         rows = rows[1:] if len(rows) > 1 else []
