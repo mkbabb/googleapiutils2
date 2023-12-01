@@ -379,7 +379,7 @@ class Sheets(DriveBase):
             for name in names
             if not ignore_not_existing or self.has(spreadsheet_id, name=name)
         ]
-        
+
         if len(names) == 0:
             return
 
@@ -1026,6 +1026,10 @@ class Sheets(DriveBase):
         rows = rows[1:] if len(rows) > 1 else []
 
         df = pd.DataFrame(rows, **kwargs)
+
+        if not len(df) and len(columns):
+            df.columns = columns
+            return df
 
         mapper = {i: col for i, col in enumerate(columns)}
         df.rename(columns=mapper, inplace=True)
