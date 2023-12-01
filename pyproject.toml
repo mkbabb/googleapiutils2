@@ -8,6 +8,8 @@ readme = "README.md"
 keywords = [
     "google",
     "googleapi",
+    "google-api",
+    "google api",
     "googleapiutils2",
     "google-sheets-api",
     "google-drive-api",
