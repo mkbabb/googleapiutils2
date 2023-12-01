@@ -21,6 +21,8 @@ from ..utils import (
     export_mime_type,
     parse_file_id,
     q_escape,
+    validate_ext_mime_type,
+    MIME_EXTENSIONS,
 )
 from .misc import (
     DEFAULT_FIELDS,
@@ -53,7 +55,10 @@ class Drive(DriveBase):
     """
 
     def __init__(
-        self, creds: Credentials | None = None, throttle_time: float = THROTTLE_TIME
+        self,
+        creds: Credentials | None = None,
+        throttle_time: float = THROTTLE_TIME,
+        team_drives: bool = True,
     ):
         super().__init__(creds=creds, throttle_time=throttle_time)
 
@@ -61,6 +66,7 @@ class Drive(DriveBase):
             "drive", VERSION, credentials=self.creds
         )  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
+        self.team_drives = team_drives
 
     def get(
         self,
@@ -69,7 +75,6 @@ class Drive(DriveBase):
         parents: List[str] | str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
-        team_drives: bool = True,
         **kwargs: Any,
     ) -> File:
         """Get a file by its:
@@ -89,7 +94,7 @@ class Drive(DriveBase):
             team_drives (bool, optional): Whether to include files from Team Drives. Defaults to True.
         """
         if file_id is not None:
-            kwargs |= self._team_drives_payload(team_drives, kind="update")
+            kwargs |= self._team_drives_payload(self.team_drives, kind="update")
             file_id = parse_file_id(file_id)
 
             return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
@@ -101,7 +106,7 @@ class Drive(DriveBase):
         name = Path(name) if name is not None else None
 
         if name is not None:
-            for parent in name.parents:
+            for parent in name.parents[1:]:
                 if (
                     t_parents := next(
                         self._query_children(
@@ -109,7 +114,6 @@ class Drive(DriveBase):
                             name=str(parent),
                             fields=fields,
                             q=q,
-                            team_drives=team_drives,
                         ),
                         None,
                     )
@@ -123,7 +127,10 @@ class Drive(DriveBase):
 
         file = next(
             self._query_children(
-                name=name, parents=parents, fields=fields, q=q, team_drives=team_drives
+                name=name,
+                parents=parents,
+                fields=fields,
+                q=q,
             ),
             None,
         )
@@ -385,7 +392,6 @@ class Drive(DriveBase):
         query: str | None = None,
         fields: str = DEFAULT_FIELDS,
         order_by: str = "modifiedTime desc",
-        team_drives: bool = True,
     ) -> Generator[File, None, None]:
         """List files in Google Drive.
 
@@ -406,14 +412,13 @@ class Drive(DriveBase):
                 parents=parents,
                 fields=fields,
                 q=query,
-                team_drives=team_drives,
             )
             return
 
         if query is None:
             query = "trashed = false"
 
-        kwargs = self._team_drives_payload(team_drives)
+        kwargs = self._team_drives_payload(self.team_drives)
         list_func = lambda x: self.files.list(
             q=query,
             pageToken=x,
@@ -431,7 +436,6 @@ class Drive(DriveBase):
         name: str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
-        team_drives: bool = True,
     ):
         """Internal usage function. Query children of a parent folder.
         If `name` is specified, only files with the given name will be returned.
@@ -460,7 +464,7 @@ class Drive(DriveBase):
 
         query = " and ".join((f"({i})" for i in queries))
 
-        return self.list(query=query, fields=fields, team_drives=team_drives)
+        return self.list(query=query, fields=fields)
 
     def _create_nested_folders(
         self, filepath: Path, parents: List[str], get_extant: bool = True
@@ -555,7 +559,6 @@ class Drive(DriveBase):
         name: FilePath | None = None,
         mime_type: GoogleMimeTypes | None = None,
         body: File | None = None,
-        team_drives: bool = True,
         **kwargs: Any,
     ):
         """Update a file on Google Drive, editing its name (filename, ext), mime type, and/or body (File metadata).
@@ -575,7 +578,7 @@ class Drive(DriveBase):
         kwargs |= {
             "fileId": file_id,
             "body": body if body is not None else {},
-            **self._team_drives_payload(team_drives, kind="update"),
+            **self._team_drives_payload(self.team_drives, kind="update"),
         }
         if name is not None:
             filepath = Path(name)
@@ -626,9 +629,16 @@ class Drive(DriveBase):
             else GoogleMimeTypes[filepath.suffix.lstrip(".")]
         )
 
+        if not validate_ext_mime_type(name=name, mime_type=mime_type):
+            exts = ", ".join(MIME_EXTENSIONS.get(mime_type, []))
+            raise ValueError(
+                f"Invalid mime type '{mime_type.value}' for file with name '{name}'. Must be one of: {exts}."
+            )
+
         kwargs |= {
             "body": body if body is not None else {},
             "media_body": uploader(mime_type),
+            **self._team_drives_payload(self.team_drives, kind="update"),
         }
 
         if update and (file := self.get_if_exists(name=name, parents=parents)):

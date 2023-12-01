@@ -1,6 +1,3 @@
-"""
-"""
-
 import random
 import shutil
 import subprocess

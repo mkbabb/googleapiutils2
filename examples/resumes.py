@@ -30,7 +30,7 @@ sheets = Sheets()
 
 def chat_completion(prompt: str, system_msg: str, model: str = "gpt-3.5-turbo") -> str:
     # Obtain completion from OpenAI based on the prompt and system message
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_msg},
@@ -42,8 +42,8 @@ def chat_completion(prompt: str, system_msg: str, model: str = "gpt-3.5-turbo") 
     )
     # Extract the content if available
     try:
-        content = response["choices"][0]["message"]["content"]
-        return content
+        content = response.choices[0].message.content
+        return content if content is not None else ""
     except:
         return ""
 

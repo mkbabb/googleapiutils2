@@ -122,11 +122,69 @@ class GoogleMimeTypes(Enum):
     default = "application/octet-stream"
 
 
+MIME_EXTENSIONS: dict[GoogleMimeTypes, list[str]] = {
+    GoogleMimeTypes.audio: ["mp3", "wav", "aac", "m4a", "wma", "flac"],
+    GoogleMimeTypes.docs: ["doc", "docx"],
+    GoogleMimeTypes.drawing: ["svg"],
+    GoogleMimeTypes.file: [],
+    GoogleMimeTypes.folder: [],
+    GoogleMimeTypes.form: ["html"],
+    GoogleMimeTypes.fusiontable: [],
+    GoogleMimeTypes.jam: ["jam"],
+    GoogleMimeTypes.map: [],
+    GoogleMimeTypes.photo: ["jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff"],
+    GoogleMimeTypes.slides: ["ppt", "pptx"],
+    GoogleMimeTypes.script: ["gs"],
+    GoogleMimeTypes.shortcut: [],
+    GoogleMimeTypes.site: ["html"],
+    GoogleMimeTypes.sheets: ["csv", "xlsx", "ods", "xls"],
+    GoogleMimeTypes.unknown: [],
+    GoogleMimeTypes.video: ["mp4", "avi", "mov", "wmv", "flv", "mkv"],
+    GoogleMimeTypes.xls: ["xls"],
+    GoogleMimeTypes.xlsx: ["xlsx"],
+    GoogleMimeTypes.ods: ["ods"],
+    GoogleMimeTypes.csv: ["csv"],
+    GoogleMimeTypes.jpg: ["jpg", "jpeg"],
+    GoogleMimeTypes.png: ["png"],
+    GoogleMimeTypes.svg: ["svg"],
+    GoogleMimeTypes.gif: ["gif"],
+    GoogleMimeTypes.bmp: ["bmp"],
+    GoogleMimeTypes.txt: ["txt"],
+    GoogleMimeTypes.html: ["html", "htm"],
+    GoogleMimeTypes.xml: ["xml"],
+    GoogleMimeTypes.tmpl: ["tmpl"],
+    GoogleMimeTypes.doc: ["doc"],
+    GoogleMimeTypes.docx: ["docx"],
+    GoogleMimeTypes.pdf: ["pdf"],
+    GoogleMimeTypes.js: ["js"],
+    GoogleMimeTypes.swf: ["swf"],
+    GoogleMimeTypes.mp3: ["mp3"],
+    GoogleMimeTypes.zip: ["zip"],
+    GoogleMimeTypes.rar: ["rar"],
+    GoogleMimeTypes.tar: ["tar"],
+    GoogleMimeTypes.arj: ["arj"],
+    GoogleMimeTypes.cab: ["cab"],
+    GoogleMimeTypes.php: ["php"],
+    GoogleMimeTypes.json: ["json"],
+    GoogleMimeTypes.default: [],
+}
+
+
 DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.sheets: GoogleMimeTypes.xlsx,
     GoogleMimeTypes.docs: GoogleMimeTypes.docx,
     GoogleMimeTypes.slides: GoogleMimeTypes.pdf,
 }
+
+
+def validate_ext_mime_type(name: str, mime_type: GoogleMimeTypes) -> bool:
+    """Validates if the file name matches the expected extensions for its MIME type."""
+
+    extension = name.split(".")[-1].lower() if "." in name else name
+
+    extensions = MIME_EXTENSIONS.get(mime_type, [])
+
+    return extension in extensions
 
 
 def export_mime_type(
