@@ -45,10 +45,22 @@ Sheet1[2:3, ...].update(rows)
 Sheet1[4:5, ...].update(rows)
 Sheet1[4, "A"].update([["Frunk!"]])
 
+
 sheets.update(
     SHEET_URL,
     Sheet1[5, ...],
     values=[[11, 22, 33]],
+)
+
+sheets.reset_append(
+    spreadsheet_id=SHEET_URL,
+    sheet_name=Sheet1.sheet_name,
+)
+
+sheets.append(
+    SHEET_URL,
+    Sheet1.sheet_name,
+    values=[["appended!"]],
 )
 
 Sheet1[5:, ...].clear()
@@ -104,6 +116,7 @@ sheets.append(
         }
     ],
 )
+
 
 sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
 

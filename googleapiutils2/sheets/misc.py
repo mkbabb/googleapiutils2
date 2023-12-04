@@ -256,6 +256,7 @@ class SheetSliceT:
         SheetSlice[sheet_name, row_ix, col_ix]
         SheetSlice[sheet_name, range_name]
         SheetSlice[row_ix, col_ix]
+        SheetSlice[sheet_name]
         SheetSlice[range_name]
 
     The sheet_name and range_name must be a string.

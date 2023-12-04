@@ -713,7 +713,11 @@ class Sheets(DriveBase):
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
     ):
-        """Appends values to a spreadsheet. Like `update`, but searches for the next available row to append to.
+        """Appends values to a spreadsheet. Like `update`, but searches for the next available range to append to.
+
+        The next available range is determined by the last **cleared/deleted** row and column set.
+        It's not enough to just clear the data therein with the delete key.
+
         This means rows will be added to the spreadsheet if the input values are longer than the
         number of existing rows. See: https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
 
@@ -749,6 +753,34 @@ class Sheets(DriveBase):
                 valueInputOption=value_input_option.value,
             )
             .execute()
+        )
+
+    def reset_append(
+        self,
+        spreadsheet_id: str,
+        sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
+    ):
+        """Resets the last appended to row in a spreadsheet by clearing it.
+        Leverages append's next available range searching functionality.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            sheet_name (SheetsRange): The sheet to reset the last appended to row in.
+        """
+        # Append dummy data to get the last appened to row:
+        data = self.append(
+            spreadsheet_id=spreadsheet_id,
+            range_name=sheet_name,
+            values=[[""]],
+        )
+
+        # Get the updated range and make a sheet_slice out of it:
+        updated_slice = to_sheet_slice(data["tableRange"])
+        last_row_slice = updated_slice[updated_slice.rows.stop + 1, ...]
+
+        return self.clear(
+            spreadsheet_id=spreadsheet_id,
+            range_name=last_row_slice,
         )
 
     def clear(

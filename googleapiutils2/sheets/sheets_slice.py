@@ -28,6 +28,8 @@ def sheets_rangekey(sheets_range: SheetsRange) -> SheetSliceT:
 
 @cached(cache=cache, key=sheets_rangekey)
 def to_sheet_slice(sheets_range: SheetsRange) -> SheetSliceT:
+    """Convert a string range to a SheetSlice. See the SheetSliceT class for more details."""
+
     if isinstance(sheets_range, SheetSliceT):
         return sheets_range
     else:
