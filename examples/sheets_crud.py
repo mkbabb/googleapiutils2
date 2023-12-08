@@ -15,6 +15,7 @@ The examples encompass common CRUD operations (Create, Read, Update, Delete)
 and illustrate advanced techniques such as slicing, batched updates, alignment, and formatting.
 """
 from typing import *
+import json
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
@@ -28,7 +29,7 @@ sheets.add(SHEET_URL, ["Sheet99", "Sheet100"])
 
 sheets.delete(SHEET_URL, ["Sheet99", "Sheet101"])
 
-sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)
+sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name, preserve_header=True)
 
 
 rows = [
@@ -57,11 +58,13 @@ sheets.reset_append(
     sheet_name=Sheet1.sheet_name,
 )
 
-sheets.append(
-    SHEET_URL,
-    Sheet1.sheet_name,
-    values=[["appended!"]],
-)
+for _ in range(10):
+    values = [list(range(64))]
+    sheets.append(
+        SHEET_URL,
+        Sheet1.sheet_name,
+        values=values,
+    )
 
 Sheet1[5:, ...].clear()
 
@@ -119,5 +122,16 @@ sheets.append(
 
 
 sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
+
+tmp = sheets.format_values(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
+
+# change the font to times new roman:
+tmp["textFormat"]["fontFamily"] = "Times New Roman"
+
+# change the font size to 24:
+tmp["textFormat"]["fontSize"] = 24
+
+sheets.format(SHEET_URL, Sheet1[1, ...], cell_format=tmp)
+
 
 sheets.resize_columns(SHEET_URL, Sheet1.sheet_name, width=None)

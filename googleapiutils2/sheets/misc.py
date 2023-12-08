@@ -51,6 +51,69 @@ class InsertDataOption(Enum):
     overwrite = "OVERWRITE"
 
 
+class HorizontalAlignment(Enum):
+    """Defines the horizontal alignment of the content in a cell."""
+
+    # Default value; indicates that the horizontal alignment is unspecified.
+    HORIZONTAL_ALIGN_UNSPECIFIED = "HORIZONTAL_ALIGN_UNSPECIFIED"
+    # Aligns content to the left side of the cell.
+    LEFT = "LEFT"
+    # Centers content horizontally in the cell.
+    CENTER = "CENTER"
+    # Aligns content to the right side of the cell.
+    RIGHT = "RIGHT"
+
+
+class HyperlinkDisplayType(Enum):
+    """Specifies how a hyperlink is displayed in the cell."""
+
+    # Default value; indicates that the hyperlink display type is unspecified.
+    HYPERLINK_DISPLAY_TYPE_UNSPECIFIED = "HYPERLINK_DISPLAY_TYPE_UNSPECIFIED"
+    # Shows the hyperlink with its associated link.
+    LINKED = "LINKED"
+    # Displays the hyperlink text without the link.
+    PLAIN_TEXT = "PLAIN_TEXT"
+
+
+class TextDirection(Enum):
+    """Determines the direction of text in a cell."""
+
+    # Default value; indicates that the text direction is unspecified.
+    TEXT_DIRECTION_UNSPECIFIED = "TEXT_DIRECTION_UNSPECIFIED"
+    # Text is oriented from left to right.
+    LEFT_TO_RIGHT = "LEFT_TO_RIGHT"
+    # Text is oriented from right to left.
+    RIGHT_TO_LEFT = "RIGHT_TO_LEFT"
+
+
+class VerticalAlignment(Enum):
+    """Defines the vertical alignment of the content in a cell."""
+
+    # Default value; indicates that the vertical alignment is unspecified.
+    VERTICAL_ALIGN_UNSPECIFIED = "VERTICAL_ALIGN_UNSPECIFIED"
+    # Aligns content to the top of the cell.
+    TOP = "TOP"
+    # Centers content vertically in the cell.
+    MIDDLE = "MIDDLE"
+    # Aligns content to the bottom of the cell.
+    BOTTOM = "BOTTOM"
+
+
+class WrapStrategy(Enum):
+    """Specifies how text should wrap within a cell."""
+
+    # Default value; indicates that the wrap strategy is unspecified.
+    WRAP_STRATEGY_UNSPECIFIED = "WRAP_STRATEGY_UNSPECIFIED"
+    # Content will overflow the cell without wrapping.
+    OVERFLOW_CELL = "OVERFLOW_CELL"
+    # Legacy wrap strategy.
+    LEGACY_WRAP = "LEGACY_WRAP"
+    # Content will be clipped and not displayed beyond the cell.
+    CLIP = "CLIP"
+    # Content will wrap within the cell.
+    WRAP = "WRAP"
+
+
 def normalize_sheet_name(sheet_name: str) -> str:
     """Normalize a sheet name for use in a Google Sheets API request.
     Quotes sheet names if they're not already quoted.

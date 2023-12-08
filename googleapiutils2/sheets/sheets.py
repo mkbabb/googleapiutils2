@@ -33,6 +33,11 @@ from .misc import (
     SheetsValues,
     ValueInputOption,
     ValueRenderOption,
+    HorizontalAlignment,
+    VerticalAlignment,
+    WrapStrategy,
+    HyperlinkDisplayType,
+    TextDirection,
 )
 
 if TYPE_CHECKING:
@@ -46,8 +51,11 @@ if TYPE_CHECKING:
         BatchUpdateValuesResponse,
         CellFormat,
         ClearValuesResponse,
+        Color,
+        ColorStyle,
         CopySheetToAnotherSpreadsheetRequest,
         DeleteSheetRequest,
+        Padding,
         Request,
         Sheet,
         SheetProperties,
@@ -87,6 +95,38 @@ class Sheets(DriveBase):
         ] = defaultdict(dict)
 
         atexit.register(self._batch_update_remaining_auto)
+
+    def _reset_sheet_cache(
+        self,
+        cache_key: str,
+        spreadsheet_id: str,
+        name: str | None = None,
+        sheet_id: int | None = None,
+    ):
+        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+
+        key = (cache_key, spreadsheet_id, name)
+
+        if key in self._cache:
+            self._cache.pop(key)
+
+        return sheet_id
+
+    def _set_sheet_cache(
+        self,
+        cache_key: str,
+        value: Any,
+        spreadsheet_id: str,
+        name: str | None = None,
+        sheet_id: int | None = None,
+    ):
+        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+
+        key = (cache_key, spreadsheet_id, name)
+
+        self._cache[key] = value
+
+        return sheet_id
 
     def batch_update_spreadsheet(
         self,
@@ -190,9 +230,20 @@ class Sheets(DriveBase):
     def get_spreadsheet(
         self,
         spreadsheet_id: str,
+        include_grid_data: bool = False,
+        ranges: SheetsRange | list[SheetsRange] | None = None,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.spreadsheets.get(spreadsheetId=spreadsheet_id).execute()
+
+        ranges = ranges if ranges is not None else []
+        ranges = ranges if isinstance(ranges, list) else [ranges]
+        ranges = [str(range_name) for range_name in ranges]
+
+        return self.spreadsheets.get(
+            spreadsheetId=spreadsheet_id,
+            includeGridData=include_grid_data,
+            ranges=ranges,  # type: ignore
+        ).execute()
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("sheet_id"))
     def _get_sheet_id(
@@ -247,6 +298,8 @@ class Sheets(DriveBase):
         spreadsheet_id: str,
         name: str | None = None,
         sheet_id: int | None = None,
+        include_grid_data: bool = False,
+        ranges: SheetsRange | list[SheetsRange] | None = None,
     ) -> Sheet:
         """Get a sheet from a spreadsheet. Either the name or the ID of the sheet must be provided.
 
@@ -256,7 +309,11 @@ class Sheets(DriveBase):
             sheet_id (int, optional): The ID of the sheet to get. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        spreadsheet = self.get_spreadsheet(spreadsheet_id)
+        spreadsheet = self.get_spreadsheet(
+            spreadsheet_id=spreadsheet_id,
+            include_grid_data=include_grid_data,
+            ranges=ranges,
+        )
         sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
 
         for sheet in spreadsheet["sheets"]:
@@ -384,10 +441,9 @@ class Sheets(DriveBase):
             return
 
         def make_body(name: str):
-            sheet_id = self._get_sheet_id(spreadsheet_id, name=name)
-
-            key = ("sheet_id", spreadsheet_id, name)
-            self._cache.pop(key)
+            sheet_id = self._reset_sheet_cache(
+                cache_key="sheet_id", spreadsheet_id=spreadsheet_id, name=name
+            )
 
             body: DeleteSheetRequest = {
                 "sheetId": sheet_id,
@@ -482,7 +538,12 @@ class Sheets(DriveBase):
                 [header],
             )
             # update the header cache
-            self._cache[("header", spreadsheet_id, sheet_name)] = header
+            self._set_sheet_cache(
+                cache_key="header",
+                value=header,
+                spreadsheet_id=spreadsheet_id,
+                name=sheet_name,
+            )
 
         header = list(header)
         frame = frame.reindex(columns=header)
@@ -544,15 +605,21 @@ class Sheets(DriveBase):
             if t_rows > rows or t_cols > cols:
                 rows, cols = max(t_rows, rows), max(t_cols, cols)
                 self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
-                # update the shape cache
-                self._cache[("shape", spreadsheet_id, sheet_name)] = (rows, cols)
+
+                shape = (rows, cols)
+                self._set_sheet_cache(
+                    cache_key="shape",
+                    value=shape,
+                    spreadsheet_id=spreadsheet_id,
+                    name=sheet_name,
+                )
 
     def update(
         self,
         spreadsheet_id: str,
         range_name: SheetsRange = DEFAULT_SHEET_NAME,
         values: SheetsValues | None = None,
-        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        value_input_option: ValueInputOption = ValueInputOption.raw,
         align_columns: bool = True,
         ensure_shape: bool = False,
     ):
@@ -776,7 +843,7 @@ class Sheets(DriveBase):
 
         # Get the updated range and make a sheet_slice out of it:
         updated_slice = to_sheet_slice(data["tableRange"])
-        last_row_slice = updated_slice[updated_slice.rows.stop + 1, ...]
+        last_row_slice = updated_slice[updated_slice.rows.stop, ...]
 
         return self.clear(
             spreadsheet_id=spreadsheet_id,
@@ -797,7 +864,7 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
 
-        return (
+        res = (
             self.spreadsheets.values()
             .clear(spreadsheetId=spreadsheet_id, range=str(sheet_slice))
             .execute()
@@ -873,8 +940,12 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
+        preserve_header: bool = False,
     ):
-        """Resets a sheet back to a default state. This includes clearing all values and formatting.
+        """Resets a sheet back to a default state. This includes:
+            - clearing all values
+            - clearing all formatting
+            - resizing the sheet to 26 columns and 1000 rows
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
@@ -885,15 +956,41 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
+        header_slice = SheetSlice[sheet_name, 1, ...]
+
+        header = self.values(
+            spreadsheet_id=spreadsheet_id, range_name=header_slice
+        ).get("values", [])
+        header_fmt = self.format_values(
+            spreadsheet_id=spreadsheet_id, range_name=header_slice
+        )
+
         self.clear(spreadsheet_id, sheet_name)
+
         self.resize(
             spreadsheet_id,
             sheet_name=sheet_name,
             rows=DEFAULT_SHEET_SHAPE[0],
             cols=DEFAULT_SHEET_SHAPE[1],
         )
-        # then clear all of the formatting
+
+        self.resize_columns(spreadsheet_id, sheet_name=sheet_name)
+
         self.clear_formatting(spreadsheet_id, sheet_name=sheet_name)
+
+        if preserve_header and len(header):
+            self.update(
+                spreadsheet_id=spreadsheet_id, range_name=header_slice, values=header
+            )
+            self.format(
+                spreadsheet_id=spreadsheet_id,
+                range_name=header_slice,
+                cell_format=header_fmt,
+            )
+        else:
+            self._reset_sheet_cache(
+                cache_key="header", spreadsheet_id=spreadsheet_id, name=sheet_name
+            )
 
     @staticmethod
     def _create_format_body(
@@ -942,8 +1039,14 @@ class Sheets(DriveBase):
         strikethrough: bool | None = None,
         font_size: int | None = None,
         font_family: str | None = None,
-        text_color: str | None = None,
-        background_color: str | None = None,
+        text_color: Color | str | None = None,
+        background_color: Color | str | None = None,
+        padding: Padding | int | None = None,
+        horizontal_alignment: HorizontalAlignment | None = None,
+        vertical_alignment: VerticalAlignment | None = None,
+        wrap_strategy: WrapStrategy | None = None,
+        text_direction: TextDirection | None = None,
+        hyperlink_display_type: HyperlinkDisplayType | None = None,
         cell_format: CellFormat | None = None,
     ) -> CellFormat:
         text_format: TextFormat = {}
@@ -960,11 +1063,46 @@ class Sheets(DriveBase):
         if font_family is not None:
             text_format["fontFamily"] = font_family
         if text_color is not None:
-            text_format["foregroundColor"] = hex_to_rgb(text_color)
+            text_format["foregroundColor"] = (
+                hex_to_rgb(text_color) if isinstance(text_color, str) else text_color
+            )
 
         cell_format_dict: CellFormat = {}
         if background_color is not None:
-            cell_format_dict["backgroundColor"] = hex_to_rgb(background_color)
+            cell_format_dict["backgroundColor"] = (
+                hex_to_rgb(background_color)
+                if isinstance(background_color, str)
+                else background_color
+            )
+
+        if padding is not None:
+            padding_dict: Padding = {}
+            if isinstance(padding, int):
+                padding_dict = {
+                    "top": padding,
+                    "bottom": padding,
+                    "left": padding,
+                    "right": padding,
+                }
+            elif isinstance(padding, dict):
+                padding_dict = padding
+            cell_format_dict["padding"] = padding_dict
+
+        if horizontal_alignment is not None:
+            cell_format_dict["horizontalAlignment"] = horizontal_alignment.value
+
+        if vertical_alignment is not None:
+            cell_format_dict["verticalAlignment"] = vertical_alignment.value
+
+        if wrap_strategy is not None:
+            cell_format_dict["wrapStrategy"] = wrap_strategy.value
+
+        if text_direction is not None:
+            cell_format_dict["textDirection"] = text_direction.value
+
+        if hyperlink_display_type is not None:
+            cell_format_dict["hyperlinkDisplayType"] = hyperlink_display_type.value
+
         if cell_format is not None:
             cell_format_dict.update(cell_format)
 
@@ -980,8 +1118,14 @@ class Sheets(DriveBase):
         strikethrough: bool | None = None,
         font_size: int | None = None,
         font_family: str | None = None,
-        text_color: str | None = None,
-        background_color: str | None = None,
+        text_color: Color | str | None = None,
+        background_color: Color | str | None = None,
+        padding: Padding | int | None = None,
+        horizontal_alignment: HorizontalAlignment | None = None,
+        vertical_alignment: VerticalAlignment | None = None,
+        wrap_strategy: WrapStrategy | None = None,
+        text_direction: TextDirection | None = None,
+        hyperlink_display_type: HyperlinkDisplayType | None = None,
         cell_format: CellFormat | None = None,
     ):
         """Formats a range of cells in a spreadsheet.
@@ -990,7 +1134,7 @@ class Sheets(DriveBase):
             spreadsheet_id (str): The spreadsheet to update.
             range_name (str): The range to format.
             ...
-            cell_format (CellFormat, optional): A cell format to merge with the default format. Defaults to None.
+            cell_format (CellFormat, optional): A cell format to merge with the provided format. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
@@ -1004,6 +1148,12 @@ class Sheets(DriveBase):
             font_family=font_family,
             text_color=text_color,
             background_color=background_color,
+            padding=padding,
+            horizontal_alignment=horizontal_alignment,
+            vertical_alignment=vertical_alignment,
+            wrap_strategy=wrap_strategy,
+            text_direction=text_direction,
+            hyperlink_display_type=hyperlink_display_type,
             cell_format=cell_format,
         )
 
@@ -1025,10 +1175,66 @@ class Sheets(DriveBase):
                 )
             ]
         }
+
         return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
+    def format_values(self, spreadsheet_id: str, range_name: SheetsRange) -> CellFormat:
+        sheet_slice = to_sheet_slice(range_name)
+
+        response = self.get(
+            spreadsheet_id=spreadsheet_id,
+            name=sheet_slice.sheet_name,
+            include_grid_data=True,
+            ranges=range_name,
+        )
+
+        cell_format: CellFormat = response["data"][0]["rowData"][0]["values"][0][
+            "effectiveFormat"
+        ]
+
+        text_format: TextFormat = cell_format.get("textFormat", {})
+        text_color: Color = text_format.get("foregroundColor", {})
+
+        horizontal_alignment = cell_format.get("horizontalAlignment")
+        vertical_alignment = cell_format.get("verticalAlignment")
+        wrap_strategy = cell_format.get("wrapStrategy")
+        text_direction = cell_format.get("textDirection")
+        hyperlink_display_type = cell_format.get("hyperlinkDisplayType")
+
+        return self._create_cell_format(
+            bold=text_format.get("bold"),
+            italic=text_format.get("italic"),
+            underline=text_format.get("underline"),
+            strikethrough=text_format.get("strikethrough"),
+            font_size=text_format.get("fontSize"),
+            font_family=text_format.get("fontFamily"),
+            text_color=text_color,
+            background_color=cell_format.get("backgroundColor", {}),
+            padding=cell_format.get("padding"),
+            horizontal_alignment=HorizontalAlignment(horizontal_alignment)
+            if horizontal_alignment is not None
+            else None,
+            vertical_alignment=VerticalAlignment(vertical_alignment)
+            if vertical_alignment is not None
+            else None,
+            wrap_strategy=WrapStrategy(wrap_strategy)
+            if wrap_strategy is not None
+            else None,
+            text_direction=TextDirection(text_direction)
+            if text_direction is not None
+            else None,
+            hyperlink_display_type=HyperlinkDisplayType(hyperlink_display_type)
+            if hyperlink_display_type is not None
+            else None,
+        )
+
     @staticmethod
-    def to_frame(values: ValueRange, **kwargs: Any) -> pd.DataFrame:
+    def to_frame(
+        values: ValueRange,
+        columns: list[str] | None = None,
+        dtypes: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
         """Converts a ValueRange to a DataFrame.
 
         Useful for working with the data in Pandas after a call to sheets.values().
@@ -1042,6 +1248,8 @@ class Sheets(DriveBase):
 
         Args:
             values (ValueRange): The values to convert.
+            columns (list[str], optional): The column names to use. Defaults to None.
+            dtypes (dict[str, type], optional): The data types to use. Defaults to None.
             **kwargs: Additional arguments to pass to pd.DataFrame.
 
         Example:
@@ -1051,31 +1259,48 @@ class Sheets(DriveBase):
                 SHEET_ID, "Sheet1!A1:B2"))
             >>> df
         """
+        dtypes = dtypes if dtypes is not None else {}
+
+        def convert_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+            for col, dtype in dtypes.items():
+                df[col] = df[col].astype(dtype)
+
+            return df
+
         # No values
         if not len(rows := values.get("values", [])):
             return pd.DataFrame()
 
-        columns = kwargs.pop("columns", []) + rows[0]
+        columns = columns if columns is not None else []
+        columns += rows[0]
+
         rows = rows[1:] if len(rows) > 1 else []
 
         df = pd.DataFrame(rows, **kwargs)
 
         # Only headers
         if not len(df) and len(columns):
-            return pd.DataFrame(columns=columns)
+            df = pd.DataFrame(columns=columns, **kwargs)
+            convert_dtypes(df)
+            return df
 
         mapper = {i: col for i, col in enumerate(columns)}
         df.rename(columns=mapper, inplace=True)
 
+        df = df.convert_dtypes()
+        # Set object columns to pd.StringDtype:
+        df = df.astype({col: pd.StringDtype() for col in df.select_dtypes("object")})
         # Replace empty strings with pd.NA; infer the data types
-        df.select_dtypes(include=["object"]).replace(
+        df.select_dtypes(include=["object", "string"]).replace(
             r"^\s*$", pd.NA, regex=True, inplace=True
         )
+        df = convert_dtypes(df)
+
         return df
 
     @staticmethod
     def from_frame(
-        df: pd.DataFrame, as_dict: bool = False
+        df: pd.DataFrame, as_dict: bool = True
     ) -> list[list[Any]] | list[dict[Hashable, Any]]:
         """Converts a DataFrame to a list of lists to be used with sheets.update() & c.
 
@@ -1083,8 +1308,10 @@ class Sheets(DriveBase):
             df (pd.DataFrame): The DataFrame to convert.
             as_dict (bool, optional): Whether to return a list of dicts instead of a list of lists. Defaults to False.
         """
-        df = df.fillna("")
-        df = df.astype(str)
+        t_df = df.astype(str)
+        t_df[df.isna()] = ""
+
+        df = t_df
 
         if as_dict:
             return df.to_dict(orient="records")
