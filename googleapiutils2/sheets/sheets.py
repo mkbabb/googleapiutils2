@@ -942,6 +942,7 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
+        resize: bool = True,
         preserve_header: bool = False,
     ):
         """Resets a sheet back to a default state. This includes:
@@ -954,6 +955,8 @@ class Sheets(DriveBase):
         Args:
             spreadsheet_id (str): The spreadsheet to update.
             sheet_name (str): The name of the sheet to reset.
+            resize (bool, optional): Whether to resize the sheet back to its default column and row counts. Defaults to True.
+            preserve_header (bool, optional): Whether to preserve the first row of the sheet. Defaults to False.
         """
 
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -972,12 +975,13 @@ class Sheets(DriveBase):
         self.clear(spreadsheet_id, sheet_name)
 
         # reset the sheet to the default shape
-        self.resize(
-            spreadsheet_id,
-            sheet_name=sheet_name,
-            rows=DEFAULT_SHEET_SHAPE[0],
-            cols=DEFAULT_SHEET_SHAPE[1],
-        )
+        if resize:
+            self.resize(
+                spreadsheet_id,
+                sheet_name=sheet_name,
+                rows=DEFAULT_SHEET_SHAPE[0],
+                cols=DEFAULT_SHEET_SHAPE[1],
+            )
 
         # reset the columns to the default width
         self.resize_dimensions(
