@@ -1489,6 +1489,8 @@ class Sheets(DriveBase):
             )
 
         if sizes is None and dimension == SheetsDimension.columns:
+            # This is a hack to ameliorate the fact that autoResizeDimensions
+            # doesn't include the header in its calculations.
             header = self._header(spreadsheet_id, sheet_name)
             res = self.append(spreadsheet_id, sheet_name, [header])
             updated_range = res["updates"]["updatedRange"]
