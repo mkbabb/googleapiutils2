@@ -8,6 +8,11 @@ from typing import *
 
 from ..utils import to_base
 
+if TYPE_CHECKING:
+    from googleapiclient._apis.sheets.v4.resources import (
+        CellFormat,
+    )
+
 VERSION = "v4"
 
 DEFAULT_SHEET_NAME = "'Sheet1'"
@@ -18,6 +23,22 @@ BASE = 26
 OFFSET = 1
 
 SheetsValues = list[list[Any]] | list[dict[str | Any, Any]] | list[object]
+
+
+@dataclass
+class SheetsFormat:
+    cell_format: CellFormat | None = None
+    row_sizes: list[int] | None = None
+    column_sizes: list[int] | None = None
+
+
+class SheetsDimension(Enum):
+    """The dimension that this rule applies to."""
+
+    # This conditional format rule applies to rows.
+    rows = "ROWS"
+    # This conditional format rule applies to columns.
+    columns = "COLUMNS"
 
 
 class ValueInputOption(Enum):

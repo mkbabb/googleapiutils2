@@ -38,6 +38,8 @@ from .misc import (
     WrapStrategy,
     HyperlinkDisplayType,
     TextDirection,
+    SheetsFormat,
+    SheetsDimension,
 )
 
 if TYPE_CHECKING:
@@ -65,6 +67,7 @@ if TYPE_CHECKING:
         TextFormat,
         UpdateValuesResponse,
         ValueRange,
+        UpdateDimensionPropertiesRequest,
     )
 
 
@@ -947,6 +950,8 @@ class Sheets(DriveBase):
             - clearing all formatting
             - resizing the sheet to 26 columns and 1000 rows
 
+        If `preserve_header` is True, the first row of the sheet will be *mostly* preserved.
+
         Args:
             spreadsheet_id (str): The spreadsheet to update.
             sheet_name (str): The name of the sheet to reset.
@@ -961,12 +966,13 @@ class Sheets(DriveBase):
         header = self.values(
             spreadsheet_id=spreadsheet_id, range_name=header_slice
         ).get("values", [])
-        header_fmt = self.format_values(
+        header_fmt = self.get_format(
             spreadsheet_id=spreadsheet_id, range_name=header_slice
         )
 
         self.clear(spreadsheet_id, sheet_name)
 
+        # Reset the sheet to the default shape
         self.resize(
             spreadsheet_id,
             sheet_name=sheet_name,
@@ -974,7 +980,10 @@ class Sheets(DriveBase):
             cols=DEFAULT_SHEET_SHAPE[1],
         )
 
-        self.resize_columns(spreadsheet_id, sheet_name=sheet_name)
+        # Reset the columns to the default width
+        self.resize_dimensions(
+            spreadsheet_id, sheet_name=sheet_name, dimension=SheetsDimension.columns
+        )
 
         self.clear_formatting(spreadsheet_id, sheet_name=sheet_name)
 
@@ -985,7 +994,7 @@ class Sheets(DriveBase):
             self.format(
                 spreadsheet_id=spreadsheet_id,
                 range_name=header_slice,
-                cell_format=header_fmt,
+                sheets_format=header_fmt,
             )
         else:
             self._reset_sheet_cache(
@@ -1126,18 +1135,30 @@ class Sheets(DriveBase):
         wrap_strategy: WrapStrategy | None = None,
         text_direction: TextDirection | None = None,
         hyperlink_display_type: HyperlinkDisplayType | None = None,
-        cell_format: CellFormat | None = None,
+        sheets_format: SheetsFormat | None = None,
     ):
         """Formats a range of cells in a spreadsheet.
+
+        If a SheetsFormat object is provided, this will take precedence over the other arguments.
+        A SheetsFormat object contains formatting and dimension information:
+            -  column_sizes: a list of column sizes
+            -  row_sizes: a list of row sizes
+            -  cell_format: a CellFormat object containing formatting information
+
+        This function works bidirectionally with `get_format`.
+
+        See "CellFormat" in the Sheets API for more details.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
             range_name (str): The range to format.
             ...
-            cell_format (CellFormat, optional): A cell format to merge with the provided format. Defaults to None.
+            sheets_format (SheetsFormat, optional): A SheetsFormat object containing the formatting to apply. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
+
+        sheets_format = sheets_format if sheets_format is not None else SheetsFormat()
 
         cell_format = self._create_cell_format(
             bold=bold,
@@ -1154,7 +1175,7 @@ class Sheets(DriveBase):
             wrap_strategy=wrap_strategy,
             text_direction=text_direction,
             hyperlink_display_type=hyperlink_display_type,
-            cell_format=cell_format,
+            cell_format=sheets_format.cell_format,
         )
 
         sheet_id = self._id(spreadsheet_id, sheet_slice.sheet_name)
@@ -1162,6 +1183,33 @@ class Sheets(DriveBase):
 
         sheet_slice = sheet_slice.with_shape(shape)
         rows, cols = sheet_slice.rows, sheet_slice.columns
+
+        if sheets_format.column_sizes is not None:
+            # if overflow is enabled, don't resize the columns:
+            if not (
+                sheets_format.cell_format is not None
+                and sheets_format.cell_format.get("wrapStrategy")
+                == WrapStrategy.OVERFLOW_CELL
+            ):
+                self.resize_dimensions(
+                    spreadsheet_id=spreadsheet_id,
+                    sheet_name=sheet_slice.sheet_name,
+                    sizes=sheets_format.column_sizes,
+                    dimension=SheetsDimension.columns,
+                )
+
+        if sheets_format.row_sizes is not None:
+            # if wrapping is enabled, don't resize the rows
+            if not (
+                sheets_format.cell_format is not None
+                and sheets_format.cell_format.get("wrapStrategy") == WrapStrategy.WRAP
+            ):
+                self.resize_dimensions(
+                    spreadsheet_id=spreadsheet_id,
+                    sheet_name=sheet_slice.sheet_name,
+                    sizes=sheets_format.row_sizes,
+                    dimension=SheetsDimension.rows,
+                )
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
@@ -1175,10 +1223,26 @@ class Sheets(DriveBase):
                 )
             ]
         }
+        self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
-        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+        return None
 
-    def format_values(self, spreadsheet_id: str, range_name: SheetsRange) -> CellFormat:
+    def get_format(self, spreadsheet_id: str, range_name: SheetsRange):
+        """Gets the formatting of a range of cells in a spreadsheet.
+
+        A SheetsFormat object contains formatting and dimension information:
+            -  column_sizes: a list of column sizes
+            -  row_sizes: a list of row sizes
+            -  cell_format: a CellFormat object containing formatting information
+
+        This function works bidirectionally with `format`.
+
+        See "CellFormat" in the Sheets API for more details.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to get.
+            range_name (str): The range to get formatting from."""
+
         sheet_slice = to_sheet_slice(range_name)
 
         response = self.get(
@@ -1187,6 +1251,22 @@ class Sheets(DriveBase):
             include_grid_data=True,
             ranges=range_name,
         )
+
+        column_metadata = response["data"][0]["columnMetadata"]
+        row_metadata = response["data"][0]["rowMetadata"]
+
+        column_sizes = [metadata["pixelSize"] for metadata in column_metadata]
+        row_sizes = [metadata["pixelSize"] for metadata in row_metadata]
+
+        data = response["data"][0]
+
+        # Formatting might be missing if the sheet is empty
+        if "rowData" not in data:
+            return SheetsFormat(
+                cell_format=None,
+                column_sizes=column_sizes,
+                row_sizes=row_sizes,
+            )
 
         cell_format: CellFormat = response["data"][0]["rowData"][0]["values"][0][
             "effectiveFormat"
@@ -1201,7 +1281,7 @@ class Sheets(DriveBase):
         text_direction = cell_format.get("textDirection")
         hyperlink_display_type = cell_format.get("hyperlinkDisplayType")
 
-        return self._create_cell_format(
+        cell_format = self._create_cell_format(
             bold=text_format.get("bold"),
             italic=text_format.get("italic"),
             underline=text_format.get("underline"),
@@ -1226,6 +1306,12 @@ class Sheets(DriveBase):
             hyperlink_display_type=HyperlinkDisplayType(hyperlink_display_type)
             if hyperlink_display_type is not None
             else None,
+        )
+
+        return SheetsFormat(
+            cell_format=cell_format,
+            column_sizes=column_sizes,
+            row_sizes=row_sizes,
         )
 
     @staticmethod
@@ -1321,52 +1407,66 @@ class Sheets(DriveBase):
         return data
 
     @staticmethod
-    def _resize_columns(sheet: Sheet, widths: int | list[int] | None = None) -> list:
+    def _resize_dimension(
+        sheet: Sheet,
+        sizes: int | list[int] | None = None,
+        dimension: SheetsDimension = SheetsDimension.columns,
+    ) -> list:
         sheet_id = sheet["properties"]["sheetId"]
-        num_columns = sheet["properties"]["gridProperties"]["columnCount"]
+        grid_properties = sheet["properties"]["gridProperties"]
+        count = (
+            grid_properties["columnCount"]
+            if dimension == SheetsDimension.columns
+            else grid_properties["rowCount"]
+        )
 
         make_range = lambda i: {
             "sheetId": sheet_id,
-            "dimension": "COLUMNS",
+            "dimension": dimension.value,
             "startIndex": i,
             "endIndex": i + 1,
         }
 
-        if widths is None:
+        if sizes is None:
             return [
                 {
                     "autoResizeDimensions": {
                         "dimensions": make_range(i),
                     }
                 }
-                for i in range(num_columns)
+                for i in range(count)
             ]
 
-        if isinstance(widths, int):
-            widths = [widths] * num_columns
+        if isinstance(sizes, int):
+            sizes = [sizes] * count
+
+        if not len(sizes):
+            return []
+
         return [
             {
                 "updateDimensionProperties": {
                     "range": make_range(i),
-                    "properties": {"pixelSize": widths[i]},
+                    "properties": {"pixelSize": sizes[i]},
                     "fields": "pixelSize",
                 }
             }
-            for i in range(num_columns)
+            for i in range(min(len(sizes), count))
         ]
 
-    def resize_columns(
+    def resize_dimensions(
         self,
         spreadsheet_id: str,
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
-        width: int | None = 100,
+        sizes: list[int] | int | None = 100,
+        dimension: SheetsDimension = SheetsDimension.columns,
     ):
         """Resizes the columns of a sheet.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
             sheet_name (str): The name of the sheet to update.
-            width (int, optional): The width to set the columns to. Defaults to 100. If None, will auto-resize.
+            size (int, optional): The size to set the columns to. Defaults to 100. If None, will auto-resize.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
@@ -1376,7 +1476,11 @@ class Sheets(DriveBase):
 
         def resize():
             body: BatchUpdateSpreadsheetRequest = {
-                "requests": self._resize_columns(sheet, width)  # type: ignore
+                "requests": self._resize_dimension(
+                    sheet=sheet,
+                    sizes=sizes,
+                    dimension=dimension,
+                )
             }
             return (
                 self.service.spreadsheets()
@@ -1384,7 +1488,7 @@ class Sheets(DriveBase):
                 .execute()
             )
 
-        if width is None:
+        if sizes is None and dimension == SheetsDimension.columns:
             header = self._header(spreadsheet_id, sheet_name)
             res = self.append(spreadsheet_id, sheet_name, [header])
             updated_range = res["updates"]["updatedRange"]

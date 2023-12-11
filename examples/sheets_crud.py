@@ -121,17 +121,28 @@ sheets.append(
 )
 
 
+sheemt = sheets.get(
+    spreadsheet_id=SHEET_URL,
+    name="Sheet1",
+    include_grid_data=True,
+    ranges=Sheet1[1, ...]
+)
+
+# dump to a json file:
+with open("sheet.json", "w") as f:
+    json.dump(sheemt, f, indent=4)
+
 sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
 
-tmp = sheets.format_values(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
+tmp = sheets.get_format(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
 
 # change the font to times new roman:
-tmp["textFormat"]["fontFamily"] = "Times New Roman"
+tmp.cell_format["textFormat"]["fontFamily"] = "Times New Roman"
 
 # change the font size to 24:
-tmp["textFormat"]["fontSize"] = 24
+tmp.cell_format["textFormat"]["fontSize"] = 24
 
-sheets.format(SHEET_URL, Sheet1[1, ...], cell_format=tmp)
+sheets.format(SHEET_URL, Sheet1[1, ...], sheets_format=tmp)
 
 
-sheets.resize_columns(SHEET_URL, Sheet1.sheet_name, width=None)
+sheets.resize_dimensions(SHEET_URL, Sheet1.sheet_name, sizes=None)
