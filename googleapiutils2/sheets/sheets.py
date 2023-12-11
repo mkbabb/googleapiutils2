@@ -29,21 +29,20 @@ from .misc import (
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
     VERSION,
+    HorizontalAlignment,
+    HyperlinkDisplayType,
     InsertDataOption,
+    SheetsDimension,
+    SheetsFormat,
     SheetsValues,
+    TextDirection,
     ValueInputOption,
     ValueRenderOption,
-    HorizontalAlignment,
     VerticalAlignment,
     WrapStrategy,
-    HyperlinkDisplayType,
-    TextDirection,
-    SheetsFormat,
-    SheetsDimension,
 )
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import File
     from googleapiclient._apis.sheets.v4.resources import (
         AddSheetRequest,
         AppendValuesResponse,
@@ -65,9 +64,9 @@ if TYPE_CHECKING:
         Spreadsheet,
         SpreadsheetProperties,
         TextFormat,
+        UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
-        UpdateDimensionPropertiesRequest,
     )
 
 
@@ -956,7 +955,7 @@ class Sheets(DriveBase):
             spreadsheet_id (str): The spreadsheet to update.
             sheet_name (str): The name of the sheet to reset.
         """
-        # first clear all of the values, and set the bounds of the sheet to have 26 columns, and 1000 rows
+
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
@@ -972,7 +971,7 @@ class Sheets(DriveBase):
 
         self.clear(spreadsheet_id, sheet_name)
 
-        # Reset the sheet to the default shape
+        # reset the sheet to the default shape
         self.resize(
             spreadsheet_id,
             sheet_name=sheet_name,
@@ -980,7 +979,7 @@ class Sheets(DriveBase):
             cols=DEFAULT_SHEET_SHAPE[1],
         )
 
-        # Reset the columns to the default width
+        # reset the columns to the default width
         self.resize_dimensions(
             spreadsheet_id, sheet_name=sheet_name, dimension=SheetsDimension.columns
         )
@@ -1330,8 +1329,6 @@ class Sheets(DriveBase):
         All string values that are empty will be converted to pd.NA,
         and the data types of the columns will be inferred.
 
-        If the sheet is empty, None will be returned.
-
         Args:
             values (ValueRange): The values to convert.
             columns (list[str], optional): The column names to use. Defaults to None.
@@ -1358,6 +1355,7 @@ class Sheets(DriveBase):
             return pd.DataFrame()
 
         columns = columns if columns is not None else []
+        # if we have extant columns, append to them instead of replacing them
         columns += rows[0]
 
         rows = rows[1:] if len(rows) > 1 else []
@@ -1389,6 +1387,8 @@ class Sheets(DriveBase):
         df: pd.DataFrame, as_dict: bool = True
     ) -> list[list[Any]] | list[dict[Hashable, Any]]:
         """Converts a DataFrame to a list of lists to be used with sheets.update() & c.
+        If `as_dict` is True, the list of lists will be converted to a list of dicts,
+        which is useful for aligning the columns with the header.
 
         Args:
             df (pd.DataFrame): The DataFrame to convert.
@@ -1461,12 +1461,15 @@ class Sheets(DriveBase):
         sizes: list[int] | int | None = 100,
         dimension: SheetsDimension = SheetsDimension.columns,
     ):
-        """Resizes the columns of a sheet.
+        """Resizes the dimensions of a sheet.
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (str): The name of the sheet to update.
-            size (int, optional): The size to set the columns to. Defaults to 100. If None, will auto-resize.
+            sheet_name (str): The name of the sheet to resize.
+            sizes (list[int] | int | None, optional): The sizes to resize to.
+                If None, the columns will be auto resized. Defaults to 100.
+                If an int, all columns will be resized to that size.
+            dimension (SheetsDimension, optional): The dimension to resize. Defaults to SheetsDimension.columns.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
