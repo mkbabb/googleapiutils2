@@ -285,7 +285,7 @@ def retry(
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    logger.error(f"Retrying {func.__name__}...")
+                    logger.error(f"Retrying {func.__name__}; {i} / {retries}... {e}")
 
                     if on_exception(e) == False:
                         logger.error(e)
@@ -345,7 +345,7 @@ class DriveBase:
         atexit.register(self._request_queue.join)
 
     @retry(
-        retries=10, delay=5, exponential_backoff=True, on_exception=on_http_exception
+        retries=10, delay=15, exponential_backoff=True, on_exception=on_http_exception
     )
     def execute(self, request: googleapiclient.http.HttpRequest):
         if self.execute_time == 0:
