@@ -144,16 +144,18 @@ class Sheets(DriveBase):
             **kwargs: Additional arguments to pass to self.sheets.batchUpdate.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.spreadsheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body, **kwargs
-        ).execute()
+        return self.execute(
+            self.spreadsheets.batchUpdate(
+                spreadsheetId=spreadsheet_id, body=body, **kwargs
+            )
+        )
 
     def create(
         self,
         title: str,
         sheet_names: list[str] | None = None,
         body: Spreadsheet | None = None,  # type: ignore
-    ):
+    ) -> Spreadsheet:
         body: Spreadsheet = nested_defaultdict(body if body else {})  # type: ignore
         sheet_names = sheet_names if sheet_names is not None else [DEFAULT_SHEET_NAME]
 
@@ -163,7 +165,7 @@ class Sheets(DriveBase):
 
         body["sheets"] = list(body["sheets"].values())  # type: ignore
 
-        return self.spreadsheets.create(body=body).execute()  # type: ignore
+        return self.execute(self.spreadsheets.create(body=body))  # type: ignore
 
     def copy_to(
         self,
@@ -171,7 +173,7 @@ class Sheets(DriveBase):
         to_spreadsheet_id: str,
         from_sheet_id: int | None = None,
         from_sheet_name: str | None = None,
-    ):
+    ) -> Sheet:
         """Copy a sheet from one spreadsheet to another.
 
         Args:
@@ -194,14 +196,12 @@ class Sheets(DriveBase):
             "destinationSpreadsheetId": to_spreadsheet_id
         }
 
-        return (
-            self.spreadsheets.sheets()
-            .copyTo(  # type: ignore
+        return self.execute(
+            self.spreadsheets.sheets().copyTo(  # type: ignore
                 spreadsheetId=from_spreadsheet_id,
                 sheetId=from_sheet_id,  # type: ignore
                 body=body,
             )
-            .execute()
         )
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("header"))
@@ -241,11 +241,13 @@ class Sheets(DriveBase):
         ranges = ranges if isinstance(ranges, list) else [ranges]
         ranges = [str(range_name) for range_name in ranges]
 
-        return self.spreadsheets.get(
-            spreadsheetId=spreadsheet_id,
-            includeGridData=include_grid_data,
-            ranges=ranges,  # type: ignore
-        ).execute()
+        return self.execute(
+            self.spreadsheets.get(
+                spreadsheetId=spreadsheet_id,
+                includeGridData=include_grid_data,
+                ranges=ranges,  # type: ignore
+            )
+        )
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("sheet_id"))
     def _get_sheet_id(
@@ -474,7 +476,7 @@ class Sheets(DriveBase):
         range_name: SheetsRange = DEFAULT_SHEET_NAME,
         value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
         **kwargs: Any,
-    ):
+    ) -> ValueRange:
         """Get values from a spreadsheet within a range.
 
         Args:
@@ -485,15 +487,13 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
 
-        return (
-            self.spreadsheets.values()
-            .get(
+        return self.execute(
+            self.spreadsheets.values().get(
                 spreadsheetId=spreadsheet_id,
                 range=str(sheet_slice),
                 valueRenderOption=value_render_option.value,
                 **kwargs,
             )
-            .execute()
         )
 
     def _dict_to_values_align_columns(
@@ -624,7 +624,7 @@ class Sheets(DriveBase):
         value_input_option: ValueInputOption = ValueInputOption.raw,
         align_columns: bool = True,
         ensure_shape: bool = False,
-    ):
+    ) -> UpdateValuesResponse:
         """Updates a range of values in a spreadsheet.
 
         If `values` is a list of dicts, the keys of the first dict will be used as the header row.
@@ -652,15 +652,13 @@ class Sheets(DriveBase):
             align_columns=align_columns,
         )
 
-        return (
-            self.spreadsheets.values()
-            .update(
+        return self.execute(
+            self.spreadsheets.values().update(
                 spreadsheetId=spreadsheet_id,
                 range=str(sheet_slice),
                 body={"values": values},  # type: ignore
                 valueInputOption=value_input_option.value,
             )
-            .execute()
         )
 
     def _batch_update(
@@ -670,7 +668,7 @@ class Sheets(DriveBase):
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
         ensure_shape: bool = False,
-    ):
+    ) -> BatchUpdateValuesResponse:
         """Internal method for batch updating values. Use `batch_update` instead."""
         if ensure_shape:
             self._ensure_sheet_shape(spreadsheet_id, list(data.keys()))
@@ -692,13 +690,11 @@ class Sheets(DriveBase):
             "valueInputOption": value_input_option.value,
             "data": new_data,
         }
-        return (
-            self.spreadsheets.values()
-            .batchUpdate(
+        return self.execute(
+            self.spreadsheets.values().batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body,
             )
-            .execute()
         )
 
     def batch_update(
@@ -781,7 +777,7 @@ class Sheets(DriveBase):
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-    ):
+    ) -> AppendValuesResponse:
         """Appends values to a spreadsheet. Like `update`, but searches for the next available range to append to.
 
         The next available range is determined by the last **cleared/deleted** row and column set.
@@ -812,16 +808,14 @@ class Sheets(DriveBase):
             )
         }
 
-        return (
-            self.spreadsheets.values()
-            .append(
+        return self.execute(
+            self.spreadsheets.values().append(
                 spreadsheetId=spreadsheet_id,
                 range=str(sheet_slice),
                 body=body,
                 insertDataOption=insert_data_option.value,
                 valueInputOption=value_input_option.value,
             )
-            .execute()
         )
 
     def reset_append(
@@ -856,7 +850,7 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         range_name: SheetsRange = DEFAULT_SHEET_NAME,
-    ):
+    ) -> ClearValuesResponse:
         """Clears a range of values in a spreadsheet.
 
         Args:
@@ -866,10 +860,10 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
 
-        res = (
-            self.spreadsheets.values()
-            .clear(spreadsheetId=spreadsheet_id, range=str(sheet_slice))
-            .execute()
+        return self.execute(
+            self.spreadsheets.values().clear(
+                spreadsheetId=spreadsheet_id, range=str(sheet_slice)
+            )
         )
 
     def resize(
@@ -1464,7 +1458,7 @@ class Sheets(DriveBase):
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
         sizes: list[int] | int | None = 100,
         dimension: SheetsDimension = SheetsDimension.columns,
-    ):
+    ) -> BatchUpdateSpreadsheetResponse:
         """Resizes the dimensions of a sheet.
 
         Args:
@@ -1489,10 +1483,10 @@ class Sheets(DriveBase):
                     dimension=dimension,
                 )
             }
-            return (
-                self.service.spreadsheets()
-                .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
-                .execute()
+            return self.execute(
+                self.service.spreadsheets().batchUpdate(
+                    spreadsheetId=spreadsheet_id, body=body
+                )
             )
 
         if sizes is None and dimension == SheetsDimension.columns:
@@ -1505,6 +1499,6 @@ class Sheets(DriveBase):
             res = resize()
 
             self.clear(spreadsheet_id, updated_range)
-            return res
+            return res # type: ignore
         else:
             return resize()

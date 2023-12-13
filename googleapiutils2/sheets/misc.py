@@ -9,9 +9,7 @@ from typing import *
 from ..utils import to_base
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.sheets.v4.resources import (
-        CellFormat,
-    )
+    from googleapiclient._apis.sheets.v4.resources import CellFormat
 
 VERSION = "v4"
 

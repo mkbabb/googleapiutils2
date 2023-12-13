@@ -13,6 +13,7 @@ from googleapiclient import discovery
 
 from ..utils import (
     DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    MIME_EXTENSIONS,
     THROTTLE_TIME,
     DriveBase,
     FilePath,
@@ -22,7 +23,6 @@ from ..utils import (
     parse_file_id,
     q_escape,
     validate_ext_mime_type,
-    MIME_EXTENSIONS,
 )
 from .misc import (
     DEFAULT_FIELDS,

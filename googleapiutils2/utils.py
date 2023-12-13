@@ -29,7 +29,10 @@ if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import Color, Spreadsheet
 
 
+EXECUTE_TIME = 0
+
 THROTTLE_TIME = 30
+
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -207,17 +210,30 @@ class DriveBase:
     creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
         - ~/auth/credentials.json
         - env var: GOOGLE_API_CREDENTIALS
+    execute_time (float, optional): The time to wait between calls to execute. Defaults to None.
     throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
     """
 
-    def __init__(self, creds: Credentials | None, throttle_time: float = THROTTLE_TIME):
+    def __init__(
+        self,
+        creds: Credentials | None,
+        execute_time: float = EXECUTE_TIME,
+        throttle_time: float = THROTTLE_TIME,
+    ):
         # Google Drive API service creds
         self.creds = creds if creds is not None else get_oauth2_creds()
 
         # throttle time in seconds; used in throttled_fn
         self.throttle_time = throttle_time
+
+        # time to wait between calls to execute
+        self.execute_time = execute_time
+
         # used to throttle calls to throttled_fn
-        self._prev_time: Optional[float] = None
+        self._prev_time_throttle: Optional[float] = None
+
+        # used to throttle calls to execute
+        self._prev_time_execute: Optional[float] = None
 
         # TTL cache for various functions; used by way of "@cachedmethod(operator.attrgetter("_cache"))"
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
@@ -235,7 +251,19 @@ class DriveBase:
 
         atexit.register(self._request_queue.join)
 
-    def execute(self, request: googleapiclient.http.HttpRequest) -> Any:
+    def execute(self, request: googleapiclient.http.HttpRequest):
+        curr_time = time.perf_counter()
+        dt = (
+            curr_time - self._prev_time_execute
+            if self._prev_time_execute is not None
+            else self.execute_time
+        )
+        time.sleep(dt)
+        self._prev_time_execute = curr_time
+
+        return request.execute()
+
+    def execute_queue(self, request: googleapiclient.http.HttpRequest) -> Any:
         self._request_queue.put(request)
         return None
 
@@ -257,15 +285,15 @@ class DriveBase:
 
         curr_time = time.perf_counter()
         dt = (
-            curr_time - self._prev_time
-            if self._prev_time is not None
+            curr_time - self._prev_time_throttle
+            if self._prev_time_throttle is not None
             else self.throttle_time
         )
 
         if not (dt >= self.throttle_time and can_call):
             return None
 
-        self._prev_time = curr_time
+        self._prev_time_throttle = curr_time
 
         return on_final_call()
 
