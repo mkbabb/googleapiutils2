@@ -345,7 +345,7 @@ class DriveBase:
         atexit.register(self._request_queue.join)
 
     @retry(
-        retries=10, delay=15, exponential_backoff=True, on_exception=on_http_exception
+        retries=10, delay=30, exponential_backoff=False, on_exception=on_http_exception
     )
     def execute(self, request: googleapiclient.http.HttpRequest):
         if self.execute_time == 0:
