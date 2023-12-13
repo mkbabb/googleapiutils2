@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import pickle
@@ -9,6 +10,8 @@ from collections import defaultdict
 from enum import Enum
 from functools import cache
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 from typing import *
 
 import googleapiclient.http
@@ -18,9 +21,6 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from threading import Thread
-from queue import Queue
-import atexit
 
 FilePath = str | Path
 
@@ -222,22 +222,17 @@ class DriveBase:
     ):
         # Google Drive API service creds
         self.creds = creds if creds is not None else get_oauth2_creds()
-
         # throttle time in seconds; used in throttled_fn
         self.throttle_time = throttle_time
-
         # time to wait between calls to execute
         self.execute_time = execute_time
-
         # used to throttle calls to throttled_fn
         self._prev_time_throttle: Optional[float] = None
-
         # used to throttle calls to execute
         self._prev_time_execute: Optional[float] = None
-
         # TTL cache for various functions; used by way of "@cachedmethod(operator.attrgetter("_cache"))"
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
-
+        # queue for requests to execute
         self._request_queue: Queue[googleapiclient.http.HttpRequest] = Queue()
 
         def _worker():
@@ -252,16 +247,22 @@ class DriveBase:
         atexit.register(self._request_queue.join)
 
     def execute(self, request: googleapiclient.http.HttpRequest):
+        if self.execute_time <= 0:
+            return request.execute()
+
         curr_time = time.perf_counter()
         dt = (
             curr_time - self._prev_time_execute
             if self._prev_time_execute is not None
-            else self.execute_time
+            else 0
         )
-        time.sleep(dt)
+        if dt < self.execute_time:
+            time.sleep(dt)
+
+        res = request.execute()
         self._prev_time_execute = curr_time
 
-        return request.execute()
+        return res
 
     def execute_queue(self, request: googleapiclient.http.HttpRequest) -> Any:
         self._request_queue.put(request)
