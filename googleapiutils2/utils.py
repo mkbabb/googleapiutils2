@@ -285,7 +285,7 @@ def retry(
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    logger.error(f"Retrying {func.__name__}; {i} / {retries}... {e}")
+                    logger.error(f"Retrying {func.__name__}; {i + 1} / {retries}...")
 
                     if on_exception(e) == False:
                         logger.error(e)
