@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import atexit
+import functools
+import http
 import json
 import os
 import pickle
+import random
 import time
 import urllib.parse
 from collections import defaultdict
@@ -21,8 +24,12 @@ from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from loguru import logger
 
 FilePath = str | Path
+
+T = TypeVar("T")
+P = ParamSpec("P")
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import File
@@ -205,6 +212,97 @@ def export_mime_type(
     return t_mime_type, t_mime_type.name
 
 
+class GoogleAPIException(Exception):
+    pass
+
+
+class InvalidRequestError(GoogleAPIException):
+    pass
+
+
+class OverQueryLimitError(GoogleAPIException):
+    pass
+
+
+class RequestDeniedError(GoogleAPIException):
+    pass
+
+
+class NotFoundError(GoogleAPIException):
+    pass
+
+
+class UnknownError(GoogleAPIException):
+    pass
+
+
+def raise_for_status(status: str) -> None:
+    if status == "OK":
+        return
+
+    if status == "INVALID_REQUEST":
+        raise InvalidRequestError("The request was invalid.")
+    elif status == "OVER_QUERY_LIMIT":
+        raise OverQueryLimitError("You are over your query limit.")
+    elif status == "REQUEST_DENIED":
+        raise RequestDeniedError("Your request was denied.")
+    elif status == "NOT_FOUND":
+        raise NotFoundError("The requested resource was not found.")
+    elif status == "UNKNOWN_ERROR":
+        raise UnknownError("An unknown error occurred.")
+    else:
+        raise GoogleAPIException("An unexpected error occurred.")
+
+
+def on_http_exception(e: Exception) -> bool:
+    if isinstance(e, googleapiclient.errors.HttpError):
+        status = e.resp.status
+
+        return status == http.HTTPStatus.TOO_MANY_REQUESTS
+
+    return False
+
+
+def retry(
+    retries: int = 10,
+    delay: int = 5,
+    exponential_backoff: bool = False,
+    on_exception: Callable[[Exception], bool | None] | None = None,
+):
+    """Retry a function up to "retries" times, with a delay of "delay" seconds.
+    If "exponential_backoff" is True, the delay will double each time,
+    exponentially increasing."""
+
+    if on_exception is None:
+        on_exception = lambda _: True
+
+    def inner(func: Callable[P, T]) -> Callable[P, T]:
+        @functools.wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            e = Exception()
+
+            for i in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    logger.error(f"Retrying {func.__name__}...")
+
+                    if on_exception(e) == False:
+                        logger.error(e)
+
+                        raise e
+
+                sleep = random.uniform(0, 1)
+                sleep += delay if not exponential_backoff else delay * 2**i
+                time.sleep(sleep)
+            else:
+                raise e  # type: ignore
+
+        return wrapper
+
+    return inner
+
+
 class DriveBase:
     """Args:
     creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
@@ -246,8 +344,11 @@ class DriveBase:
 
         atexit.register(self._request_queue.join)
 
+    @retry(
+        retries=10, delay=5, exponential_backoff=True, on_exception=on_http_exception
+    )
     def execute(self, request: googleapiclient.http.HttpRequest):
-        if self.execute_time <= 0:
+        if self.execute_time == 0:
             return request.execute()
 
         curr_time = time.perf_counter()

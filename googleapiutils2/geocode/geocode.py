@@ -4,32 +4,8 @@ from typing import *
 
 import requests
 
-from ..utils import update_url_params
+from ..utils import raise_for_status, update_url_params
 from .misc import GeocodeResult
-
-
-class GeocodeError(Exception):
-    pass
-
-
-class GeocodeInvalidRequestError(GeocodeError):
-    pass
-
-
-class GeocodeOverQueryLimitError(GeocodeError):
-    pass
-
-
-class GeocodeRequestDeniedError(GeocodeError):
-    pass
-
-
-class GeocodeNotFoundError(GeocodeError):
-    pass
-
-
-class GeocodeUnknownError(GeocodeError):
-    pass
 
 
 class Geocode:
@@ -38,26 +14,12 @@ class Geocode:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def _raise_error(self, status: str):
-        if status == "INVALID_REQUEST":
-            raise GeocodeInvalidRequestError("The request was invalid.")
-        elif status == "OVER_QUERY_LIMIT":
-            raise GeocodeOverQueryLimitError("You are over your query limit.")
-        elif status == "REQUEST_DENIED":
-            raise GeocodeRequestDeniedError("Your request was denied.")
-        elif status == "NOT_FOUND":
-            raise GeocodeNotFoundError("The requested resource was not found.")
-        elif status == "UNKNOWN_ERROR":
-            raise GeocodeUnknownError("An unknown error occurred.")
-        else:
-            raise GeocodeError("An unexpected error occurred.")
-
     def _decode_json(self, r: requests.Response) -> list[GeocodeResult]:
         data = r.json()
+
         status = data.get("status")
 
-        if status != "OK":
-            self._raise_error(status)
+        raise_for_status(status)
 
         return data.get("results", None)
 
