@@ -62,17 +62,17 @@ class SheetsValueRange:
         return format_range_name(sheet_name, self.range_name)
 
     def header(self) -> list[str]:
-        return self.sheets._header(
+        return self.sheets.header(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
         )
 
     def shape(self) -> tuple[int, int]:
-        return self.sheets._shape(
+        return self.sheets.shape(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
         )
 
     def sheet_id(self) -> int:
-        return self.sheets._id(
+        return self.sheets.id(
             spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
         )
 

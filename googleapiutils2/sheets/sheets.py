@@ -18,6 +18,7 @@ from googleapiutils2.sheets.sheets_slice import (
 )
 
 from ..utils import (
+    EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
     hex_to_rgb,
@@ -77,13 +78,19 @@ class Sheets(DriveBase):
         creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
             - ~/auth/credentials.json
             - env var: GOOGLE_API_CREDENTIALS
+        execute_time (float, optional): The time to wait between requests. Defaults to EXECUTE_TIME (0.1).
         throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
     """
 
     def __init__(
-        self, creds: Credentials | None = None, throttle_time: float = THROTTLE_TIME
+        self,
+        creds: Credentials | None = None,
+        execute_time: float = EXECUTE_TIME,
+        throttle_time: float = THROTTLE_TIME,
     ):
-        super().__init__(creds=creds, throttle_time=throttle_time)
+        super().__init__(
+            creds=creds, execute_time=execute_time, throttle_time=throttle_time
+        )
 
         self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
@@ -205,7 +212,7 @@ class Sheets(DriveBase):
         )
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("header"))
-    def _header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+    def header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
@@ -213,7 +220,7 @@ class Sheets(DriveBase):
         )[0]
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("shape"))
-    def _shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+    def shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         properties = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)[
             "properties"
@@ -225,7 +232,7 @@ class Sheets(DriveBase):
         return shape
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("id"))
-    def _id(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME) -> int:
+    def id(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME) -> int:
         sheet = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)
         return sheet["properties"]["sheetId"]
 
@@ -519,7 +526,7 @@ class Sheets(DriveBase):
 
         sheet_name = sheet_slice.sheet_name
 
-        header = self._header(spreadsheet_id, sheet_name)
+        header = self.header(spreadsheet_id, sheet_name)
         header = pd.Index(header).astype(str)
 
         frame = pd.DataFrame(rows)
@@ -590,7 +597,7 @@ class Sheets(DriveBase):
         sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
 
         shapes = {
-            sheet_name: self._shape(spreadsheet_id, sheet_name)
+            sheet_name: self.shape(spreadsheet_id, sheet_name)
             for sheet_name in sheet_names
         }
         sheet_slices = [
@@ -1175,8 +1182,8 @@ class Sheets(DriveBase):
             cell_format=sheets_format.cell_format,
         )
 
-        sheet_id = self._id(spreadsheet_id, sheet_slice.sheet_name)
-        shape = self._shape(spreadsheet_id, sheet_slice.sheet_name)
+        sheet_id = self.id(spreadsheet_id, sheet_slice.sheet_name)
+        shape = self.shape(spreadsheet_id, sheet_slice.sheet_name)
 
         sheet_slice = sheet_slice.with_shape(shape)
         rows, cols = sheet_slice.rows, sheet_slice.columns
@@ -1492,13 +1499,13 @@ class Sheets(DriveBase):
         if sizes is None and dimension == SheetsDimension.columns:
             # This is a hack to ameliorate the fact that autoResizeDimensions
             # doesn't include the header in its calculations.
-            header = self._header(spreadsheet_id, sheet_name)
+            header = self.header(spreadsheet_id, sheet_name)
             res = self.append(spreadsheet_id, sheet_name, [header])
             updated_range = res["updates"]["updatedRange"]
 
             res = resize()
 
             self.clear(spreadsheet_id, updated_range)
-            return res # type: ignore
+            return res  # type: ignore
         else:
             return resize()

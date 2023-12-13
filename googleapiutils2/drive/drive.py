@@ -13,6 +13,7 @@ from googleapiclient import discovery
 
 from ..utils import (
     DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    EXECUTE_TIME,
     MIME_EXTENSIONS,
     THROTTLE_TIME,
     DriveBase,
@@ -51,16 +52,21 @@ class Drive(DriveBase):
         creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
             - ~/auth/credentials.json
             - env var: GOOGLE_API_CREDENTIALS
+        execute_time (float, optional): The time to wait between requests. Defaults to EXECUTE_TIME (0.1).
         throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
+        team_drives (bool, optional): Whether to include files from Team Drives. Defaults to True.
     """
 
     def __init__(
         self,
         creds: Credentials | None = None,
+        execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
         team_drives: bool = True,
     ):
-        super().__init__(creds=creds, throttle_time=throttle_time)
+        super().__init__(
+            creds=creds, execute_time=execute_time, throttle_time=throttle_time
+        )
 
         self.service: DriveResource = discovery.build(
             "drive", VERSION, credentials=self.creds
