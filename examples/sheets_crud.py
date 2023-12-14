@@ -53,10 +53,6 @@ sheets.update(
     values=[[11, 22, 33]],
 )
 
-sheets.reset_append(
-    spreadsheet_id=SHEET_URL,
-    sheet_name=Sheet1.sheet_name,
-)
 
 for _ in range(10):
     values = [list(range(64))]
@@ -125,14 +121,24 @@ sheemt = sheets.get(
     spreadsheet_id=SHEET_URL,
     name="Sheet1",
     include_grid_data=True,
-    ranges=Sheet1[1, ...]
+    ranges=Sheet1[1, ...],
 )
 
 # dump to a json file:
 with open("sheet.json", "w") as f:
     json.dump(sheemt, f, indent=4)
 
-sheets.format(SHEET_URL, Sheet1[2:, ...], bold=True)
+sheets.format(
+    SHEET_URL,
+    [Sheet1[2, ...], Sheet1[3, ...]],
+    bold=True,
+    background_color="#d48686",
+    number_format={
+        # add a pattern to make all numbers 6 chars, padded with 5 0s:
+        "pattern": "0000##",
+        "type": "NUMBER",
+    },
+)
 
 tmp = sheets.get_format(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
 
@@ -141,6 +147,7 @@ tmp.cell_format["textFormat"]["fontFamily"] = "Times New Roman"
 
 # change the font size to 24:
 tmp.cell_format["textFormat"]["fontSize"] = 24
+
 
 sheets.format(SHEET_URL, Sheet1[1, ...], sheets_format=tmp)
 

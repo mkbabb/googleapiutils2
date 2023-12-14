@@ -42,4 +42,5 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
+        NumberFormat,
     )

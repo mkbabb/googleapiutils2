@@ -68,6 +68,7 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
+        NumberFormat,
     )
 
 
@@ -1031,6 +1032,7 @@ class Sheets(DriveBase):
         wrap_strategy: WrapStrategy | None = None,
         text_direction: TextDirection | None = None,
         hyperlink_display_type: HyperlinkDisplayType | None = None,
+        number_format: NumberFormat | None = None,
         cell_format: CellFormat | None = None,
     ) -> CellFormat:
         text_format: TextFormat = {}
@@ -1087,6 +1089,12 @@ class Sheets(DriveBase):
         if hyperlink_display_type is not None:
             cell_format_dict["hyperlinkDisplayType"] = hyperlink_display_type.value
 
+        if number_format is not None:
+            if "type" not in number_format:
+                number_format |= {"type": "NUMBER_FORMAT_TYPE_UNSPECIFIED"}
+
+            cell_format_dict["numberFormat"] = number_format
+
         if cell_format is not None:
             cell_format_dict.update(cell_format)
 
@@ -1110,6 +1118,7 @@ class Sheets(DriveBase):
         wrap_strategy: WrapStrategy | None = None,
         text_direction: TextDirection | None = None,
         hyperlink_display_type: HyperlinkDisplayType | None = None,
+        number_format: NumberFormat | None = None,
         sheets_format: SheetsFormat | None = None,
     ):
         """Formats a range of cells in a spreadsheet.
@@ -1152,6 +1161,7 @@ class Sheets(DriveBase):
             wrap_strategy=wrap_strategy,
             text_direction=text_direction,
             hyperlink_display_type=hyperlink_display_type,
+            number_format=number_format,
             cell_format=sheets_format.cell_format,
         )
 
@@ -1186,14 +1196,14 @@ class Sheets(DriveBase):
                         dimension=SheetsDimension.rows,
                     )
 
-                return self._create_format_body(
-                    sheet_id,
-                    start_row=rows.start,
-                    end_row=rows.stop,
-                    start_col=cols.start,
-                    end_col=cols.stop,
-                    cell_format=cell_format,
-                )
+            return self._create_format_body(
+                sheet_id,
+                start_row=rows.start,
+                end_row=rows.stop,
+                start_col=cols.start,
+                end_col=cols.stop,
+                cell_format=cell_format,
+            )
 
         requests = []
         for range_name in range_names:
