@@ -21,6 +21,7 @@ from ..utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
+    deep_update,
     hex_to_rgb,
     named_methodkey,
     nested_defaultdict,
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         ColorStyle,
         CopySheetToAnotherSpreadsheetRequest,
         DeleteSheetRequest,
+        NumberFormat,
         Padding,
         Request,
         Sheet,
@@ -68,7 +70,6 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
-        NumberFormat,
     )
 
 
@@ -971,6 +972,7 @@ class Sheets(DriveBase):
                 spreadsheet_id=spreadsheet_id,
                 range_names=header_slice,
                 sheets_format=header_fmt,
+                update=False,
             )
         else:
             self._reset_sheet_cache(
@@ -1090,9 +1092,6 @@ class Sheets(DriveBase):
             cell_format_dict["hyperlinkDisplayType"] = hyperlink_display_type.value
 
         if number_format is not None:
-            if "type" not in number_format:
-                number_format |= {"type": "NUMBER_FORMAT_TYPE_UNSPECIFIED"}
-
             cell_format_dict["numberFormat"] = number_format
 
         if cell_format is not None:
@@ -1104,6 +1103,7 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         range_names: SheetsRange | list[SheetsRange],
+        update: bool = True,
         bold: bool | None = None,
         italic: bool | None = None,
         underline: bool | None = None,
@@ -1196,13 +1196,25 @@ class Sheets(DriveBase):
                         dimension=SheetsDimension.rows,
                     )
 
+            t_cell_format = cell_format.copy()  # type: ignore
+
+            if update:
+                t_sheets_format = self.get_format(
+                    spreadsheet_id=spreadsheet_id,
+                    range_name=sheet_slice,
+                )
+                if t_sheets_format.cell_format is not None:
+                    deep_update(t_sheets_format.cell_format, t_cell_format)  # type: ignore
+
+                    t_cell_format = t_sheets_format.cell_format
+
             return self._create_format_body(
                 sheet_id,
                 start_row=rows.start,
                 end_row=rows.stop,
                 start_col=cols.start,
                 end_col=cols.stop,
-                cell_format=cell_format,
+                cell_format=t_cell_format,
             )
 
         requests = []
@@ -1264,9 +1276,16 @@ class Sheets(DriveBase):
                 row_sizes=row_sizes,
             )
 
-        cell_format: CellFormat = response["data"][0]["rowData"][0]["values"][0][
-            "effectiveFormat"
-        ]
+        row_data_values = data["rowData"][0]["values"][0]
+
+        if "effectiveFormat" not in row_data_values:
+            return SheetsFormat(
+                cell_format=None,
+                column_sizes=column_sizes,
+                row_sizes=row_sizes,
+            )
+
+        cell_format: CellFormat = row_data_values["effectiveFormat"]
 
         text_format: TextFormat = cell_format.get("textFormat", {})
         text_color: Color = text_format.get("foregroundColor", {})

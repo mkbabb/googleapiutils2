@@ -131,8 +131,13 @@ with open("sheet.json", "w") as f:
 sheets.format(
     SHEET_URL,
     [Sheet1[2, ...], Sheet1[3, ...]],
-    bold=True,
     background_color="#d48686",
+)
+
+sheets.format(
+    SHEET_URL,
+    [Sheet1[2, ...], Sheet1[3, ...]],
+    bold=True,
     number_format={
         # add a pattern to make all numbers 6 chars, padded with 5 0s:
         "pattern": "0000##",

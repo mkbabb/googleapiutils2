@@ -658,3 +658,12 @@ def nested_defaultdict(
         return existing
     existing = {key: nested_defaultdict(val) for key, val in existing.items()}
     return defaultdict(nested_defaultdict, existing, **kwargs)
+
+
+def deep_update(d: dict, u: dict) -> dict:
+    for k, v in u.items():
+        if isinstance(v, dict):
+            d[k] = deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
