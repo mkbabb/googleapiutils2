@@ -825,34 +825,6 @@ class Sheets(DriveBase):
             )
         )
 
-    def reset_append(
-        self,
-        spreadsheet_id: str,
-        sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
-    ):
-        """Resets the last appended to row in a spreadsheet by clearing it.
-        Leverages append's next available range searching functionality.
-
-        Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (SheetsRange): The sheet to reset the last appended to row in.
-        """
-        # Append dummy data to get the last appened to row:
-        data = self.append(
-            spreadsheet_id=spreadsheet_id,
-            range_name=sheet_name,
-            values=[[""]],
-        )
-
-        # Get the updated range and make a sheet_slice out of it:
-        updated_slice = to_sheet_slice(data["tableRange"])
-        last_row_slice = updated_slice[updated_slice.rows.stop, ...]
-
-        return self.clear(
-            spreadsheet_id=spreadsheet_id,
-            range_name=last_row_slice,
-        )
-
     def clear(
         self,
         spreadsheet_id: str,
@@ -959,7 +931,6 @@ class Sheets(DriveBase):
             resize (bool, optional): Whether to resize the sheet back to its default column and row counts. Defaults to True.
             preserve_header (bool, optional): Whether to preserve the first row of the sheet. Defaults to False.
         """
-
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
@@ -997,7 +968,7 @@ class Sheets(DriveBase):
             )
             self.format(
                 spreadsheet_id=spreadsheet_id,
-                range_name=header_slice,
+                range_names=header_slice,
                 sheets_format=header_fmt,
             )
         else:
@@ -1124,7 +1095,7 @@ class Sheets(DriveBase):
     def format(
         self,
         spreadsheet_id: str,
-        range_name: SheetsRange,
+        range_names: SheetsRange | list[SheetsRange],
         bold: bool | None = None,
         italic: bool | None = None,
         underline: bool | None = None,
@@ -1155,12 +1126,14 @@ class Sheets(DriveBase):
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
-            range_name (str): The range to format.
+            range_names (list[SheetsRange] | SheetsRange): The ranges to update.
             ...
             sheets_format (SheetsFormat, optional): A SheetsFormat object containing the formatting to apply. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = to_sheet_slice(range_name)
+
+        if not isinstance(range_names, list):
+            range_names = [range_names]
 
         sheets_format = sheets_format if sheets_format is not None else SheetsFormat()
 
@@ -1182,42 +1155,38 @@ class Sheets(DriveBase):
             cell_format=sheets_format.cell_format,
         )
 
-        sheet_id = self.id(spreadsheet_id, sheet_slice.sheet_name)
-        shape = self.shape(spreadsheet_id, sheet_slice.sheet_name)
+        def resize_and_create_request(sheet_id: int, sheet_slice: SheetSliceT):
+            rows, cols = sheet_slice.rows, sheet_slice.columns
 
-        sheet_slice = sheet_slice.with_shape(shape)
-        rows, cols = sheet_slice.rows, sheet_slice.columns
+            if sheets_format.column_sizes is not None:
+                # if overflow is enabled, don't resize the columns:
+                if not (
+                    sheets_format.cell_format is not None
+                    and sheets_format.cell_format.get("wrapStrategy")
+                    == WrapStrategy.OVERFLOW_CELL
+                ):
+                    self.resize_dimensions(
+                        spreadsheet_id=spreadsheet_id,
+                        sheet_name=sheet_slice.sheet_name,
+                        sizes=sheets_format.column_sizes,
+                        dimension=SheetsDimension.columns,
+                    )
 
-        if sheets_format.column_sizes is not None:
-            # if overflow is enabled, don't resize the columns:
-            if not (
-                sheets_format.cell_format is not None
-                and sheets_format.cell_format.get("wrapStrategy")
-                == WrapStrategy.OVERFLOW_CELL
-            ):
-                self.resize_dimensions(
-                    spreadsheet_id=spreadsheet_id,
-                    sheet_name=sheet_slice.sheet_name,
-                    sizes=sheets_format.column_sizes,
-                    dimension=SheetsDimension.columns,
-                )
+            if sheets_format.row_sizes is not None:
+                # if wrapping is enabled, don't resize the rows
+                if not (
+                    sheets_format.cell_format is not None
+                    and sheets_format.cell_format.get("wrapStrategy")
+                    == WrapStrategy.WRAP
+                ):
+                    self.resize_dimensions(
+                        spreadsheet_id=spreadsheet_id,
+                        sheet_name=sheet_slice.sheet_name,
+                        sizes=sheets_format.row_sizes,
+                        dimension=SheetsDimension.rows,
+                    )
 
-        if sheets_format.row_sizes is not None:
-            # if wrapping is enabled, don't resize the rows
-            if not (
-                sheets_format.cell_format is not None
-                and sheets_format.cell_format.get("wrapStrategy") == WrapStrategy.WRAP
-            ):
-                self.resize_dimensions(
-                    spreadsheet_id=spreadsheet_id,
-                    sheet_name=sheet_slice.sheet_name,
-                    sizes=sheets_format.row_sizes,
-                    dimension=SheetsDimension.rows,
-                )
-
-        body: BatchUpdateSpreadsheetRequest = {
-            "requests": [
-                self._create_format_body(
+                return self._create_format_body(
                     sheet_id,
                     start_row=rows.start,
                     end_row=rows.stop,
@@ -1225,8 +1194,21 @@ class Sheets(DriveBase):
                     end_col=cols.stop,
                     cell_format=cell_format,
                 )
-            ]
-        }
+
+        requests = []
+        for range_name in range_names:
+            sheet_slice = to_sheet_slice(range_name)
+            sheet_id = self.id(spreadsheet_id, sheet_slice.sheet_name)
+            shape = self.shape(spreadsheet_id, sheet_slice.sheet_name)
+
+            sheet_slice = sheet_slice.with_shape(shape)
+
+            requests.append(
+                resize_and_create_request(sheet_id=sheet_id, sheet_slice=sheet_slice)
+            )
+
+        body: BatchUpdateSpreadsheetRequest = {"requests": requests}
+
         self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
 
         return None
