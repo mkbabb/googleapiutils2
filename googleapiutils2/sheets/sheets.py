@@ -1132,6 +1132,7 @@ class Sheets(DriveBase):
         This function works bidirectionally with `get_format`.
 
         See "CellFormat" in the Sheets API for more details.
+        See the formatting API for more details: https://developers.google.com/sheets/api/guides/formats
 
         Args:
             spreadsheet_id (str): The spreadsheet to update.
