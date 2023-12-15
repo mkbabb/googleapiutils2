@@ -169,16 +169,17 @@ class Drive(DriveBase):
         except FileNotFoundError:
             return None
 
-    def _download(self, file_id: str, filepath: Path, mime_type: GoogleMimeTypes):
+    def _download(self, file: File, filepath: Path, mime_type: GoogleMimeTypes):
         """Internal usage function. Download a file given by "filepath" and its contents.
 
         If the file is a Google Apps file, it's exported to the given mime type (export_media),
         else it's downloaded as-is (get_media)
         If the file is larger than 10MB, it's downloaded in chunks."""
+        file_id = file["id"]
 
         request = (
             self.files.export_media(fileId=file_id, mimeType=mime_type.value)  # type: ignore
-            if "google-apps" in mime_type.value
+            if "google-apps" in file["mimeType"]
             else self.files.get_media(fileId=file_id)  # type: ignore
         )
 
@@ -273,7 +274,7 @@ class Drive(DriveBase):
             return download_large_file(url=link, filepath=filepath)
         else:
             return self._download(
-                file_id=file_id, filepath=filepath, mime_type=mime_type  # type: ignore
+                file=file, filepath=filepath, mime_type=mime_type  # type: ignore
             )
 
     def _download_data(
