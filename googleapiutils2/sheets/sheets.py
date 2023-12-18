@@ -1237,7 +1237,7 @@ class Sheets(DriveBase):
         return None
 
     def get_format(self, spreadsheet_id: str, range_name: SheetsRange):
-        """Gets the formatting of a range of cells in a spreadsheet.
+        """Get the formatting of the **first** cell of a range of cells.
 
         A SheetsFormat object contains formatting and dimension information:
             -  column_sizes: a list of column sizes

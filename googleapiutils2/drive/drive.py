@@ -103,7 +103,7 @@ class Drive(DriveBase):
             kwargs |= self._team_drives_payload(self.team_drives, kind="update")
             file_id = parse_file_id(file_id)
 
-            return self.files.get(fileId=file_id, fields=fields, **kwargs).execute()
+            return self.execute(self.files.get(fileId=file_id, fields=fields, **kwargs))
         elif name is None:
             raise ValueError("Either file_id or name must be specified.")
 
@@ -373,7 +373,7 @@ class Drive(DriveBase):
         if name is not None:
             kwargs["body"]["name"] = name
 
-        return self.files.copy(**kwargs).execute()
+        return self.execute(self.files.copy(**kwargs))
 
     @staticmethod
     def _team_drives_payload(
@@ -426,13 +426,15 @@ class Drive(DriveBase):
             query = "trashed = false"
 
         kwargs = self._team_drives_payload(self.team_drives)
-        list_func = lambda x: self.files.list(
-            q=query,
-            pageToken=x,
-            fields=create_listing_fields(fields),
-            orderBy=order_by,
-            **kwargs,
-        ).execute()
+        list_func = lambda x: self.execute(
+            self.files.list(
+                q=query,
+                pageToken=x,
+                fields=create_listing_fields(fields),
+                orderBy=order_by,
+                **kwargs,
+            )
+        )
 
         for response in list_drive_items(list_func):
             yield from response.get("files", [])  # type: ignore
@@ -498,9 +500,11 @@ class Drive(DriveBase):
                 "parents": parents,
                 "mimeType": GoogleMimeTypes.folder.value,
             }
-            return self.files.create(
-                body=body,
-            ).execute()
+            return self.execute(
+                self.files.create(
+                    body=body,
+                )
+            )
 
         for dirname in filepath.parts[:-1]:
             folder = create_or_get_if_exists(dirname, parents)
@@ -557,8 +561,7 @@ class Drive(DriveBase):
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
-        file = self.files.create(**kwargs).execute()
-        return file
+        return self.execute(self.files.create(**kwargs))
 
     def update(
         self,
@@ -567,7 +570,7 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         body: File | None = None,
         **kwargs: Any,
-    ):
+    ) -> File:
         """Update a file on Google Drive, editing its name (filename, ext), mime type, and/or body (File metadata).
 
         For more information, see: https://developers.google.com/drive/api/v3/reference/files/update
@@ -594,9 +597,9 @@ class Drive(DriveBase):
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
-        return self.files.update(**kwargs).execute()
+        return self.execute(self.files.update(**kwargs))
 
-    def delete(self, file_id: str, trash: bool = True, **kwargs: Any):
+    def delete(self, file_id: str, trash: bool = True, **kwargs: Any) -> File:
         """Delete a file from Google Drive.
         If `trash` is True, the file will be moved to the trash. Otherwise, it will be deleted permanently.
 
@@ -609,12 +612,14 @@ class Drive(DriveBase):
         file_id = parse_file_id(file_id)
 
         if trash:
-            return self.files.update(
-                fileId=file_id,
-                body={"trashed": True},
+            return self.execute(
+                self.files.update(
+                    fileId=file_id,
+                    body={"trashed": True},
+                )
             )
         else:
-            return self.files.delete(fileId=file_id, **kwargs).execute()
+            return self.execute(self.files.delete(fileId=file_id, **kwargs))
 
     def _upload(
         self,
@@ -650,7 +655,7 @@ class Drive(DriveBase):
 
         if update and (file := self.get_if_exists(name=name, parents=parents)):
             kwargs["fileId"] = file["id"]
-            return self.files.update(**kwargs).execute()
+            return self.execute(self.files.update(**kwargs))
 
         if name is not None:
             kwargs["body"]["name"] = name
@@ -659,7 +664,7 @@ class Drive(DriveBase):
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
-        return self.files.create(**kwargs).execute()
+        return self.execute(self.files.create(**kwargs))
 
     def _upload_file(
         self,
@@ -903,7 +908,7 @@ class Drive(DriveBase):
             mime_type (GoogleMimeTypes): The mime type to export to.
         """
         file_id = parse_file_id(file_id)
-        return self.files.export(fileId=file_id, mimeType=mime_type.value).execute()
+        return self.execute(self.files.export(fileId=file_id, mimeType=mime_type.value))
 
     def sync(
         self,
@@ -950,9 +955,9 @@ class Permissions:
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return self.permissions.get(
-            fileId=file_id, permissionId=permission_id, **kwargs
-        ).execute()
+        return self.drive.execute(
+            self.permissions.get(fileId=file_id, permissionId=permission_id, **kwargs)
+        )
 
     def list(
         self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
@@ -964,9 +969,14 @@ class Permissions:
             fields (str, optional): The fields to return. Defaults to DEFAULT_FIELDS.
         """
         file_id = parse_file_id(file_id)
-        list_func = lambda x: self.permissions.list(
-            fileId=file_id, pageToken=x, fields=create_listing_fields(fields), **kwargs
-        ).execute()
+        list_func = lambda x: self.drive.execute(
+            self.permissions.list(
+                fileId=file_id,
+                pageToken=x,
+                fields=create_listing_fields(fields),
+                **kwargs,
+            )
+        )
         for response in list_drive_items(list_func):
             yield from response.get("permissions", [])  # type: ignore
 
@@ -1015,15 +1025,17 @@ class Permissions:
         ):
             return p
 
-        return self.permissions.create(
-            fileId=file_id,
-            body=user_permission,
-            fields=DEFAULT_FIELDS,
-            sendNotificationEmail=sendNotificationEmail,
-            **kwargs,
-        ).execute()
+        return self.drive.execute(
+            self.permissions.create(
+                fileId=file_id,
+                body=user_permission,
+                fields=DEFAULT_FIELDS,
+                sendNotificationEmail=sendNotificationEmail,
+                **kwargs,
+            )
+        )
 
-    def delete(self, file_id: str, permission_id: str, **kwargs: Any):
+    def delete(self, file_id: str, permission_id: str, **kwargs: Any) -> Permission:
         """Deletes a permission from a file.
 
         Args:
@@ -1031,6 +1043,8 @@ class Permissions:
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return self.permissions.delete(
-            fileId=file_id, permissionId=permission_id, **kwargs
-        ).execute()
+        return self.drive.execute(
+            self.permissions.delete(
+                fileId=file_id, permissionId=permission_id, **kwargs
+            )
+        )
