@@ -25,7 +25,7 @@ SheetsValues = list[list[Any]] | list[dict[str | Any, Any]] | list[object]
 
 @dataclass
 class SheetsFormat:
-    cell_format: CellFormat | None = None
+    cell_formats: list[list[CellFormat]] | None = None
     row_sizes: list[int] | None = None
     column_sizes: list[int] | None = None
 

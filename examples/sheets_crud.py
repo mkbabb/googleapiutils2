@@ -145,16 +145,33 @@ sheets.format(
     },
 )
 
-tmp = sheets.get_format(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
-
-# change the font to times new roman:
-tmp.cell_format["textFormat"]["fontFamily"] = "Times New Roman"
-
-# change the font size to 24:
-tmp.cell_format["textFormat"]["fontSize"] = 24
+sheets_format_list = sheets.get_format(
+    spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...]
+)
+sheets_format = sheets_format_list[0]
 
 
-sheets.format(SHEET_URL, Sheet1[1, ...], sheets_format=tmp)
+# sheets.format(
+#     SHEET_URL,
+#     Sheet1[1, 1],
+#     cell_format={
+#         "textFormat": {
+#             "fontSize": 24,
+#         }
+#     },
+# )
+
+
+sheets.format(
+    SHEET_URL,
+    Sheet1[1, ...],
+    cell_format={
+        "textFormat": {
+            "fontFamily": "Times New Roman",
+            "fontSize": 16,
+        }
+    },
+)
 
 
 sheets.resize_dimensions(SHEET_URL, Sheet1.sheet_name, sizes=None)

@@ -70,6 +70,8 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
+        CellData,
+        RowData,
     )
 
 
@@ -258,7 +260,6 @@ class Sheets(DriveBase):
             )
         )
 
-    @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("sheet_id"))
     def _get_sheet_id(
         self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
     ):
@@ -271,21 +272,37 @@ class Sheets(DriveBase):
             name (str, optional): The name of the sheet to get. Defaults to None.
             sheet_id (int, optional): The ID of the sheet to get. Defaults to None.
         """
-
         if sheet_id is not None:
             return sheet_id
-        elif name is not None:
-            name = (
+        elif name is None:
+            raise ValueError("Either the name or the ID of the sheet must be provided.")
+
+        def inner():
+            t_name = (
                 name.strip("'") if name.startswith("'") and name.endswith("'") else name
             )
             spreadsheet = self.get_spreadsheet(spreadsheet_id)
 
             for sheet in spreadsheet["sheets"]:
                 properties = sheet["properties"]
-                if properties["title"] == name:
+                if properties["title"] == t_name:
                     return properties["sheetId"]
 
-        raise ValueError("Either the name or the ID of the sheet must be provided.")
+        key = ("sheet_id", spreadsheet_id, name)
+
+        try:
+            return self._cache[key]
+        except KeyError:
+            pass
+
+        sheet_id = inner()
+
+        if sheet_id is None:
+            raise ValueError(f"Sheet {name} not found in spreadsheet.")
+
+        self._cache[key] = sheet_id
+
+        return sheet_id
 
     def has(
         self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
@@ -454,9 +471,12 @@ class Sheets(DriveBase):
             return
 
         def make_body(name: str):
-            sheet_id = self._reset_sheet_cache(
-                cache_key="sheet_id", spreadsheet_id=spreadsheet_id, name=name
-            )
+            sheet_id = self._get_sheet_id(spreadsheet_id, name=name)
+
+            key = ("sheet_id", spreadsheet_id, name)
+
+            if key in self._cache:
+                self._cache.pop(key)
 
             body: DeleteSheetRequest = {
                 "sheetId": sheet_id,
@@ -971,8 +991,8 @@ class Sheets(DriveBase):
             self.format(
                 spreadsheet_id=spreadsheet_id,
                 range_names=header_slice,
-                sheets_format=header_fmt,
-                update=False,
+                sheets_format=header_fmt[0],
+                update=True,
             )
         else:
             self._reset_sheet_cache(
@@ -1119,6 +1139,7 @@ class Sheets(DriveBase):
         text_direction: TextDirection | None = None,
         hyperlink_display_type: HyperlinkDisplayType | None = None,
         number_format: NumberFormat | None = None,
+        cell_format: CellFormat | None = None,
         sheets_format: SheetsFormat | None = None,
     ):
         """Formats a range of cells in a spreadsheet.
@@ -1163,7 +1184,15 @@ class Sheets(DriveBase):
             text_direction=text_direction,
             hyperlink_display_type=hyperlink_display_type,
             number_format=number_format,
-            cell_format=sheets_format.cell_format,
+            cell_format=sheets_format.cell_formats[0][0]
+            if (
+                sheets_format.cell_formats is not None
+                and len(sheets_format.cell_formats)
+                and len(sheets_format.cell_formats[0])
+            )
+            else cell_format
+            if cell_format is not None
+            else None,
         )
 
         def resize_and_create_request(sheet_id: int, sheet_slice: SheetSliceT):
@@ -1171,11 +1200,7 @@ class Sheets(DriveBase):
 
             if sheets_format.column_sizes is not None:
                 # if overflow is enabled, don't resize the columns:
-                if not (
-                    sheets_format.cell_format is not None
-                    and sheets_format.cell_format.get("wrapStrategy")
-                    == WrapStrategy.OVERFLOW_CELL
-                ):
+                if not (cell_format.get("wrapStrategy") == WrapStrategy.OVERFLOW_CELL):
                     self.resize_dimensions(
                         spreadsheet_id=spreadsheet_id,
                         sheet_name=sheet_slice.sheet_name,
@@ -1185,11 +1210,7 @@ class Sheets(DriveBase):
 
             if sheets_format.row_sizes is not None:
                 # if wrapping is enabled, don't resize the rows
-                if not (
-                    sheets_format.cell_format is not None
-                    and sheets_format.cell_format.get("wrapStrategy")
-                    == WrapStrategy.WRAP
-                ):
+                if not (cell_format.get("wrapStrategy") == WrapStrategy.WRAP):
                     self.resize_dimensions(
                         spreadsheet_id=spreadsheet_id,
                         sheet_name=sheet_slice.sheet_name,
@@ -1197,26 +1218,49 @@ class Sheets(DriveBase):
                         dimension=SheetsDimension.rows,
                     )
 
-            t_cell_format = cell_format.copy()  # type: ignore
-
-            if update:
-                t_sheets_format = self.get_format(
-                    spreadsheet_id=spreadsheet_id,
-                    range_name=sheet_slice,
+            formats = [
+                self._create_format_body(
+                    sheet_id,
+                    start_row=rows.start,
+                    end_row=rows.stop,
+                    start_col=cols.start,
+                    end_col=cols.stop,
+                    cell_format=cell_format,
                 )
-                if t_sheets_format.cell_format is not None:
-                    deep_update(t_sheets_format.cell_format, t_cell_format)  # type: ignore
+            ]
 
-                    t_cell_format = t_sheets_format.cell_format
+            if not update:
+                return formats
 
-            return self._create_format_body(
-                sheet_id,
-                start_row=rows.start,
-                end_row=rows.stop,
-                start_col=cols.start,
-                end_col=cols.stop,
-                cell_format=t_cell_format,
+            t_sheets_formats = self.get_format(
+                spreadsheet_id=spreadsheet_id,
+                range_name=sheet_slice,
             )
+
+            if not len(t_sheets_formats) or t_sheets_formats[0].cell_formats is None:
+                return formats
+
+            for n, row in enumerate(t_sheets_formats[0].cell_formats):
+                for m, format in enumerate(row):
+                    start_row = rows.start + n
+                    start_col = cols.start + m
+
+                    t_cell_format = cell_format.copy()
+
+                    deep_update(format, t_cell_format)  # type: ignore
+
+                    formats.append(
+                        self._create_format_body(
+                            sheet_id,
+                            start_row=start_row,
+                            end_row=start_row + 1,
+                            start_col=start_col,
+                            end_col=start_col + 1,
+                            cell_format=format,
+                        )
+                    )
+
+            return formats
 
         requests = []
         for range_name in range_names:
@@ -1226,7 +1270,7 @@ class Sheets(DriveBase):
 
             sheet_slice = sheet_slice.with_shape(shape)
 
-            requests.append(
+            requests.extend(
                 resize_and_create_request(sheet_id=sheet_id, sheet_slice=sheet_slice)
             )
 
@@ -1236,57 +1280,14 @@ class Sheets(DriveBase):
 
         return None
 
-    def get_format(self, spreadsheet_id: str, range_name: SheetsRange):
-        """Get the formatting of the **first** cell of a range of cells.
+    @staticmethod
+    def _destructure_row_data(cell_data: CellData) -> CellFormat | None:
+        if "effectiveFormat" not in cell_data or "userEnteredFormat" not in cell_data:
+            return None
 
-        A SheetsFormat object contains formatting and dimension information:
-            -  column_sizes: a list of column sizes
-            -  row_sizes: a list of row sizes
-            -  cell_format: a CellFormat object containing formatting information
-
-        This function works bidirectionally with `format`.
-
-        See "CellFormat" in the Sheets API for more details.
-
-        Args:
-            spreadsheet_id (str): The spreadsheet to get.
-            range_name (str): The range to get formatting from."""
-
-        sheet_slice = to_sheet_slice(range_name)
-
-        response = self.get(
-            spreadsheet_id=spreadsheet_id,
-            name=sheet_slice.sheet_name,
-            include_grid_data=True,
-            ranges=range_name,
-        )
-
-        column_metadata = response["data"][0]["columnMetadata"]
-        row_metadata = response["data"][0]["rowMetadata"]
-
-        column_sizes = [metadata["pixelSize"] for metadata in column_metadata]
-        row_sizes = [metadata["pixelSize"] for metadata in row_metadata]
-
-        data = response["data"][0]
-
-        # Formatting might be missing if the sheet is empty
-        if "rowData" not in data:
-            return SheetsFormat(
-                cell_format=None,
-                column_sizes=column_sizes,
-                row_sizes=row_sizes,
-            )
-
-        row_data_values = data["rowData"][0]["values"][0]
-
-        if "effectiveFormat" not in row_data_values:
-            return SheetsFormat(
-                cell_format=None,
-                column_sizes=column_sizes,
-                row_sizes=row_sizes,
-            )
-
-        cell_format: CellFormat = row_data_values["effectiveFormat"]
+        cell_format: CellFormat = cell_data.get(
+            "effectiveFormat", cell_data.get("userEnteredFormat")
+        )  # type: ignore
 
         text_format: TextFormat = cell_format.get("textFormat", {})
         text_color: Color = text_format.get("foregroundColor", {})
@@ -1297,7 +1298,7 @@ class Sheets(DriveBase):
         text_direction = cell_format.get("textDirection")
         hyperlink_display_type = cell_format.get("hyperlinkDisplayType")
 
-        cell_format = self._create_cell_format(
+        cell_format = Sheets._create_cell_format(
             bold=text_format.get("bold"),
             italic=text_format.get("italic"),
             underline=text_format.get("underline"),
@@ -1324,11 +1325,77 @@ class Sheets(DriveBase):
             else None,
         )
 
-        return SheetsFormat(
-            cell_format=cell_format,
-            column_sizes=column_sizes,
-            row_sizes=row_sizes,
+        return cell_format
+
+    def get_format(
+        self, spreadsheet_id: str, range_name: SheetsRange
+    ) -> list[SheetsFormat]:
+        """Get the formatting of the **first** cell of a range of cells.
+
+        A SheetsFormat object contains formatting and dimension information:
+            -  column_sizes: a list of column sizes
+            -  row_sizes: a list of row sizes
+            -  cell_format: a CellFormat object containing formatting information
+
+        This function works bidirectionally with `format`.
+
+        See "CellFormat" in the Sheets API for more details.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to get.
+            range_name (str): The range to get formatting from."""
+        sheet_slice = to_sheet_slice(range_name)
+        response = self.get(
+            spreadsheet_id=spreadsheet_id,
+            name=sheet_slice.sheet_name,
+            include_grid_data=True,
+            ranges=range_name,
         )
+
+        sheets_formats = []
+
+        for data in response["data"]:
+            column_metadata = data["columnMetadata"]
+            row_metadata = data["rowMetadata"]
+
+            column_sizes = [metadata["pixelSize"] for metadata in column_metadata]
+            row_sizes = [metadata["pixelSize"] for metadata in row_metadata]
+
+            # Row data may be missing if the sheet is empty
+            if "rowData" not in data:
+                sheets_formats.append(
+                    SheetsFormat(
+                        cell_formats=None,
+                        column_sizes=column_sizes,
+                        row_sizes=row_sizes,
+                    )
+                )
+                continue
+
+            cell_formats: list[list[CellFormat]] = []
+
+            row_data = data["rowData"]
+            for row in row_data:
+                if "values" not in row:
+                    continue
+
+                row_formats: list[CellFormat] = []
+
+                for value in row["values"]:
+                    if (t_cell_format := self._destructure_row_data(value)) is not None:
+                        row_formats.append(t_cell_format)
+
+                cell_formats.append(row_formats)
+
+            sheets_formats.append(
+                SheetsFormat(
+                    cell_formats=cell_formats if len(cell_formats) else None,
+                    column_sizes=column_sizes,
+                    row_sizes=row_sizes,
+                )
+            )
+
+        return sheets_formats
 
     @staticmethod
     def to_frame(
