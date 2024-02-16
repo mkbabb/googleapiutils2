@@ -110,9 +110,7 @@ class GoogleMimeTypes(Enum):
 
     txt = "text/plain"
     html = "text/html"
-    htm = "text/html"
     xml = "text/xml"
-    tmpl = "text/plain"
 
     doc = "application/msword"
     docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -159,10 +157,9 @@ MIME_EXTENSIONS: dict[GoogleMimeTypes, list[str]] = {
     GoogleMimeTypes.svg: ["svg"],
     GoogleMimeTypes.gif: ["gif"],
     GoogleMimeTypes.bmp: ["bmp"],
-    GoogleMimeTypes.txt: ["txt"],
+    GoogleMimeTypes.txt: ["txt", "md"],
     GoogleMimeTypes.html: ["html", "htm"],
     GoogleMimeTypes.xml: ["xml"],
-    GoogleMimeTypes.tmpl: ["tmpl"],
     GoogleMimeTypes.doc: ["doc"],
     GoogleMimeTypes.docx: ["docx"],
     GoogleMimeTypes.pdf: ["pdf"],
@@ -573,8 +570,8 @@ def get_id_from_url(url: str) -> str:
     path = url_obj.path
     paths = path.split("/")
 
-    get_adjacent = (
-        lambda x: paths[t_ix]
+    get_adjacent = lambda x: (
+        paths[t_ix]
         if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
         else None
     )
