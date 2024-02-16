@@ -152,7 +152,11 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
 
         cleaned_ips = set([str(ip).strip() for ip in ips])
 
-        return {ip: (y := _get_ip_info(ip)) for ip in cleaned_ips if y is not None}
+        ip_infos = {ip: _get_ip_info(ip) for ip in cleaned_ips}
+
+        ip_infos = {k: v for k, v in ip_infos.items() if v is not None}
+
+        return ip_infos
 
     dns_info: dict[str, Any] = {}
 
