@@ -133,6 +133,13 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         result = run_command(f"dig {record_type} {domain} +short")
         return result
 
+    def _get_ip_info(ip: str):
+        """Fetches details of an IP address using the ipinfo API"""
+        try:
+            return ipinfo_api.getDetails(ip).all
+        except Exception as e:
+            return None
+
     def extract_ip_details_from_spf(record: str) -> Dict[str, Any]:
         """Extracts IP addresses from SPF record, performs reverse DNS if necessary, and fetches IP details"""
         ips = re.findall(RE_IPS, record)
@@ -145,7 +152,7 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
 
         cleaned_ips = set([str(ip).strip() for ip in ips])
 
-        return {ip: ipinfo_api.getDetails(ip).all for ip in cleaned_ips}
+        return {ip: (y := _get_ip_info(ip)) for ip in cleaned_ips if y is not None}
 
     dns_info: dict[str, Any] = {}
 
