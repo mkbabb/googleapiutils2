@@ -184,6 +184,8 @@ ipinfo_api = ipinfo.getHandler(
     access_token=config["ipinfo"]["access_token"],
 )
 
+openai.api_key = config["openai"]["api_key"]
+
 reports_folder = (
     "https://drive.google.com/drive/u/0/folders/10m37Y2BQ-L9m2QIj3ay_6s4mdzBhF9go"
 )
