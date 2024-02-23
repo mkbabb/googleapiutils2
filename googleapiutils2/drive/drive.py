@@ -630,6 +630,7 @@ class Drive(DriveBase):
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
+        from_mime_type: GoogleMimeTypes | None = None,
         **kwargs,
     ) -> File:
         filepath = Path(filepath)
@@ -640,6 +641,7 @@ class Drive(DriveBase):
             if mime_type is not None
             else GoogleMimeTypes[filepath.suffix.lstrip(".")]
         )
+        from_mime_type = from_mime_type if from_mime_type is not None else mime_type
 
         if not validate_ext_mime_type(name=name, mime_type=mime_type):
             exts = ", ".join(MIME_EXTENSIONS.get(mime_type, []))
@@ -649,7 +651,7 @@ class Drive(DriveBase):
 
         kwargs |= {
             "body": body if body is not None else {},
-            "media_body": uploader(mime_type),
+            "media_body": uploader(from_mime_type),
             **self._team_drives_payload(self.team_drives, kind="update"),
         }
 
@@ -675,6 +677,7 @@ class Drive(DriveBase):
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
+        from_mime_type: GoogleMimeTypes | None = None,
         **kwargs: Any,
     ) -> File:
         """Uploads a file to Google Drive. Filepath variant.
@@ -720,6 +723,7 @@ class Drive(DriveBase):
                     recursive=recursive,
                     body=body,
                     update=update,
+                    from_mime_type=from_mime_type,
                     **kwargs,
                 )
 
@@ -736,6 +740,7 @@ class Drive(DriveBase):
             parents=parents,
             body=body,
             update=update,
+            from_mime_type=from_mime_type,
             **kwargs,
         )
 
@@ -747,6 +752,7 @@ class Drive(DriveBase):
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
+        from_mime_type: GoogleMimeTypes | None = None,
         **kwargs: Any,
     ) -> File:
         """Uploads data to Google Drive. Bytes variant of `upload_file`
@@ -774,6 +780,7 @@ class Drive(DriveBase):
                 parents=parents,
                 body=body,
                 update=update,
+                from_mime_type=from_mime_type,
                 **kwargs,
             )
 
@@ -785,6 +792,7 @@ class Drive(DriveBase):
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
+        from_mime_type: GoogleMimeTypes | None = None,
         **kwargs: Any,
     ) -> File:
         """
@@ -828,6 +836,7 @@ class Drive(DriveBase):
                 parents=parents,
                 body=body,
                 update=update,
+                from_mime_type=from_mime_type,
                 **kwargs,
             )
 
@@ -840,6 +849,7 @@ class Drive(DriveBase):
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
+        from_mime_type: GoogleMimeTypes | None = None,
         **kwargs: Any,
     ):
         """Uploads a file to Google Drive.
@@ -863,6 +873,7 @@ class Drive(DriveBase):
                 recursive=recursive,
                 body=body,
                 update=update,
+                from_mime_type=from_mime_type,
                 **kwargs,
             )
         elif isinstance(filepath, pd.DataFrame):
@@ -877,6 +888,7 @@ class Drive(DriveBase):
                 parents=parents,
                 body=body,
                 update=update,
+                from_mime_type=from_mime_type,
                 **kwargs,
             )
         elif isinstance(filepath, bytes):
@@ -891,6 +903,7 @@ class Drive(DriveBase):
                 parents=parents,
                 body=body,
                 update=update,
+                from_mime_type=from_mime_type,
                 **kwargs,
             )
 

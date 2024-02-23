@@ -132,7 +132,7 @@ class GoogleMimeTypes(Enum):
 
 MIME_EXTENSIONS: dict[GoogleMimeTypes, list[str]] = {
     GoogleMimeTypes.audio: ["mp3", "wav", "aac", "m4a", "wma", "flac"],
-    GoogleMimeTypes.docs: ["doc", "docx"],
+    GoogleMimeTypes.docs: ["doc", "docx", "rtf", "txt", "html"],
     GoogleMimeTypes.drawing: ["svg"],
     GoogleMimeTypes.file: [],
     GoogleMimeTypes.folder: [],
@@ -160,7 +160,7 @@ MIME_EXTENSIONS: dict[GoogleMimeTypes, list[str]] = {
     GoogleMimeTypes.txt: ["txt", "md"],
     GoogleMimeTypes.html: ["html", "htm"],
     GoogleMimeTypes.xml: ["xml"],
-    GoogleMimeTypes.doc: ["doc"],
+    GoogleMimeTypes.doc: ["doc", "docx", "rtf", "txt", "html"],
     GoogleMimeTypes.docx: ["docx"],
     GoogleMimeTypes.pdf: ["pdf"],
     GoogleMimeTypes.js: ["js"],
@@ -183,15 +183,24 @@ DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.slides: GoogleMimeTypes.pdf,
 }
 
+GOOGLE_MIME_TYPES = [
+    GoogleMimeTypes.audio,
+    GoogleMimeTypes.docs,
+    GoogleMimeTypes.drawing,
+    GoogleMimeTypes.file,
+    GoogleMimeTypes.folder,
+    GoogleMimeTypes.sheets,
+]
+
 
 def validate_ext_mime_type(name: str, mime_type: GoogleMimeTypes) -> bool:
     """Validates if the file name matches the expected extensions for its MIME type."""
-
-    extension = name.split(".")[-1].lower() if "." in name else name
+    path = Path(name)
+    ext = path.suffix.lstrip(".")
 
     extensions = MIME_EXTENSIONS.get(mime_type, [])
 
-    return extension in extensions
+    return (ext in extensions) or (mime_type in GOOGLE_MIME_TYPES)
 
 
 def export_mime_type(

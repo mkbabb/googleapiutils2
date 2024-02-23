@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import pathlib
-import pprint
+from markdown2 import Markdown  # type: ignore
 import re
 import subprocess
 import tempfile
-import tomllib
+import tomllib  # type: ignore
 from typing import *
 
 import ipinfo  # type: ignore
@@ -20,21 +20,26 @@ from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, SheetSlice, get_oaut
 RE_IPS = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
 RE_HOSTNAMES = re.compile(r"include:(\S+)")
 
+markdowner = Markdown(extras=["tables"])
 
-def upload_markdown(
+
+def upload_markdown_to_google_doc(
     content: str,
     filename: str,
     parent_folder: str,
     drive: Drive,
 ):
-    with tempfile.NamedTemporaryFile(mode="r+", suffix=".txt") as f:
-        f.write(content)
+    html = markdowner.convert(content)
+
+    with tempfile.NamedTemporaryFile(mode="r+", suffix=".html") as f:
+        f.write(html)
         f.seek(0)
 
         return drive.upload(
             filepath=f.name,
             name=filename,
-            mime_type=GoogleMimeTypes.txt,
+            mime_type=GoogleMimeTypes.docs,
+            from_mime_type=GoogleMimeTypes.html,
             parents=parent_folder,
         )
 
@@ -55,7 +60,7 @@ def strip_response(response: str) -> str:
     return response
 
 
-def handle_response(response: ChatCompletion):
+def handle_response(response: ChatCompletion) -> dict[str, Any] | str | None:
     if not len(response.choices):
         return None
 
@@ -66,23 +71,22 @@ def handle_response(response: ChatCompletion):
 
     content = strip_response(content)
 
-    return content
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return content
 
 
-def analyze_dns_records_for_cybersecurity(domain: str, records: dict[str, str]):
+def analyze_dns_records(
+    domain: str, records: dict[str, str], system_prompt: str, prompt: str
+):
     records_str = json.dumps(records, indent=2)
 
-    system_prompt = "As an expert in Cybersecurity, analyze the given DNS records for cybersecurity insights."
-
-    prompt = f"""Analyze the following DNS records of the domain '{domain}' for any cybersecurity concerns, such as potential vulnerabilities or misconfigurations.
-    Be extemely pithy in your reply and provide actionable insights.
-
-DNS Records:
-{records_str}"""
+    prompt = prompt.format(domain=domain, records_str=records_str)
 
     response = openai.chat.completions.create(
-        # model="gpt-4-turbo-preview",
-        model="gpt-3.5-turbo-1106",
+        model="gpt-4-turbo-preview",
+        # model="gpt-3.5-turbo-1106",
         messages=[
             {
                 "role": "system",
@@ -90,10 +94,41 @@ DNS Records:
             },
             {"role": "user", "content": prompt},
         ],
-        # response_format={"type": "json_object"},
+        response_format={"type": "json_object"},
     )
 
-    return handle_response(response=response)
+    parsed_response = handle_response(response=response)  # type: ignore
+
+    if parsed_response is None:
+        return "No response from OpenAI"
+
+    summary = parsed_response.get("summary", "")
+    vulnerabilities = parsed_response.get("vulnerabilities", [])
+    misconfigurations = parsed_response.get("misconfigurations", [])
+    recommendations = parsed_response.get("recommendations", [])
+
+    if isinstance(vulnerabilities, list):
+        vulnerabilities = "\n".join([f"- {v}" for v in vulnerabilities])
+
+    if isinstance(misconfigurations, list):
+        misconfigurations = "\n".join([f"- {m}" for m in misconfigurations])
+
+    if isinstance(recommendations, list):
+        recommendations = "\n".join([f"- {r}" for r in recommendations])
+
+    return f"""
+### Summary
+{summary}
+
+### Vulnerabilities
+{vulnerabilities}
+
+### Misconfigurations
+{misconfigurations}
+
+### Recommendations
+{recommendations}
+"""
 
 
 def run_command(command: str) -> str:
@@ -182,6 +217,32 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
     return dns_info
 
 
+def dns_info_to_markdown_table(dns_info: dict[str, Any]) -> str:
+    markdown = "| **Record Type** | **Record Value** |\n"
+    markdown += "| --- | --- |\n"
+
+    dns_info = dict(sorted(dns_info.items()))
+
+    for record_type, record_value in dns_info.items():
+        if isinstance(record_value, str):
+            record_values = record_value.split("\n")
+        elif isinstance(record_value, dict):
+            # Convert dict to a single-line JSON string to avoid breaking the table format
+            record_values = [json.dumps(record_value)]
+        elif isinstance(record_value, list):
+            # Join list elements into a single string, assuming elements are strings
+            record_values = [", ".join(record_value)]
+        else:
+            record_values = [str(record_value)]
+
+        for value in record_values:
+            # Escape pipe characters and ensure no leading/trailing whitespace
+            value = value.replace("|", "\|").strip()
+            markdown += f"| {record_type} | {value} |\n"
+
+    return markdown
+
+
 creds = get_oauth2_creds()
 drive = Drive(creds=creds)
 sheets = Sheets(creds=creds)
@@ -217,6 +278,16 @@ dig_df = sheets.to_frame(
     )
 )
 
+prompt_df = sheets.to_frame(
+    sheets.values(
+        spreadsheet_id=file_id,
+        range_name="Prompt",
+    )
+)
+
+system_prompt = prompt_df.iloc[0]["system_prompt"]
+prompt = prompt_df.iloc[0]["prompt"]
+
 
 for n, row in addresses_df.iterrows():
     lea_number = row["LEA Number"]
@@ -227,40 +298,54 @@ for n, row in addresses_df.iterrows():
     dig_row = dig_df.iloc[n] if n in dig_df.index else None  # type: ignore
 
     # skip any rows that have an analysis document:
-    if dig_row is not None and (
-        "Record Analysis URL" in dig_row
-        and not (
-            pd.isna(dig_row["Record Analysis URL"])
-            or dig_row["Record Analysis URL"] == ""
-        )
-    ):
-        continue
+    # if dig_row is not None and (
+    #     "Record Analysis URL" in dig_row
+    #     and not (
+    #         pd.isna(dig_row["Record Analysis URL"])
+    #         or dig_row["Record Analysis URL"] == ""
+    #     )
+    # ):
+    #     continue
 
     dns_info = get_dns_info_for_domain(domain=domain, ipinfo_api=ipinfo_api)
+    dns_info_table = dns_info_to_markdown_table(dns_info)
 
-    analysis = analyze_dns_records_for_cybersecurity(domain, dns_info)
+    dns_analysis = analyze_dns_records(
+        domain=domain,
+        records=dns_info,
+        system_prompt=system_prompt,
+        prompt=prompt,
+    )
 
-    dns_info_str = json.dumps(dns_info, indent=4).replace("\\n", "\n")
+    dns_report = f"""
+# {lea_number} - {domain} DNS Analysis
+## Analysis
+{dns_analysis}
+---
+## DNS Records
+{dns_info_table}"""
 
-    analysis = f"""
-## DNS Records:
-{dns_info_str}
-
-## Analysis:
-{analysis}"""
+    dns_report_file = upload_markdown_to_google_doc(
+        content=dns_report,
+        filename=f"{lea_number} - {domain} DNS Analysis",
+        parent_folder=reports_folder,
+        drive=drive,
+    )
+    dns_report_file = drive.get(dns_report_file["id"])
 
     if "SPF IPs" in dns_info:
         del dns_info["SPF IPs"]
 
-    analysis_file = upload_markdown(
-        content=analysis,
-        filename=f"{lea_number} - {domain} DNS Analysis.txt",
-        parent_folder=reports_folder,
-        drive=drive,
-    )
-    analysis_file = drive.get(analysis_file["id"])
+    row_dict = {
+        **row,
+        **dns_info,
+        "DNS Info": json.dumps(dns_info),
+        "Record Analysis URL": dns_report_file["webViewLink"],
+    }
 
-    row_dict = {**row, **dns_info, "Record Analysis URL": analysis_file["webViewLink"]}
+    logger.info(
+        f"Created report for domain: {domain} at {dns_report_file['webViewLink']}"
+    )
 
     row_ix = int(n) + 2  # type: ignore
     row_slice = SheetSlice["DIG", row_ix, ...]

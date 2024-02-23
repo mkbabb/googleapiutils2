@@ -20,7 +20,7 @@ DEFAULT_SHEET_SHAPE = (1000, 26)
 BASE = 26
 OFFSET = 1
 
-SheetsValues = list[list[Any]] | list[dict[str | Any, Any]] | list[object]
+SheetsValues = list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[object]
 
 
 @dataclass
