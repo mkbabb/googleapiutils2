@@ -6,7 +6,7 @@ from markdown2 import Markdown  # type: ignore
 import re
 import subprocess
 import tempfile
-import tomllib  # type: ignore
+import tomllib
 from typing import *
 
 import ipinfo  # type: ignore
@@ -101,6 +101,8 @@ def analyze_dns_records(
 
     if parsed_response is None:
         return "No response from OpenAI"
+    elif isinstance(parsed_response, str):
+        return parsed_response
 
     summary = parsed_response.get("summary", "")
     vulnerabilities = parsed_response.get("vulnerabilities", [])
