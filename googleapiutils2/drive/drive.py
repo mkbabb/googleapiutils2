@@ -23,6 +23,7 @@ from ..utils import (
     guess_mime_type,
     parse_file_id,
     q_escape,
+    mime_type_to_google_mime_type,
 )
 from .misc import (
     DEFAULT_FIELDS,
@@ -625,7 +626,7 @@ class Drive(DriveBase):
         uploader: Callable[[GoogleMimeTypes], Any],
         name: str,
         filepath: FilePath,
-        mime_type: GoogleMimeTypes | None = None,
+        to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
@@ -636,26 +637,27 @@ class Drive(DriveBase):
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
 
-        # If the mime type is not specified, guess it from the file
-        mime_type = (
-            mime_type if mime_type is not None else guess_mime_type(filepath=filepath)
-        )
+        file = self.get_if_exists(name=name, parents=parents)
 
-        
+        if from_mime_type is None:
+            if file is not None:
+                from_mime_type = mime_type_to_google_mime_type(file["mimeType"])
+            else:
+                from_mime_type = guess_mime_type(filepath=filepath)
+
         from_mime_type = (
-            from_mime_type
-            if from_mime_type is not None
-            else guess_mime_type(filepath=filepath)
+            from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
         )
-        from_mime_type = from_mime_type if from_mime_type is not None else mime_type
+        
+        to_mime_type = to_mime_type if to_mime_type is not None else from_mime_type
 
         kwargs |= {
             "body": body if body is not None else {},
-            "media_body": uploader(from_mime_type),
+            "media_body": uploader(from_mime_type),  # type: ignore
             **self._team_drives_payload(self.team_drives, kind="update"),
         }
 
-        if update and (file := self.get_if_exists(name=name, parents=parents)):
+        if update and file is not None:
             kwargs["fileId"] = file["id"]
             return self.execute(self.files.update(**kwargs))
 
@@ -663,8 +665,8 @@ class Drive(DriveBase):
             kwargs["body"]["name"] = name
         if len(parents):
             kwargs["body"]["parents"] = parents
-        if mime_type is not None:
-            kwargs["body"]["mimeType"] = mime_type.value
+        if to_mime_type is not None:
+            kwargs["body"]["mimeType"] = to_mime_type.value
 
         return self.execute(self.files.create(**kwargs))
 
@@ -672,7 +674,7 @@ class Drive(DriveBase):
         self,
         filepath: FilePath,
         name: str | None = None,
-        mime_type: GoogleMimeTypes | None = None,
+        to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
@@ -688,7 +690,7 @@ class Drive(DriveBase):
         Args:
             filepath (FilePath): The path to the file to upload.
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
-            mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
+            to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
@@ -718,7 +720,7 @@ class Drive(DriveBase):
                 self._upload_file(
                     filepath=file,
                     name=t_file.name,
-                    mime_type=mime_type,
+                    to_mime_type=to_mime_type,
                     parents=t_parents,
                     recursive=recursive,
                     body=body,
@@ -736,7 +738,7 @@ class Drive(DriveBase):
             uploader=uploader,
             name=name if name is not None else filepath.name,
             filepath=filepath,
-            mime_type=mime_type,
+            to_mime_type=to_mime_type,
             parents=parents,
             body=body,
             update=update,
@@ -748,7 +750,7 @@ class Drive(DriveBase):
         self,
         data: bytes,
         name: str,
-        mime_type: GoogleMimeTypes,
+        to_mime_type: GoogleMimeTypes,
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
@@ -758,9 +760,9 @@ class Drive(DriveBase):
         """Uploads data to Google Drive. Bytes variant of `upload_file`
 
         Args:
-            data (bytes): Data to upload
-            name (str): Name of the file
-            mime_type (GoogleMimeTypes): Mime type of the file
+            data (bytes): Data to upload.
+            name (str): Name of the file.
+            to_mime_type (GoogleMimeTypes): Mime type of the file.
             parents (List[str], optional): List of parent IDs. Defaults to None.
             body (File, optional): File body. Defaults to None.
             update (bool, optional): Whether to update the file if it exists. Defaults to True.
@@ -776,7 +778,7 @@ class Drive(DriveBase):
                 uploader=uploader,
                 name=name,
                 filepath=tio.name,
-                mime_type=mime_type,
+                to_mime_type=to_mime_type,
                 parents=parents,
                 body=body,
                 update=update,
@@ -788,7 +790,7 @@ class Drive(DriveBase):
         self,
         df: pd.DataFrame,
         name: str,
-        mime_type: GoogleMimeTypes,
+        to_mime_type: GoogleMimeTypes,
         parents: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
@@ -801,17 +803,18 @@ class Drive(DriveBase):
         Args:
             df (DataFrame): The DataFrame to upload.
             name (str): The name of the file.
+            to_mime_type (GoogleMimeTypes): The mime type of the file.
             file_format (str, optional): The file format ("csv", "xlsx", etc.). Defaults to "csv".
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
-        if mime_type.name not in DataFrameExportFileTypes.__members__:
+        if to_mime_type.name not in DataFrameExportFileTypes.__members__:
             raise ValueError(
-                f"Invalid export mime type {mime_type.value} for DataFrame. Must be one of {', '.join(DataFrameExportFileTypes.__members__.keys())}."
+                f"Invalid export mime type {to_mime_type.value} for DataFrame. Must be one of {', '.join(DataFrameExportFileTypes.__members__.keys())}."
             )
 
-        export_file_type = DataFrameExportFileTypes[mime_type.name]
+        export_file_type = DataFrameExportFileTypes[to_mime_type.name]
         use_index = df.index.name is not None
 
         with tempfile.NamedTemporaryFile(
@@ -821,7 +824,7 @@ class Drive(DriveBase):
                 case DataFrameExportFileTypes.csv:
                     df.to_csv(tmp_file.name, index=use_index)
                 case DataFrameExportFileTypes.sheets:
-                    mime_type = GoogleMimeTypes.sheets
+                    to_mime_type = GoogleMimeTypes.sheets
                     df.to_csv(tmp_file.name, index=use_index)
                 case DataFrameExportFileTypes.xlsx:
                     with pd.ExcelWriter(tmp_file.name, engine="openpyxl") as writer:
@@ -832,7 +835,7 @@ class Drive(DriveBase):
             return self._upload_file(
                 filepath=tmp_file.name,
                 name=name,
-                mime_type=mime_type,
+                to_mime_type=to_mime_type,
                 parents=parents,
                 body=body,
                 update=update,
@@ -844,7 +847,7 @@ class Drive(DriveBase):
         self,
         filepath: FilePath | pd.DataFrame | BytesIO,
         name: str | None = None,
-        mime_type: GoogleMimeTypes | None = None,
+        to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
@@ -858,7 +861,7 @@ class Drive(DriveBase):
         Args:
             filepath (FilePath | DataFrame | BytesIO): The file to upload.
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
-            mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
+            to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
@@ -868,7 +871,7 @@ class Drive(DriveBase):
             return self._upload_file(
                 filepath=filepath,
                 name=name,
-                mime_type=mime_type,
+                to_mime_type=to_mime_type,
                 parents=parents,
                 recursive=recursive,
                 body=body,
@@ -877,14 +880,14 @@ class Drive(DriveBase):
                 **kwargs,
             )
         elif isinstance(filepath, pd.DataFrame):
-            if name is None or mime_type is None:
+            if name is None or to_mime_type is None:
                 raise ValueError(
                     "If uploading a dataframe, both name and mime_type must be specified."
                 )
             return self._upload_frame(
                 df=filepath,
                 name=name,
-                mime_type=mime_type,
+                to_mime_type=to_mime_type,
                 parents=parents,
                 body=body,
                 update=update,
@@ -892,14 +895,14 @@ class Drive(DriveBase):
                 **kwargs,
             )
         elif isinstance(filepath, bytes):
-            if name is None or mime_type is None:
+            if name is None or to_mime_type is None:
                 raise ValueError(
                     "If uploading bytes, both name and mime_type must be specified."
                 )
             return self._upload_data(
                 data=filepath,
                 name=name,
-                mime_type=mime_type,
+                to_mime_type=to_mime_type,
                 parents=parents,
                 body=body,
                 update=update,

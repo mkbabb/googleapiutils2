@@ -38,7 +38,7 @@ def upload_markdown_to_google_doc(
         return drive.upload(
             filepath=f.name,
             name=filename,
-            mime_type=GoogleMimeTypes.docs,
+            to_mime_type=GoogleMimeTypes.docs,
             from_mime_type=GoogleMimeTypes.html,
             parents=parent_folder,
         )

@@ -71,11 +71,41 @@ account by way of the following discovery scheme:
 
 ## Drive 📁
 
-Example: copy a file to a folder.
+### MIME Types
+
+When you upload a file to Google Drive, you must specify the original file's MIME type and the desired uploaded MIME type: the `from_mime_type` and `to_mime_type` parameters, respectively. The `GoogleMimeTypes` class provides a list of common MIME types.
+
+We attempt to infer both MIME types from the file extension, but this is not always possible. The inference scheme is as thus:
+
+-   If either parameter is explicitly set, e.g. is not None, the value is used.
+-   If the file's already been uploaded, the MIME type is inferred from the file's metadata.
+-   If the file's not been uploaded, the MIME type is inferred from the file's extension.
+-   If the file's extension is not recognized, the MIME type is set to `GoogleMimeTypes.file`.
+
+### Example: upload a file to a folder.
+
+```python
+from googleapiutils2 import Drive, get_oauth2_creds
+
+creds = get_oauth2_creds() # explicitly get the credentials; you can share these with Sheets, etc.
+drive = Drive(creds=creds)
+
+# This will upload to your root Google Drive folder
+drive.upload(
+    filepath="examples/hey.txt",
+    name="Asset 1",
+    to_mime_type=GoogleMimeTypes.docs,
+)
+```
+
+### Example: copy a file to a folder.
 
 ```python
 from googleapiutils2 import Drive
-drive = Drive()
+FILE_ID = ...
+FOLDER_URL = ...
+
+drive = Drive() # implicitly get the credentials
 
 filename = "Heyy"
 
@@ -98,10 +128,12 @@ What the above does is:
 
 ## Sheets 📊
 
-Example: update a range of cells in a sheet.
+### Example: update a range of cells in a sheet.
 
 ```python
-sheets = Sheets()
+SHEET_ID = ...
+
+sheets = Sheets() # implicitly get the credentials
 
 Sheet1 = SheetsValueRange(sheets, SHEET_ID, sheet_name="Sheet1")
 
@@ -115,7 +147,7 @@ Sheet1[2:3, ...].update(rows)
 
 What the above does is:
 
--   Get the OAuth2 credentials using the default discvoery scheme (JSON object
+-   Get the OAuth2 credentials using the default discovery scheme (JSON object
     representing the requisite credentials, see
     [here](https://developers.google.com/identity/protocols/oauth2/native-app#step-2:-send-a-request-to-googles-oauth-2.0-server)
     for more information).

@@ -32,7 +32,7 @@ with tempfile.NamedTemporaryFile(
         filepath=tmpfile.name,
         name=name,
         parents=folder_id,
-        mime_type=GoogleMimeTypes.sheets,
+        to_mime_type=GoogleMimeTypes.sheets,
         recursive=True,
         update=True,
     )

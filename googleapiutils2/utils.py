@@ -210,17 +210,21 @@ def export_mime_type(
 
 
 @cache
-def guess_mime_type(
-    filepath: FilePath,
-) -> GoogleMimeTypes:
-    mime_type, _ = guess_type(str(filepath))
-
-    if mime_type is not None:
-        for m in GoogleMimeTypes:
-            if m.value == mime_type:
-                return m
+def mime_type_to_google_mime_type(mime_type: str) -> GoogleMimeTypes | None:
+    for m in GoogleMimeTypes:
+        if m.value == mime_type:
+            return m
 
     return None
+
+
+@cache
+def guess_mime_type(
+    filepath: FilePath,
+) -> GoogleMimeTypes | None:
+    mime_type, _ = guess_type(str(filepath))
+
+    return mime_type_to_google_mime_type(mime_type)
 
 
 class GoogleAPIException(Exception):
