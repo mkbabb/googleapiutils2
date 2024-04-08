@@ -14,16 +14,15 @@ from googleapiclient import discovery
 from ..utils import (
     DEFAULT_DOWNLOAD_CONVERSION_MAP,
     EXECUTE_TIME,
-    MIME_EXTENSIONS,
     THROTTLE_TIME,
     DriveBase,
     FilePath,
     GoogleMimeTypes,
     download_large_file,
     export_mime_type,
+    guess_mime_type,
     parse_file_id,
     q_escape,
-    validate_ext_mime_type,
 )
 from .misc import (
     DEFAULT_FIELDS,
@@ -636,18 +635,19 @@ class Drive(DriveBase):
         filepath = Path(filepath)
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
+
+        # If the mime type is not specified, guess it from the file
         mime_type = (
-            mime_type
-            if mime_type is not None
-            else GoogleMimeTypes[filepath.suffix.lstrip(".")]
+            mime_type if mime_type is not None else guess_mime_type(filepath=filepath)
+        )
+
+        
+        from_mime_type = (
+            from_mime_type
+            if from_mime_type is not None
+            else guess_mime_type(filepath=filepath)
         )
         from_mime_type = from_mime_type if from_mime_type is not None else mime_type
-
-        if not validate_ext_mime_type(name=name, mime_type=mime_type):
-            exts = ", ".join(MIME_EXTENSIONS.get(mime_type, []))
-            raise ValueError(
-                f"Invalid mime type '{mime_type.value}' for file with name '{name}'. Must be one of: {exts}."
-            )
 
         kwargs |= {
             "body": body if body is not None else {},

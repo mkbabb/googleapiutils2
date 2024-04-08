@@ -6,7 +6,7 @@ from markdown2 import Markdown  # type: ignore
 import re
 import subprocess
 import tempfile
-import tomllib
+import tomllib # type: ignore
 from typing import *
 
 import ipinfo  # type: ignore

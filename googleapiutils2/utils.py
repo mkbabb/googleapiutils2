@@ -12,6 +12,7 @@ import urllib.parse
 from collections import defaultdict
 from enum import Enum
 from functools import cache
+from mimetypes import guess_type
 from pathlib import Path
 from queue import Queue
 from threading import Thread
@@ -193,16 +194,6 @@ GOOGLE_MIME_TYPES = [
 ]
 
 
-def validate_ext_mime_type(name: str, mime_type: GoogleMimeTypes) -> bool:
-    """Validates if the file name matches the expected extensions for its MIME type."""
-    path = Path(name)
-    ext = path.suffix.lstrip(".")
-
-    extensions = MIME_EXTENSIONS.get(mime_type, [])
-
-    return (ext in extensions) or (mime_type in GOOGLE_MIME_TYPES)
-
-
 def export_mime_type(
     mime_type: GoogleMimeTypes,
     conversion_map: dict[
@@ -216,6 +207,20 @@ def export_mime_type(
         return mime_type, ""
 
     return t_mime_type, t_mime_type.name
+
+
+@cache
+def guess_mime_type(
+    filepath: FilePath,
+) -> GoogleMimeTypes:
+    mime_type, _ = guess_type(str(filepath))
+
+    if mime_type is not None:
+        for m in GoogleMimeTypes:
+            if m.value == mime_type:
+                return m
+
+    return None
 
 
 class GoogleAPIException(Exception):
