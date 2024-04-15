@@ -43,9 +43,14 @@ THROTTLE_TIME = 30
 
 
 SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
+    # Google Drive API
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/drive",
+    # Google Sheets API
+    "https://www.googleapis.com/auth/spreadsheets",
+    # Google Groups Settings API
+    "https://www.googleapis.com/auth/admin.directory.group",
+    "https://apps-apis.google.com/a/feeds/groups/",
 ]
 
 
