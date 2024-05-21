@@ -217,7 +217,8 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
     }
 
     for record_type in SUPPORTED_RECORD_TYPES:
-        key = f"{record_type} Record"
+        key = f"{record_type} Record" if record_type != "ANY" else "DNS Records"
+
         record = _get_dns_record(domain=domain, record_type=record_type, ns=ns)
 
         if not record:
@@ -247,7 +248,7 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
 
 
 def dns_info_to_markdown_table(dns_info: dict[str, Any]) -> str:
-    markdown = "| **Record Type** | **Record Value** |\n"
+    markdown = "| **Key** | **Value** |\n"
     markdown += "| --- | --- |\n"
 
     dns_info = dict(sorted(dns_info.items()))
@@ -266,7 +267,7 @@ def dns_info_to_markdown_table(dns_info: dict[str, Any]) -> str:
 
         for value in record_values:
             # Escape pipe characters and ensure no leading/trailing whitespace
-            value = value.replace("|", "\|").strip()
+            value = value.replace("|", "\\|").strip()
             markdown += f"| {record_type} | {value} |\n"
 
     return markdown
@@ -327,16 +328,6 @@ for n, row in addresses_df.iterrows():
 
     dig_row = dig_df.iloc[n] if n in dig_df.index else None  # type: ignore
 
-    # skip any rows that have an analysis document:
-    # if dig_row is not None and (
-    #     "Record Analysis URL" in dig_row
-    #     and not (
-    #         pd.isna(dig_row["Record Analysis URL"])
-    #         or dig_row["Record Analysis URL"] == ""
-    #     )
-    # ):
-    #     continue
-
     dns_info = get_dns_info_for_domain(domain=domain, ipinfo_api=ipinfo_api)
     dns_info_table = dns_info_to_markdown_table(dns_info)
 
@@ -349,10 +340,12 @@ for n, row in addresses_df.iterrows():
 
     dns_report = f"""
 # {lea_number} - {domain} DNS Analysis
-## Analysis
+## Analysis Using Nameserver: {dns_info['NS']}
 {dns_analysis}
+
 ---
-## DNS Records
+
+## Raw DNS Data
 {dns_info_table}"""
 
     dns_report_file = upload_markdown_to_google_doc(
