@@ -229,10 +229,9 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         record = record.strip().lower()
 
         if record_type == "TXT":
-
             if "v=spf1" in record:  # SPF Handling
                 spf_ips = extract_ip_details_from_spf(record)
-                # dns_info["SPF IPs"] = spf_ips
+                dns_info["SPF IPs"] = spf_ips
                 dns_info["Has SPF"] = True
 
             if "v=dmarc" in record:  # DMARC Handling
