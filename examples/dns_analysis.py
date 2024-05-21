@@ -340,7 +340,7 @@ for n, row in addresses_df.iterrows():
 
     dns_report = f"""
 # {lea_number} - {domain} DNS Analysis
-## Analysis Using Nameserver: {dns_info['NS']}
+## Analysis Using Nameserver: _{dns_info['NS']}_
 {dns_analysis}
 
 ---
