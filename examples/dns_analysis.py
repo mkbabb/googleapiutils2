@@ -217,7 +217,7 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
     }
 
     for record_type in SUPPORTED_RECORD_TYPES:
-        key = f"{record_type} Record" if record_type != "ANY" else "DNS Records"
+        key = f"{record_type} Record" if record_type != "ANY" else "ANY Command Result"
 
         record = _get_dns_record(domain=domain, record_type=record_type, ns=ns)
 
@@ -250,8 +250,6 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
 def dns_info_to_markdown_table(dns_info: dict[str, Any]) -> str:
     markdown = "| **Key** | **Value** |\n"
     markdown += "| --- | --- |\n"
-
-    dns_info = dict(sorted(dns_info.items()))
 
     for record_type, record_value in dns_info.items():
         if isinstance(record_value, str):
