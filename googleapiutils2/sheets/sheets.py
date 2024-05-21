@@ -103,9 +103,9 @@ class Sheets(DriveBase):
             self.service.spreadsheets()
         )
 
-        self._batched_data: DefaultDict[
-            str, dict[str | Any, SheetsValues]
-        ] = defaultdict(dict)
+        self._batched_data: DefaultDict[str, dict[str | Any, SheetsValues]] = (
+            defaultdict(dict)
+        )
 
         atexit.register(self._batch_update_remaining_auto)
 
@@ -1184,15 +1184,15 @@ class Sheets(DriveBase):
             text_direction=text_direction,
             hyperlink_display_type=hyperlink_display_type,
             number_format=number_format,
-            cell_format=sheets_format.cell_formats[0][0]
-            if (
-                sheets_format.cell_formats is not None
-                and len(sheets_format.cell_formats)
-                and len(sheets_format.cell_formats[0])
-            )
-            else cell_format
-            if cell_format is not None
-            else None,
+            cell_format=(
+                sheets_format.cell_formats[0][0]
+                if (
+                    sheets_format.cell_formats is not None
+                    and len(sheets_format.cell_formats)
+                    and len(sheets_format.cell_formats[0])
+                )
+                else cell_format if cell_format is not None else None
+            ),
         )
 
         def resize_and_create_request(sheet_id: int, sheet_slice: SheetSliceT):
@@ -1308,21 +1308,27 @@ class Sheets(DriveBase):
             text_color=text_color,
             background_color=cell_format.get("backgroundColor", {}),
             padding=cell_format.get("padding"),
-            horizontal_alignment=HorizontalAlignment(horizontal_alignment)
-            if horizontal_alignment is not None
-            else None,
-            vertical_alignment=VerticalAlignment(vertical_alignment)
-            if vertical_alignment is not None
-            else None,
-            wrap_strategy=WrapStrategy(wrap_strategy)
-            if wrap_strategy is not None
-            else None,
-            text_direction=TextDirection(text_direction)
-            if text_direction is not None
-            else None,
-            hyperlink_display_type=HyperlinkDisplayType(hyperlink_display_type)
-            if hyperlink_display_type is not None
-            else None,
+            horizontal_alignment=(
+                HorizontalAlignment(horizontal_alignment)
+                if horizontal_alignment is not None
+                else None
+            ),
+            vertical_alignment=(
+                VerticalAlignment(vertical_alignment)
+                if vertical_alignment is not None
+                else None
+            ),
+            wrap_strategy=(
+                WrapStrategy(wrap_strategy) if wrap_strategy is not None else None
+            ),
+            text_direction=(
+                TextDirection(text_direction) if text_direction is not None else None
+            ),
+            hyperlink_display_type=(
+                HyperlinkDisplayType(hyperlink_display_type)
+                if hyperlink_display_type is not None
+                else None
+            ),
         )
 
         return cell_format

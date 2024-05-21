@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import json
 import pathlib
-from markdown2 import Markdown  # type: ignore
 import re
 import subprocess
 import tempfile
-import tomllib # type: ignore
+import tomllib  # type: ignore
+from functools import cache
 from typing import *
 
 import ipinfo  # type: ignore
 import openai
 import pandas as pd
 from loguru import logger
+from markdown2 import Markdown  # type: ignore
 from openai.types.chat import ChatCompletion
 
 from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, SheetSlice, get_oauth2_creds
@@ -21,6 +22,8 @@ RE_IPS = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
 RE_HOSTNAMES = re.compile(r"include:(\S+)")
 
 markdowner = Markdown(extras=["tables"])
+
+DEFAULT_NS = "152.45.127.1"
 
 
 def upload_markdown_to_google_doc(
@@ -85,8 +88,7 @@ def analyze_dns_records(
     prompt = prompt.format(domain=domain, records_str=records_str)
 
     response = openai.chat.completions.create(
-        model="gpt-4-turbo-preview",
-        # model="gpt-3.5-turbo-1106",
+        model="gpt-4o",
         messages=[
             {
                 "role": "system",
@@ -105,12 +107,8 @@ def analyze_dns_records(
         return parsed_response
 
     summary = parsed_response.get("summary", "")
-    vulnerabilities = parsed_response.get("vulnerabilities", [])
     misconfigurations = parsed_response.get("misconfigurations", [])
     recommendations = parsed_response.get("recommendations", [])
-
-    if isinstance(vulnerabilities, list):
-        vulnerabilities = "\n".join([f"- {v}" for v in vulnerabilities])
 
     if isinstance(misconfigurations, list):
         misconfigurations = "\n".join([f"- {m}" for m in misconfigurations])
@@ -122,10 +120,7 @@ def analyze_dns_records(
 ### Summary
 {summary}
 
-### Vulnerabilities
-{vulnerabilities}
-
-### Misconfigurations
+### Potential Misconfigurations
 {misconfigurations}
 
 ### Recommendations
@@ -151,6 +146,22 @@ def _reverse_dns_lookup(hostname: str) -> list[str] | None:
     return ip.split("\n") if ip else None
 
 
+@cache
+def find_ns(domain: str, default_ns: str = DEFAULT_NS):
+    """Finds the nameserver for a given domain"""
+    ns = run_command(f"dig +short NS {domain}")
+
+    # trim the "." at the end of the nameserver
+    nss = [ns.strip(".") for ns in ns.split("\n")]
+
+    for ns in nss:
+        pinged = run_command(f"ping -c 1 {ns}")
+        if len(pinged):
+            return ns
+
+    return default_ns
+
+
 def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str, Any]:
     SUPPORTED_RECORD_TYPES = [
         "A",
@@ -165,9 +176,9 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         "ANY",
     ]
 
-    def _get_dns_record(domain: str, record_type: str) -> str:
+    def _get_dns_record(domain: str, record_type: str, ns: str = DEFAULT_NS):
         """Fetches DNS record of the specified type using dig"""
-        result = run_command(f"dig {record_type} {domain} +short")
+        result = run_command(f"dig @{ns} {record_type} {domain} +short")
         return result
 
     def _get_ip_info(ip: str):
@@ -195,23 +206,39 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
 
         return ip_infos
 
-    dns_info: dict[str, Any] = {}
+    ns = find_ns(domain)
+
+    dns_info: dict[str, Any] = {
+        "Domain": domain,
+        "Has SPF": False,
+        "Has DMARC": False,
+        "Has DKIM": False,
+        "NS": ns,
+    }
 
     for record_type in SUPPORTED_RECORD_TYPES:
         key = f"{record_type} Record"
-        record = _get_dns_record(domain=domain, record_type=record_type)
+        record = _get_dns_record(domain=domain, record_type=record_type, ns=ns)
 
         if not record:
             continue
 
         dns_info[key] = record
 
+        record = record.strip().lower()
+
         if record_type == "TXT":
+
             if "v=spf1" in record:  # SPF Handling
                 spf_ips = extract_ip_details_from_spf(record)
-                dns_info["SPF IPs"] = spf_ips
-            if "v=DMARC1" in record:  # DMARC Handling
-                dns_info["DMARC Policy"] = record
+                # dns_info["SPF IPs"] = spf_ips
+                dns_info["Has SPF"] = True
+
+            if "v=dmarc" in record:  # DMARC Handling
+                dns_info["Has DMARC"] = True
+
+            if "v=dkim" in record:  # DKIM Handling
+                dns_info["Has DKIM"] = True
 
     if dmarc_record := _get_dns_record(f"_dmarc.{domain}", "TXT"):
         dns_info["DMARC Record"] = dmarc_record
@@ -264,7 +291,8 @@ reports_folder = (
     "https://drive.google.com/drive/u/0/folders/10m37Y2BQ-L9m2QIj3ay_6s4mdzBhF9go"
 )
 
-file_id = "https://docs.google.com/spreadsheets/d/1yYHbUQpGhm2GF16jgYoG_90cYmWfZjyNHwXQf1LI8fc/edit#gid=1778461197"
+# file_id = "https://docs.google.com/spreadsheets/d/1yYHbUQpGhm2GF16jgYoG_90cYmWfZjyNHwXQf1LI8fc/edit#gid=1778461197"
+file_id = "https://docs.google.com/spreadsheets/d/1YMIIldmiclGQciVqkU_9PjqX4mS4bWQejvRIEUHjMlU/edit#gid=0"
 
 addresses_df = sheets.to_frame(
     sheets.values(
@@ -334,9 +362,6 @@ for n, row in addresses_df.iterrows():
         drive=drive,
     )
     dns_report_file = drive.get(dns_report_file["id"])
-
-    if "SPF IPs" in dns_info:
-        del dns_info["SPF IPs"]
 
     row_dict = {
         **row,
