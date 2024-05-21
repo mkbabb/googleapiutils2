@@ -25,6 +25,9 @@ markdowner = Markdown(extras=["tables"])
 
 DEFAULT_NS = "152.45.127.1"
 
+YES_TAG = "<span style='color: #5cc75f;'>Yes</span>"
+NO_TAG = "<span style='color: #f64a3e;'>No</span>"
+
 
 def upload_markdown_to_google_doc(
     content: str,
@@ -188,23 +191,12 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         except Exception as e:
             return None
 
-    def extract_ip_details_from_spf(record: str) -> Dict[str, Any]:
+    def extract_ip_details_from_spf(record: str):
         """Extracts IP addresses from SPF record, performs reverse DNS if necessary, and fetches IP details"""
         ips = re.findall(RE_IPS, record)
         hostnames = re.findall(RE_HOSTNAMES, record)
 
-        for hostname in hostnames:
-            ip = _reverse_dns_lookup(hostname)
-            if ip is not None:
-                ips.extend(ip)
-
-        cleaned_ips = set([str(ip).strip() for ip in ips])
-
-        ip_infos = {ip: _get_ip_info(ip) for ip in cleaned_ips}
-
-        ip_infos = {k: v for k, v in ip_infos.items() if v is not None}
-
-        return ip_infos
+        return ips + hostnames
 
     ns = find_ns(domain)
 
@@ -231,7 +223,7 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         if record_type == "TXT":
             if "v=spf1" in record:  # SPF Handling
                 spf_ips = extract_ip_details_from_spf(record)
-                dns_info["SPF IPs"] = spf_ips
+                dns_info["SPF IPs"] = json.dumps(spf_ips)
                 dns_info["Has SPF"] = True
 
             if "v=dmarc" in record:  # DMARC Handling
@@ -335,15 +327,46 @@ for n, row in addresses_df.iterrows():
         prompt=prompt,
     )
 
+    spf_ips = json.loads(dns_info.get("SPF IPs", "[]"))
+    spf_ips = [f"- _{ip}_" for ip in spf_ips]
+    spf_ips = "\n".join(spf_ips)
+
+    spf_info = (
+        f"""### SPF IPs
+{spf_ips}"""
+        if len(spf_ips)
+        else ""
+    )
+
+    dmarc_info = (
+        f"""### DMARC Record
+{dns_info.get('DMARC Record', 'No DMARC record found.')}"""
+        if dns_info.get('Has DMARC')
+        else ""
+    )
+
+    has_spf = YES_TAG if dns_info.get("Has SPF") else NO_TAG
+    has_dmarc = YES_TAG if dns_info.get("Has DMARC") else NO_TAG
+    has_dkim = YES_TAG if dns_info.get("Has DKIM") else NO_TAG
+
     dns_report = f"""
 # {lea_number} - {domain} DNS Analysis
+
 ## Analysis Using Nameserver: _{dns_info['NS']}_
-{dns_analysis}
 
+- SPF Enabled: **{has_spf}**
+- DMARC Enabled: **{has_dmarc}**
+- DKIM Enabled: **{has_dkim}**
+
+{spf_info}
+{dmarc_info}
 ---
-
+## DNS Records Analysis
+{dns_analysis}
+---
 ## Raw DNS Data
-{dns_info_table}"""
+{dns_info_table}
+"""
 
     dns_report_file = upload_markdown_to_google_doc(
         content=dns_report,
