@@ -155,8 +155,8 @@ def find_ns(domain: str, default_ns: str = DEFAULT_NS):
     nss = [ns.strip(".") for ns in ns.split("\n")]
 
     for ns in nss:
-        pinged = run_command(f"ping -c 1 {ns}")
-        if len(pinged):
+        digged = run_command(f"dig @{ns} {domain} +short")
+        if len(digged):
             return ns
 
     return default_ns
