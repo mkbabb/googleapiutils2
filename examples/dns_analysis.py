@@ -364,6 +364,8 @@ for n, row in addresses_df.iterrows():
 ## DNS Records Analysis
 {dns_analysis}
 ---
+
+
 ## Raw DNS Data
 {dns_info_table}
 """
