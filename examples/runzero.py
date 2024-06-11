@@ -5,6 +5,7 @@ import tempfile
 from typing import *
 
 import requests
+from loguru import logger
 
 from googleapiutils2 import Drive, GoogleMimeTypes, Sheets
 
@@ -43,10 +44,14 @@ get_all_orgs_endpoint = "account/orgs"
 
 orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
 
+logger.info(f"Got {len(orgs)} orgs")
+
 org_folders = {}
 
 for o in orgs:
     name, oid = o["name"], o["id"]
+
+    logger.info(f"Creating folder for {name}...")
 
     folder = drive.create(
         name=name,
@@ -55,19 +60,25 @@ for o in orgs:
         get_extant=True,
     )
 
+    logger.info(f"Created folder for {name}")
+
     org_folders[name] = folder
 
 
 for name, folder in org_folders.items():
-    print(f"Processing {name}")
+    logger.info(f"Processing {name}...")
 
     for endpoint in endpoints:
         url = (base_url + endpoint).format(org_id=oid)
 
-        print(f"Downloading {url}")
+        logger.info(f"Downloading {url}")
 
         r = requests.get(url, headers=headers, params={"_oid": oid})
         r.raise_for_status()
+
+        size_in_mb = len(r.text) / 1024 / 1024
+
+        logger.info(f"Downloaded {url}: size {size_in_mb} MB")
 
         with tempfile.NamedTemporaryFile(mode="w") as f:
             f.write(r.text)
@@ -76,9 +87,13 @@ for name, folder in org_folders.items():
             if name == "{org_id}":
                 name = "org_info"
 
+            logger.info(f"Uploading {name} to {folder['name']}...")
+
             drive.upload(
                 filepath=f.name,
                 name=name,
                 to_mime_type=GoogleMimeTypes.csv,
                 parents=folder["id"],
             )
+
+            logger.info(f"Uploaded {name} to {folder['name']}")
