@@ -64,7 +64,6 @@ for o in orgs:
     logger.info(f"Created folder for {name}")
 
     org_folders[name] = folder
-    break
 
 
 for name, folder in org_folders.items():
@@ -92,6 +91,12 @@ for name, folder in org_folders.items():
             if filename == "{org_id}":
                 filename = "org_info"
 
+            logger.info(f"Writing {filename} to disk...")
+
+            filepath = pathlib.Path(f"./data/{name}/{filename}")
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            filepath.write_text(r.text)
+
             logger.info(f"Uploading {filename} to {folder['name']}...")
 
             try:
@@ -101,12 +106,6 @@ for name, folder in org_folders.items():
                     to_mime_type=GoogleMimeTypes.csv,
                     parents=folder["id"],
                 )
-
                 logger.info(f"Uploaded {name} to {folder['name']}")
             except Exception as e:
                 logger.warning(f"Failed to upload {name} to {folder['name']}: {e}")
-
-                filepath = pathlib.Path(f"./data/{name}/{filename}")
-                filepath.parent.mkdir(parents=True, exist_ok=True)
-
-                filepath.write_text(r.text)
