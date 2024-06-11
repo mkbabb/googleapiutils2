@@ -561,6 +561,8 @@ class Drive(DriveBase):
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
+        kwargs |= self._team_drives_payload(self.team_drives, kind="update")
+
         return self.execute(self.files.create(**kwargs))
 
     def update(
@@ -648,7 +650,7 @@ class Drive(DriveBase):
         from_mime_type = (
             from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
         )
-        
+
         to_mime_type = to_mime_type if to_mime_type is not None else from_mime_type
 
         kwargs |= {

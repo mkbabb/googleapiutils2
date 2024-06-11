@@ -240,6 +240,15 @@ class Sheets(DriveBase):
         sheet = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)
         return sheet["properties"]["sheetId"]
 
+    def create_range_url(self, file_id: str, sheet_slice: SheetSliceT) -> str:
+        file_id = parse_file_id(file_id)
+
+        sheet_name, range_name = sheet_slice.sheet_name, sheet_slice.range_name
+
+        sheet_id = self._get_sheet_id(spreadsheet_id=file_id, name=sheet_name)
+
+        return f"https://docs.google.com/spreadsheets/d/{file_id}/edit#gid={sheet_id}&range={range_name}"
+
     def get_spreadsheet(
         self,
         spreadsheet_id: str,

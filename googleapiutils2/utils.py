@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import functools
+import hashlib
 import http
 import json
 import os
@@ -10,6 +11,7 @@ import random
 import time
 import urllib.parse
 from collections import defaultdict
+from datetime import datetime, timedelta
 from enum import Enum
 from functools import cache
 from mimetypes import guess_type
@@ -687,3 +689,80 @@ def deep_update(d: dict, u: dict) -> dict:
         else:
             d[k] = v
     return d
+
+
+R = TypeVar("R")
+
+
+@cache
+def get_cache_dir() -> Path:
+    filepath = str(Path(__file__).absolute()).encode()
+
+    h = hashlib.sha1(filepath).hexdigest()
+
+    cache_dir = Path("/tmp/") / h
+
+    cache_dir.mkdir(exist_ok=True)
+
+    return cache_dir
+
+
+def cache_with_stale_interval(
+    stale_interval: timedelta | None = None,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Cache the output of a function, specifying the interval wherein the cache is considered stale.
+
+    Args:
+        stale_interval (timedelta, optional): The interval after which the cache is considered stale.
+            If None, the cache will never be considered stale.
+    """
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        @functools.wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            # Hash the input arguments
+            input_data = {"args": args, "kwargs": kwargs}
+            input_hash = hashlib.md5(
+                json.dumps(input_data, default=str, sort_keys=True).encode()
+            ).hexdigest()
+
+            cache_dir = get_cache_dir()
+
+            output_path = cache_dir / f"{input_hash}_output.json"
+            pickled_output_path = cache_dir / f"{input_hash}_output.pkl"
+
+            # Check if the output file exists and is not stale
+            if output_path.exists():
+                # Load the cached output from the file
+                with output_path.open("r") as f:
+                    cached_data = json.load(f)
+                    cached_timestamp = datetime.fromisoformat(cached_data["timestamp"])
+
+                    if stale_interval is None or (
+                        datetime.now() - cached_timestamp <= stale_interval
+                    ):
+                        with open(cached_data["pickled_output_path"], "rb") as pkl_file:
+                            return pickle.load(pkl_file)
+
+            # Call the original function
+            output_data = func(*args, **kwargs)
+
+            # Pickle the output data and save the file path
+            with open(pickled_output_path, "wb") as pkl_file:
+                pickle.dump(output_data, pkl_file)
+
+            # Save the metadata to the JSON output file with the current timestamp
+            with output_path.open("w") as f:
+                json.dump(
+                    {
+                        "pickled_output_path": str(pickled_output_path),
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    f,
+                    indent=4,
+                )
+
+            return output_data
+
+        return wrapper
+
+    return decorator

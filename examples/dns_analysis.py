@@ -8,34 +8,45 @@ import tempfile
 import tomllib  # type: ignore
 from functools import cache
 from typing import *
+from datetime import timedelta
 
 import ipinfo  # type: ignore
+import jinja2
 import openai
-import pandas as pd
+from jinja_markdown2 import MarkdownExtension  # type: ignore
 from loguru import logger
-from markdown2 import Markdown  # type: ignore
 from openai.types.chat import ChatCompletion
 
-from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, SheetSlice, get_oauth2_creds
+from googleapiutils2 import (
+    Drive,
+    GoogleMimeTypes,
+    Sheets,
+    SheetSlice,
+    get_oauth2_creds,
+    cache_with_stale_interval,
+)
 
-RE_IPS = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
-RE_HOSTNAMES = re.compile(r"include:(\S+)")
+jinja_env = jinja2.Environment(loader=jinja2.loaders.FileSystemLoader("."))
+jinja_env.add_extension(MarkdownExtension)
 
-markdowner = Markdown(extras=["tables"])
+TEMPLATE_PATH = pathlib.Path("./examples/dns-report-template.md")
 
 DEFAULT_NS = "152.45.127.1"
 
-YES_TAG = "<span style='color: #5cc75f;'>Yes</span>"
-NO_TAG = "<span style='color: #f64a3e;'>No</span>"
+
+def sanitize_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: json.dumps(v, default=str) if isinstance(v, (list, dict, tuple)) else v
+        for k, v in row.items()
+    }
 
 
-def upload_markdown_to_google_doc(
-    content: str,
+def upload_html_to_google_doc(
+    html: str,
     filename: str,
     parent_folder: str,
     drive: Drive,
 ):
-    html = markdowner.convert(content)
 
     with tempfile.NamedTemporaryFile(mode="r+", suffix=".html") as f:
         f.write(html)
@@ -83,6 +94,7 @@ def handle_response(response: ChatCompletion) -> dict[str, Any] | str | None:
         return content
 
 
+@cache_with_stale_interval(stale_interval=timedelta(days=1))
 def analyze_dns_records(
     domain: str, records: dict[str, str], system_prompt: str, prompt: str
 ):
@@ -106,29 +118,8 @@ def analyze_dns_records(
 
     if parsed_response is None:
         return "No response from OpenAI"
-    elif isinstance(parsed_response, str):
-        return parsed_response
 
-    summary = parsed_response.get("summary", "")
-    misconfigurations = parsed_response.get("misconfigurations", [])
-    recommendations = parsed_response.get("recommendations", [])
-
-    if isinstance(misconfigurations, list):
-        misconfigurations = "\n".join([f"- {m}" for m in misconfigurations])
-
-    if isinstance(recommendations, list):
-        recommendations = "\n".join([f"- {r}" for r in recommendations])
-
-    return f"""
-### Summary
-{summary}
-
-### Potential Misconfigurations
-{misconfigurations}
-
-### Recommendations
-{recommendations}
-"""
+    return parsed_response
 
 
 def run_command(command: str) -> str:
@@ -140,13 +131,6 @@ def run_command(command: str) -> str:
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         return e.output.strip()
-
-
-def _reverse_dns_lookup(hostname: str) -> list[str] | None:
-    """Performs a reverse DNS lookup to get the numeric IP address for a given hostname"""
-    ip = run_command(f"dig +short {hostname}")
-
-    return ip.split("\n") if ip else None
 
 
 @cache
@@ -165,7 +149,54 @@ def find_ns(domain: str, default_ns: str = DEFAULT_NS):
     return default_ns
 
 
-def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str, Any]:
+def extract_ip_details_from_spf(record: str, ns: str = DEFAULT_NS):
+    """Extracts IP addresses from SPF record, performs reverse DNS if necessary, and fetches IP details"""
+    RE_IPS = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:/\d{1,2})?\b")
+    RE_HOSTNAMES = re.compile(r"include:(\S+)")
+
+    ips = re.findall(RE_IPS, record)
+    hostnames = re.findall(RE_HOSTNAMES, record)
+
+    for ip in ips:
+        hostnames.append(run_command(f"dig +short -x {ip} @{ns} +short"))
+
+    # trim the "." at the end of the hostnames
+    hostnames = [str(hostname).strip().strip(".").strip() for hostname in hostnames]
+
+    return list(set(hostnames))
+
+
+def get_dns_record(domain: str, record_type: str, ns: str = DEFAULT_NS):
+    """Fetches DNS record of the specified type using dig"""
+    result = run_command(f"dig @{ns} {record_type} {domain} +short")
+    return result
+
+
+def get_dkim_record(domain: str, ns: str = DEFAULT_NS):
+    """Fetches DKIM record using dig"""
+    SELECTORS = [
+        "default",
+        "mail",
+        "email",
+        "dkim",
+        "google",
+        "selector1",
+        "selector2",
+        "smtp",
+        "k1",
+        "m1",
+    ]
+
+    for selector in SELECTORS:
+        if (
+            dkim_record := get_dns_record(
+                f"{selector}._domainkey.{domain}", "TXT", ns=ns
+            )
+        ) and "dkim" in dkim_record.lower():
+            return dkim_record
+
+
+def get_dns_info_for_domain(domain: str):
     SUPPORTED_RECORD_TYPES = [
         "A",
         "MX",
@@ -179,87 +210,70 @@ def get_dns_info_for_domain(domain: str, ipinfo_api: ipinfo.Handler) -> Dict[str
         "ANY",
     ]
 
-    def _get_dns_record(domain: str, record_type: str, ns: str = DEFAULT_NS):
-        """Fetches DNS record of the specified type using dig"""
-        result = run_command(f"dig @{ns} {record_type} {domain} +short")
-        return result
-
-    def _get_ip_info(ip: str):
-        """Fetches details of an IP address using the ipinfo API"""
-        try:
-            return ipinfo_api.getDetails(ip).all
-        except Exception as e:
-            return None
-
-    def extract_ip_details_from_spf(record: str):
-        """Extracts IP addresses from SPF record, performs reverse DNS if necessary, and fetches IP details"""
-        ips = re.findall(RE_IPS, record)
-        hostnames = re.findall(RE_HOSTNAMES, record)
-
-        return ips + hostnames
-
     ns = find_ns(domain)
 
     dns_info: dict[str, Any] = {
-        "Domain": domain,
         "Has SPF": False,
         "Has DMARC": False,
         "Has DKIM": False,
+        "Has MTA-STS": False,
+        "Has BIMI": False,
+        "Domain": domain,
         "NS": ns,
     }
+
+    dns_records = {}
 
     for record_type in SUPPORTED_RECORD_TYPES:
         key = f"{record_type} Record" if record_type != "ANY" else "ANY Command Result"
 
-        record = _get_dns_record(domain=domain, record_type=record_type, ns=ns)
-
+        record = get_dns_record(domain=domain, record_type=record_type, ns=ns)
         if not record:
             continue
 
-        dns_info[key] = record
+        dns_records[key] = record
 
         record = record.strip().lower()
 
-        if record_type == "TXT":
-            if "v=spf1" in record:  # SPF Handling
-                spf_ips = extract_ip_details_from_spf(record)
-                dns_info["SPF IPs"] = json.dumps(spf_ips)
-                dns_info["Has SPF"] = True
+        if record_type == "TXT" and "v=spf" in record:
+            spf_ips = extract_ip_details_from_spf(record)
+            dns_info["SPF IPs"] = spf_ips
+            dns_info["Has SPF"] = True
 
-            if "v=dmarc" in record:  # DMARC Handling
-                dns_info["Has DMARC"] = True
+    if dmarc_record := get_dns_record(f"_dmarc.{domain}", "TXT"):
+        dns_records["DMARC Record"] = dmarc_record
+        dns_info["Has DMARC"] = True
 
-            if "v=dkim" in record:  # DKIM Handling
-                dns_info["Has DKIM"] = True
+    if dkim_record := get_dkim_record(domain=domain, ns=ns):
+        dns_records["DKIM Record"] = dkim_record
+        dns_info["Has DKIM"] = True
 
-    if dmarc_record := _get_dns_record(f"_dmarc.{domain}", "TXT"):
-        dns_info["DMARC Record"] = dmarc_record
+    if mta_sts_record := get_dns_record(f"_mta-sts.{domain}", "TXT"):
+        dns_records["MTA-STS Record"] = mta_sts_record
+        dns_info["Has MTA-STS"] = True
 
-    return dns_info
+    if bimi_record := get_dns_record(f"_bimi.{domain}", "TXT"):
+        dns_records["BIMI Record"] = bimi_record
+        dns_info["Has BIMI"] = True
+
+    return dns_info, dns_records
 
 
-def dns_info_to_markdown_table(dns_info: dict[str, Any]) -> str:
-    markdown = "| **Key** | **Value** |\n"
-    markdown += "| --- | --- |\n"
+def create_dns_report(
+    template_path: pathlib.Path,
+    **params: Any,
+):
+    YES_TAG = "<span style='color: #5cc75f;'>Yes</span>"
+    NO_TAG = "<span style='color: #f72a2a;'>No</span>"
 
-    for record_type, record_value in dns_info.items():
-        if isinstance(record_value, str):
-            record_values = record_value.split("\n")
-        elif isinstance(record_value, dict):
-            # Convert dict to a single-line JSON string to avoid breaking the table format
-            record_values = [json.dumps(record_value)]
-        elif isinstance(record_value, list):
-            # Join list elements into a single string, assuming elements are strings
-            record_values = [", ".join(record_value)]
-        else:
-            record_values = [str(record_value)]
+    # grab the template and render it with jinja2 and Markdown:
+    template = jinja_env.get_template(str(template_path))
 
-        for value in record_values:
-            # Escape pipe characters and ensure no leading/trailing whitespace
-            value = value.replace("|", "\\|").strip()
-            markdown += f"| {record_type} | {value} |\n"
-
-    return markdown
+    return template.render(
+        **params,
+        YES_TAG=YES_TAG,
+        NO_TAG=NO_TAG,
+    )
 
 
 creds = get_oauth2_creds()
@@ -281,118 +295,94 @@ reports_folder = (
     "https://drive.google.com/drive/u/0/folders/10m37Y2BQ-L9m2QIj3ay_6s4mdzBhF9go"
 )
 
-# file_id = "https://docs.google.com/spreadsheets/d/1yYHbUQpGhm2GF16jgYoG_90cYmWfZjyNHwXQf1LI8fc/edit#gid=1778461197"
-file_id = "https://docs.google.com/spreadsheets/d/1YMIIldmiclGQciVqkU_9PjqX4mS4bWQejvRIEUHjMlU/edit#gid=0"
+sheet_url = "https://docs.google.com/spreadsheets/d/1YMIIldmiclGQciVqkU_9PjqX4mS4bWQejvRIEUHjMlU/edit#gid=0"
 
 addresses_df = sheets.to_frame(
     sheets.values(
-        spreadsheet_id=file_id,
+        spreadsheet_id=sheet_url,
         range_name="Cleaned Domain List",
     )
 )
 
 dig_df = sheets.to_frame(
     sheets.values(
-        spreadsheet_id=file_id,
+        spreadsheet_id=sheet_url,
         range_name="DIG",
     )
 )
 
 prompt_df = sheets.to_frame(
     sheets.values(
-        spreadsheet_id=file_id,
+        spreadsheet_id=sheet_url,
         range_name="Prompt",
     )
 )
-
 system_prompt = prompt_df.iloc[0]["system_prompt"]
 prompt = prompt_df.iloc[0]["prompt"]
 
 
 for n, row in addresses_df.iterrows():
+    row_ix = int(n) + 2  # type: ignore
+    row_slice = SheetSlice["DIG", row_ix, ...]
+
+    range_url = sheets.create_range_url(
+        file_id=sheet_url,
+        sheet_slice=row_slice,
+    )
+
     lea_number = row["LEA Number"]
     domain = row["Domain"]
 
-    logger.info(f"Processing domain: {domain}")
+    filename = f"{lea_number} - {domain} DNS Analysis"
+
+    logger.info(f"Processing {filename}...")
 
     dig_row = dig_df.iloc[n] if n in dig_df.index else None  # type: ignore
 
-    dns_info = get_dns_info_for_domain(domain=domain, ipinfo_api=ipinfo_api)
-    dns_info_table = dns_info_to_markdown_table(dns_info)
+    dns_info, dns_records = get_dns_info_for_domain(domain=domain)
+
+    logger.info(f"Scanned DNS records")
 
     dns_analysis = analyze_dns_records(
         domain=domain,
-        records=dns_info,
+        records=dns_records,
         system_prompt=system_prompt,
         prompt=prompt,
     )
 
-    spf_ips = json.loads(dns_info.get("SPF IPs", "[]"))
-    spf_ips = [f"- _{ip}_" for ip in spf_ips]
-    spf_ips = "\n".join(spf_ips)
+    logger.info(f"Analyzed DNS records")
 
-    spf_info = (
-        f"""### SPF IPs
-{spf_ips}"""
-        if len(spf_ips)
-        else ""
+    dns_report = create_dns_report(
+        template_path=TEMPLATE_PATH,
+        filename=filename,
+        range_url=range_url,
+        dns_records=dns_records,
+        dns_info=dns_info,
+        dns_analysis=dns_analysis,
     )
 
-    dmarc_info = (
-        f"""### DMARC Record
-{dns_info.get('DMARC Record', 'No DMARC record found.')}"""
-        if dns_info.get('Has DMARC')
-        else ""
-    )
-
-    has_spf = YES_TAG if dns_info.get("Has SPF") else NO_TAG
-    has_dmarc = YES_TAG if dns_info.get("Has DMARC") else NO_TAG
-    has_dkim = YES_TAG if dns_info.get("Has DKIM") else NO_TAG
-
-    dns_report = f"""
-# {lea_number} - {domain} DNS Analysis
-
-## Analysis Using Nameserver: _{dns_info['NS']}_
-
-- SPF Enabled: **{has_spf}**
-- DMARC Enabled: **{has_dmarc}**
-- DKIM Enabled: **{has_dkim}**
-
-{spf_info}
-{dmarc_info}
----
-## DNS Records Analysis
-{dns_analysis}
----
-
-
-## Raw DNS Data
-{dns_info_table}
-"""
-
-    dns_report_file = upload_markdown_to_google_doc(
-        content=dns_report,
-        filename=f"{lea_number} - {domain} DNS Analysis",
+    dns_report_file = upload_html_to_google_doc(
+        html=dns_report,
+        filename=filename,
         parent_folder=reports_folder,
         drive=drive,
     )
     dns_report_file = drive.get(dns_report_file["id"])
 
+    logger.info(f"Created report at: {dns_report_file['webViewLink']}")
+
     row_dict = {
         **row,
         **dns_info,
-        "DNS Info": json.dumps(dns_info),
+        **dns_records,
         "Record Analysis URL": dns_report_file["webViewLink"],
     }
 
-    logger.info(
-        f"Created report for domain: {domain} at {dns_report_file['webViewLink']}"
-    )
-
-    row_ix = int(n) + 2  # type: ignore
-    row_slice = SheetSlice["DIG", row_ix, ...]
+    row_dict = sanitize_row(row_dict)
 
     sheets.batch_update(
-        spreadsheet_id=file_id,
+        spreadsheet_id=sheet_url,
         data={row_slice: [row_dict]},
     )
+
+    logger.info(f"Updated sheet at: {range_url}")
