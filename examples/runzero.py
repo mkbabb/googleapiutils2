@@ -75,10 +75,14 @@ for name, folder in org_folders.items():
 
         logger.info(f"Downloading {url}")
 
-        r = requests.get(url, headers=headers, params={"_oid": oid})
-        r.raise_for_status()
+        try:
+            r = requests.get(url, headers=headers, params={"_oid": oid})
+            r.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Failed to download {url}: {e}")
+            continue
 
-        size_in_mb = round(len(r.text) / 1024 / 1024, 2)
+        size_in_mb = round(len(r.text) / 1024 / 1024, 4)
         logger.info(f"Downloaded {url}: size {size_in_mb} MB")
 
         with tempfile.NamedTemporaryFile(mode="w") as f:
