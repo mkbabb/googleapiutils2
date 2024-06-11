@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import tempfile
 from typing import *
 
@@ -13,7 +14,7 @@ drive = Drive()
 sheets = Sheets()
 
 base_folder = (
-    "https://drive.google.com/drive/u/0/folders/1rIwqPViVFlblsAjKMGzrJTQ4GCtt85uz"
+    "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"
 )
 
 token = os.getenv("RUNZERO_TOKEN")
@@ -63,6 +64,7 @@ for o in orgs:
     logger.info(f"Created folder for {name}")
 
     org_folders[name] = folder
+    break
 
 
 for name, folder in org_folders.items():
@@ -76,24 +78,31 @@ for name, folder in org_folders.items():
         r = requests.get(url, headers=headers, params={"_oid": oid})
         r.raise_for_status()
 
-        size_in_mb = len(r.text) / 1024 / 1024
-
+        size_in_mb = round(len(r.text) / 1024 / 1024, 2)
         logger.info(f"Downloaded {url}: size {size_in_mb} MB")
 
         with tempfile.NamedTemporaryFile(mode="w") as f:
             f.write(r.text)
 
-            name = endpoint.split("/")[-1]
-            if name == "{org_id}":
-                name = "org_info"
+            filename = endpoint.split("/")[-1]
+            if filename == "{org_id}":
+                filename = "org_info"
 
-            logger.info(f"Uploading {name} to {folder['name']}...")
+            logger.info(f"Uploading {filename} to {folder['name']}...")
 
-            drive.upload(
-                filepath=f.name,
-                name=name,
-                to_mime_type=GoogleMimeTypes.csv,
-                parents=folder["id"],
-            )
+            try:
+                drive.upload(
+                    filepath=f.name,
+                    name=filename,
+                    to_mime_type=GoogleMimeTypes.csv,
+                    parents=folder["id"],
+                )
 
-            logger.info(f"Uploaded {name} to {folder['name']}")
+                logger.info(f"Uploaded {name} to {folder['name']}")
+            except Exception as e:
+                logger.warning(f"Failed to upload {name} to {folder['name']}: {e}")
+
+                filepath = pathlib.Path(f"./data/{name}/{filename}")
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+
+                filepath.write_text(r.text)
