@@ -215,7 +215,7 @@ endpoints = [
     "export/org/users.json",
     "export/org/groups.json",
     "account/orgs/{org_id}",
-    "org/agents",
+    "org/explorers",
     "org/tasks",
 ]
 
