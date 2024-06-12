@@ -21,3 +21,5 @@ vendor/
 
 # Miscellaneous
 ___*
+*.log
+./log

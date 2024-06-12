@@ -10,6 +10,9 @@ from loguru import logger
 
 from googleapiutils2 import Drive, GoogleMimeTypes, Sheets
 
+
+logger.add("./log/log.log", rotation="1 MB")
+
 drive = Drive()
 sheets = Sheets()
 
@@ -63,10 +66,10 @@ for o in orgs:
 
     logger.info(f"Created folder for {name}")
 
-    org_folders[name] = folder
+    org_folders[(name, oid)] = folder
 
 
-for name, folder in org_folders.items():
+for (name, oid), folder in org_folders.items():
     logger.info(f"Processing {name}...")
 
     for endpoint in endpoints:
