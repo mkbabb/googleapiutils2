@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
+import http
 import os
 import pathlib
+import tarfile
 import tempfile
 from datetime import datetime
 from typing import *
@@ -11,7 +14,13 @@ import requests
 from aiohttp import ClientSession
 from loguru import logger
 
-from googleapiutils2 import Drive, GoogleMimeTypes, Sheets
+from googleapiutils2 import (
+    Drive,
+    GoogleMimeTypes,
+    Sheets,
+    cache_with_stale_interval,
+    retry,
+)
 
 if TYPE_CHECKING:
     from googleapiutils2 import File
@@ -21,6 +30,9 @@ logger.add("./log/log.log", rotation="1 MB")
 
 async def create_folder_for_org(o: dict, drive: Drive, base_folder: str):
     name, oid = o["name"], o["id"]
+
+    name = name.replace("/", "_")
+
     logger.info(f"Creating folder for {name}...")
 
     folder = drive.create(
@@ -35,54 +47,80 @@ async def create_folder_for_org(o: dict, drive: Drive, base_folder: str):
     return (name, oid), folder
 
 
+@retry(retries=10, exponential_backoff=True)
 async def download_and_upload(
     session: ClientSession,
     base_url: str,
-    endpoint: str,
-    oid: str,
     headers: dict,
-    folder: dict,
     name: str,
+    oid: str,
+    folder: dict,
+    endpoint: str,
 ):
-    filename = endpoint.split("/")[-1]
-    if filename == "{org_id}":
-        filename = "org_info"
+    t_filename = endpoint.split("/")[-1]
+    if t_filename == "{org_id}":
+        t_filename = "org_info"
+
+    filename = pathlib.Path(t_filename).with_suffix(".json")
 
     url = (base_url + endpoint).format(org_id=oid)
 
-    logger.info(f"Downloading {filename}")
+    logger.info(f"Downloading {filename} for {name}...")
 
-    try:
+    @cache_with_stale_interval()
+    async def get_url(
+        url: str = url,
+        headers: dict = headers,
+        oid: str = oid,
+    ):
         async with session.get(url, headers=headers, params={"_oid": oid}) as r:
-            r.raise_for_status()
+            if r.status != http.HTTPStatus.OK:
+                raise Exception(
+                    f"Failed to download {url} for {name}: {r.status}; {r.reason} {r}"
+                )
+
             text = await r.text()
-    except Exception as e:
-        logger.warning(f"Failed to download {url}: {e}")
-        return
 
-    size_in_mb = round(len(text) / 1024 / 1024, 4)
-    logger.info(f"Downloaded {filename}: size {size_in_mb} MB")
+            size_in_mb = round(len(text) / 1024 / 1024, 2)
 
-    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-        f.write(text)
-        temp_filepath = f.name
+            logger.info(f"Downloading {filename}: size {size_in_mb} MB")
+
+            return text
+
+    text = await get_url(
+        url=url,
+        headers=headers,
+        oid=oid,
+    )
 
     filepath = pathlib.Path(f"./data/{name}/{filename}")
     filepath.parent.mkdir(parents=True, exist_ok=True)
     filepath.write_text(text)
 
-    logger.info(f"Uploading {filename} to {folder['name']}...")
+    return filepath
 
-    try:
-        drive.upload(
-            filepath=temp_filepath,
-            name=filename,
-            to_mime_type=GoogleMimeTypes.csv,
-            parents=folder["id"],
-        )
-        logger.info(f"Uploaded {name} to {folder['name']}")
-    except Exception as e:
-        logger.warning(f"Failed to upload {name} to {folder['name']}: {e}")
+
+def compress_files(filepaths: List[pathlib.Path]):
+    name = tempfile.NamedTemporaryFile().name
+
+    with tempfile.TemporaryDirectory() as t_temp_dir:
+        temp_dir = pathlib.Path(t_temp_dir)
+
+        tar_filepath = temp_dir / f"{name}.tar"
+
+        # Create a tar file with the JSON files
+        with tarfile.open(tar_filepath, "w") as tar:
+            for filepath in filepaths:
+                tar.add(filepath, arcname=filepath.name)
+
+        # Compress the tar file using gzip
+        gzip_name = f"{name}.tar.gz"
+        gzip_filepath = temp_dir / gzip_name
+        with open(tar_filepath, 'rb') as f_in:
+            with gzip.open(gzip_filepath, 'wb') as f_out:
+                f_out.writelines(f_in)
+
+        return gzip_filepath
 
 
 async def process_org_folder(
@@ -102,17 +140,17 @@ async def process_org_folder(
             )
 
     async with ClientSession() as session:
-        tasks = []
-
         for (name, oid), folder in org_folders.items():
+
             logger.info(f"Processing {name}: {folder['webViewLink']}...")
 
-            if (
-                done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
-            ) is not None:
-                logger.info(f"Skipping {name} as it is already processed")
-                continue
+            # if (
+            #     done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
+            # ) is not None:
+            #     logger.info(f"Skipping {name}: already processed")
+            #     continue
 
+            tasks = []
             for endpoint in endpoints:
                 task = asyncio.create_task(
                     download_and_upload(
@@ -127,9 +165,27 @@ async def process_org_folder(
                 )
                 tasks.append(task)
 
-        await asyncio.gather(*tasks)
+            filepaths = await asyncio.gather(*tasks)
 
-        await create_done_file(folder)
+            await create_done_file(folder)
+
+            logger.info(f"Compressing {len(filepaths)} files for {name}...")
+
+            gzip_name = f"{name}.tar.gz"
+            gzip_filepath = compress_files(
+                filepaths=filepaths,
+            )
+
+            size_in_mb = round(gzip_filepath.stat().st_size / 1024 / 1024, 2)
+
+            logger.info(f"Uploading {gzip_name}; size {size_in_mb} MB for {name}...")
+
+            drive.upload(
+                filepath=gzip_filepath,
+                name=gzip_name,
+                to_mime_type=GoogleMimeTypes.zip,
+                parents=folder["id"],
+            )
 
 
 drive = Drive()
@@ -150,14 +206,14 @@ headers = {
 }
 
 endpoints = [
-    "export/org/assets.csv",
-    "export/org/services.csv",
-    "export/org/sites.csv",
-    "export/org/wireless.csv",
-    "export/org/software.csv",
-    "export/org/vulnerabilities.csv",
-    "export/org/users.csv",
-    "export/org/groups.csv",
+    "export/org/assets.json",
+    "export/org/services.json",
+    "export/org/sites.json",
+    "export/org/wireless.json",
+    "export/org/software.json",
+    "export/org/vulnerabilities.json",
+    "export/org/users.json",
+    "export/org/groups.json",
     "account/orgs/{org_id}",
     "org/agents",
     "org/tasks",

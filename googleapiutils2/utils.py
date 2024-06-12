@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import atexit
 import functools
 import hashlib
@@ -289,38 +290,62 @@ def retry(
     retries: int = 10,
     delay: int = 5,
     exponential_backoff: bool = False,
-    on_exception: Callable[[Exception], bool | None] | None = None,
+    on_exception: Callable[[Exception], Union[bool, None]] | None = None,
 ):
-    """Retry a function up to "retries" times, with a delay of "delay" seconds.
-    If "exponential_backoff" is True, the delay will double each time,
+    """Retry a function up to 'retries' times, with a delay of 'delay' seconds.
+    If 'exponential_backoff' is True, the delay will double each time,
     exponentially increasing."""
 
     if on_exception is None:
         on_exception = lambda _: True
 
-    def inner(func: Callable[P, T]) -> Callable[P, T]:
-        @functools.wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            e = Exception()
+    def on_exception_wrapper(func, i: int, e: Exception):
+        logger.error(f"Retrying {func.__name__}; {i + 1} / {retries} : {e}")
 
+        if on_exception(e) is False:
+            logger.error(e)
+            raise e
+
+        return True
+
+    def calc_sleep_time(i: int) -> float:
+        sleep = random.uniform(0, 1)
+        sleep += delay if not exponential_backoff else delay * 2**i
+        return sleep
+
+    def inner(
+        func: Callable[P, T] | Callable[P, Awaitable[T]]
+    ) -> Callable[P, T] | Callable[P, Awaitable[T]]:
+        @functools.wraps(func)
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            e = Exception()
             for i in range(retries):
                 try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    logger.error(f"Retrying {func.__name__}; {i + 1} / {retries}...")
+                    return await func(*args, **kwargs)  # type: ignore
+                except Exception as t_e:
+                    e = t_e
+                    on_exception_wrapper(func=func, i=i, e=e)
 
-                    if on_exception(e) == False:
-                        logger.error(e)
+                await asyncio.sleep(calc_sleep_time(i))
+            raise e  # type: ignore
 
-                        raise e
+        @functools.wraps(func)
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            e = Exception()
+            for i in range(retries):
+                try:
+                    return func(*args, **kwargs)  # type: ignore
+                except Exception as t_e:
+                    e = t_e
+                    on_exception_wrapper(func=func, i=i, e=e)
 
-                sleep = random.uniform(0, 1)
-                sleep += delay if not exponential_backoff else delay * 2**i
-                time.sleep(sleep)
-            else:
-                raise e  # type: ignore
+                time.sleep(calc_sleep_time(i))
+            raise e  # type: ignore
 
-        return wrapper
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
 
     return inner
 
@@ -716,53 +741,93 @@ def cache_with_stale_interval(
         stale_interval (timedelta, optional): The interval after which the cache is considered stale.
             If None, the cache will never be considered stale.
     """
-    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+
+    def get_paths(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs):
+        # Hash the input arguments
+        input_data = {
+            "args": args,
+            "kwargs": kwargs,
+            "func": func.__name__,
+        }
+        input_hash = hashlib.md5(
+            json.dumps(input_data, default=str, sort_keys=True).encode()
+        ).hexdigest()
+
+        cache_dir = get_cache_dir()
+
+        output_path = cache_dir / f"{input_hash}_output.json"
+        pickled_output_path = cache_dir / f"{input_hash}_output.pkl"
+
+        return output_path, pickled_output_path
+
+    def cache_get(output_path: Path, pickled_output_path: Path) -> R | None:
+        # Check if the output file exists and isn't empty:
+        if output_path.exists() and output_path.stat().st_size > 0:
+            # Load the cached output from the file
+            with output_path.open("r") as f:
+                cached_data = json.load(f)
+                cached_timestamp = datetime.fromisoformat(cached_data["timestamp"])
+
+                if stale_interval is None or (
+                    datetime.now() - cached_timestamp <= stale_interval
+                ):
+                    with open(cached_data["pickled_output_path"], "rb") as pkl_file:
+                        return pickle.load(pkl_file)
+
+        return None
+
+    def cache_set(output_path: Path, pickled_output_path: Path, output_data: R) -> R:
+        # Pickle the output data and save the file path
+        with open(pickled_output_path, "wb") as pkl_file:
+            pickle.dump(output_data, pkl_file)
+
+        # Save the metadata to the JSON output file with the current timestamp
+        with output_path.open("w") as f:
+            json.dump(
+                {
+                    "pickled_output_path": str(pickled_output_path),
+                    "timestamp": datetime.now().isoformat(),
+                },
+                f,
+                indent=4,
+            )
+
+        return output_data
+
+    def decorator(func: Callable[P, R]) -> Callable[P, R] | Callable[P, Awaitable[R]]:
         @functools.wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            # Hash the input arguments
-            input_data = {"args": args, "kwargs": kwargs}
-            input_hash = hashlib.md5(
-                json.dumps(input_data, default=str, sort_keys=True).encode()
-            ).hexdigest()
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            output_path, pickled_output_path = get_paths(func=func, *args, **kwargs)  # type: ignore
 
-            cache_dir = get_cache_dir()
+            if (output_data := cache_get(output_path, pickled_output_path)) is not None:
+                return output_data
 
-            output_path = cache_dir / f"{input_hash}_output.json"
-            pickled_output_path = cache_dir / f"{input_hash}_output.pkl"
+            output_data = await func(*args, **kwargs)  # type: ignore
 
-            # Check if the output file exists and is not stale
-            if output_path.exists():
-                # Load the cached output from the file
-                with output_path.open("r") as f:
-                    cached_data = json.load(f)
-                    cached_timestamp = datetime.fromisoformat(cached_data["timestamp"])
+            return cache_set(
+                output_path=output_path,
+                pickled_output_path=pickled_output_path,
+                output_data=output_data,
+            )
 
-                    if stale_interval is None or (
-                        datetime.now() - cached_timestamp <= stale_interval
-                    ):
-                        with open(cached_data["pickled_output_path"], "rb") as pkl_file:
-                            return pickle.load(pkl_file)
+        @functools.wraps(func)
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            output_path, pickled_output_path = get_paths(func=func, *args, **kwargs)  # type: ignore
 
-            # Call the original function
+            if (output_data := cache_get(output_path, pickled_output_path)) is not None:
+                return output_data
+
             output_data = func(*args, **kwargs)
 
-            # Pickle the output data and save the file path
-            with open(pickled_output_path, "wb") as pkl_file:
-                pickle.dump(output_data, pkl_file)
+            return cache_set(
+                output_path=output_path,
+                pickled_output_path=pickled_output_path,
+                output_data=output_data,
+            )
 
-            # Save the metadata to the JSON output file with the current timestamp
-            with output_path.open("w") as f:
-                json.dump(
-                    {
-                        "pickled_output_path": str(pickled_output_path),
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                    f,
-                    indent=4,
-                )
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
 
-            return output_data
-
-        return wrapper
-
-    return decorator
+    return decorator  # type: ignore
