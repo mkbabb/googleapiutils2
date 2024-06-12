@@ -57,11 +57,16 @@ async def download_and_upload(
     folder: dict,
     endpoint: str,
 ):
+
     t_filename = endpoint.split("/")[-1]
     if t_filename == "{org_id}":
         t_filename = "org_info"
 
     filename = pathlib.Path(t_filename).with_suffix(".json")
+
+    params = {}
+    if str(filename) == "tasks.json":
+        params["search"] = "recur:true"
 
     url = (base_url + endpoint).format(org_id=oid)
 
@@ -69,11 +74,15 @@ async def download_and_upload(
 
     @cache_with_stale_interval()
     async def get_url(
-        url: str = url,
-        headers: dict = headers,
-        oid: str = oid,
+        url: str,
+        headers: dict,
+        oid: str,
+        params: dict,
     ):
-        async with session.get(url, headers=headers, params={"_oid": oid}) as r:
+
+        async with session.get(
+            url, headers=headers, params={"_oid": oid, **params}
+        ) as r:
             if r.status != http.HTTPStatus.OK:
                 raise Exception(
                     f"Failed to download {url} for {name}: {r.status}; {r.reason} {r}"
@@ -91,6 +100,7 @@ async def download_and_upload(
         url=url,
         headers=headers,
         oid=oid,
+        params=params,
     )
 
     filepath = pathlib.Path(f"./data/{name}/{filename}")
@@ -222,6 +232,7 @@ endpoints = [
 get_all_orgs_endpoint = "account/orgs"
 
 orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
+
 
 logger.info(f"Got {len(orgs)} orgs")
 
