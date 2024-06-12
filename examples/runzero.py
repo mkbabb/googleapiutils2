@@ -167,8 +167,6 @@ get_all_orgs_endpoint = "account/orgs"
 
 orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
 
-orgs = orgs[:2]
-
 logger.info(f"Got {len(orgs)} orgs")
 
 org_folders = dict(
