@@ -154,11 +154,11 @@ async def process_org_folder(
 
             logger.info(f"Processing {name}: {folder['webViewLink']}...")
 
-            # if (
-            #     done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
-            # ) is not None:
-            #     logger.info(f"Skipping {name}: already processed")
-            #     continue
+            if (
+                done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
+            ) is not None:
+                logger.info(f"Skipping {name}: already processed")
+                continue
 
             tasks = []
             for endpoint in endpoints:
