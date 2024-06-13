@@ -182,7 +182,7 @@ async def process_org_folder(
 
             logger.info(f"Compressing {len(filepaths)} files for {name}...")
 
-            with compress_files(filepaths=filepaths, name="done") as gzip_filepath:
+            with compress_files(filepaths=filepaths, name=name) as gzip_filepath:
                 size_in_mb = get_size_in_mb(gzip_filepath)
 
                 logger.info(
