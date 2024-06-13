@@ -93,7 +93,7 @@ async def download_endpoint(
 
     if filepath.exists() and filepath.stat().st_size > 0:
         logger.info(f"Skipping {filename} for {name}: already downloaded")
-        return filepath
+        return filepath, True
 
     params = {}
     if str(filename) == "tasks.json":
@@ -126,7 +126,7 @@ async def download_endpoint(
 
         logger.info(f"Downloaded {filename} for {name}; size {size_in_mb} MB")
 
-        return filepath
+        return filepath, False
 
 
 async def process_org_folder(
@@ -159,7 +159,22 @@ async def process_org_folder(
                 )
                 tasks.append(task)
 
-            filepaths = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks)
+
+            if (all_cached := all(cached for _, cached in results)) and (
+                (
+                    done_file := next(
+                        drive.list(folder["id"], query="name contains '.tar.gz'"), None
+                    )
+                )
+                is not None
+            ):
+                logger.info(
+                    f"Skipping compression and upload for {name}: already uploaded"
+                )
+                continue
+
+            filepaths = [filepath for filepath, _ in results]
 
             logger.info(f"Compressing {len(filepaths)} files for {name}...")
 
