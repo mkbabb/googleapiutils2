@@ -8,23 +8,13 @@ import os
 import pathlib
 import tarfile
 import tempfile
-from datetime import datetime
 from typing import *
 
 import requests
 from aiohttp import ClientSession
 from loguru import logger
 
-from googleapiutils2 import (
-    Drive,
-    GoogleMimeTypes,
-    Sheets,
-    cache_with_stale_interval,
-    retry,
-)
-
-if TYPE_CHECKING:
-    from googleapiutils2 import File
+from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, retry
 
 logger.add("./log/log.log", rotation="1 MB")
 
@@ -35,7 +25,7 @@ def get_size_in_mb(filepath: pathlib.Path) -> float:
 
 @contextlib.contextmanager
 def compress_files(
-    filepaths: List[pathlib.Path], name: pathlib.Path | str | None = None
+    filepaths: list[pathlib.Path], name: pathlib.Path | str | None = None
 ) -> Iterator[pathlib.Path]:
     if name is None:
         name = pathlib.Path(tempfile.NamedTemporaryFile().name)
@@ -61,21 +51,19 @@ def compress_files(
         try:
             yield gzip_filepath
         finally:
-            # Ensure any cleanup if needed, though the context manager will handle temp directory cleanup
             pass
 
 
-async def create_folder_for_org(o: dict, drive: Drive, base_folder: str):
-    name, oid = o["name"], o["id"]
+async def create_folder_for_org(org: dict, drive: Drive, parent: str):
+    name, oid = org["name"], org["id"]
 
+    # Replace any slashes in the name with underscores
     name = name.replace("/", "_")
-
-    logger.info(f"Creating folder for {name}...")
 
     folder = drive.create(
         name=name,
         mime_type=GoogleMimeTypes.folder,
-        parents=base_folder,
+        parents=parent,
         get_extant=True,
     )
 
@@ -125,9 +113,14 @@ async def download_endpoint(
             f"Initial request for {filename} for {name} successful, downloading content..."
         )
 
-        with open(filepath, "ab") as f:
-            async for data in r.content.iter_any():
-                f.write(data)
+        try:
+            with open(filepath, "ab") as f:
+                async for data in r.content.iter_any():
+                    f.write(data)
+        except Exception as e:
+            logger.error(f"Failed to stream content from {url} for {name}: {e}")
+            filepath.unlink(missing_ok=True)
+            raise e
 
         size_in_mb = get_size_in_mb(filepath)
 
@@ -137,7 +130,10 @@ async def download_endpoint(
 
 
 async def process_org_folder(
-    base_url: str, org_folders: dict, endpoints: list, headers: dict
+    org_folders: dict,
+    base_url: str,
+    endpoints: list,
+    headers: dict,
 ):
     async with ClientSession() as session:
         for (name, oid), folder in org_folders.items():
@@ -187,16 +183,16 @@ async def process_org_folder(
 drive = Drive()
 sheets = Sheets()
 
-base_folder = (
+export_folder = (
     "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"
 )
 
-token = os.getenv("RUNZERO_TOKEN")
+runzero_token = os.getenv("RUNZERO_TOKEN")
 
 base_url = "https://console.runzero.com/api/v1.0/"
 
 headers = {
-    "Authorization": f"Bearer {token}",
+    "Authorization": f"Bearer {runzero_token}",
     "Content-Type": "application/json",
     "Accept": "application/json",
 }
@@ -219,19 +215,19 @@ get_all_orgs_endpoint = "account/orgs"
 
 orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
 
-logger.info(f"Got {len(orgs)} orgs")
+logger.info(f"Got {len(orgs)} runZero orgs")
 
 org_folders = dict(
     (
-        asyncio.run(create_folder_for_org(o, drive=drive, base_folder=base_folder))
-        for o in orgs
+        asyncio.run(create_folder_for_org(org=org, drive=drive, parent=export_folder))
+        for org in orgs
     )
 )
 
 asyncio.run(
     process_org_folder(
-        base_url=base_url,
         org_folders=org_folders,
+        base_url=base_url,
         endpoints=endpoints,
         headers=headers,
     )

@@ -742,12 +742,11 @@ def cache_with_stale_interval(
             If None, the cache will never be considered stale.
     """
 
-    def get_paths(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs):
+    def get_paths(*args: P.args, **kwargs: P.kwargs):
         # Hash the input arguments
         input_data = {
             "args": args,
             "kwargs": kwargs,
-            "func": func.__name__,
         }
         input_hash = hashlib.md5(
             json.dumps(input_data, default=str, sort_keys=True).encode()
@@ -797,7 +796,7 @@ def cache_with_stale_interval(
     def decorator(func: Callable[P, R]) -> Callable[P, R] | Callable[P, Awaitable[R]]:
         @functools.wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            output_path, pickled_output_path = get_paths(func=func, *args, **kwargs)  # type: ignore
+            output_path, pickled_output_path = get_paths(*args, **kwargs)  # type: ignore
 
             if (output_data := cache_get(output_path, pickled_output_path)) is not None:
                 return output_data
@@ -812,7 +811,7 @@ def cache_with_stale_interval(
 
         @functools.wraps(func)
         def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            output_path, pickled_output_path = get_paths(func=func, *args, **kwargs)  # type: ignore
+            output_path, pickled_output_path = get_paths(*args, **kwargs)  # type: ignore
 
             if (output_data := cache_get(output_path, pickled_output_path)) is not None:
                 return output_data
