@@ -309,7 +309,7 @@ def retry(
         return True
 
     def calc_sleep_time(i: int) -> float:
-        sleep = random.uniform(0, 1)
+        sleep = random.uniform(0, delay)
         sleep += delay if not exponential_backoff else delay * 2**i
         return sleep
 
