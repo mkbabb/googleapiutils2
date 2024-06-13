@@ -159,7 +159,11 @@ async def process_org_folder(
                 )
                 tasks.append(task)
 
-            results = await asyncio.gather(*tasks)
+            # results = await asyncio.gather(*tasks)
+            # run the tasks synchronously to avoid rate limiting:
+            results = []
+            for task in tasks:
+                results.append(await task)
 
             if (all_cached := all(cached for _, cached in results)) and (
                 (
