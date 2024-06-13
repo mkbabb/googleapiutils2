@@ -163,7 +163,10 @@ async def process_org_folder(
             # run the tasks synchronously to avoid rate limiting:
             results = []
             for task in tasks:
-                results.append(await task)
+                try:
+                    results.append(await task)
+                except Exception as e:
+                    logger.error(f"Failed to download {task}: {e}")
 
             if (all_cached := all(cached for _, cached in results)) and (
                 (
