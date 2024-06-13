@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gzip
 import http
 import os
@@ -30,6 +31,38 @@ logger.add("./log/log.log", rotation="1 MB")
 
 def get_size_in_mb(filepath: pathlib.Path) -> float:
     return round(filepath.stat().st_size / 1024 / 1024, 2)
+
+
+@contextlib.contextmanager
+def compress_files(
+    filepaths: List[pathlib.Path], name: pathlib.Path | str | None = None
+) -> Iterator[pathlib.Path]:
+    if name is None:
+        name = pathlib.Path(tempfile.NamedTemporaryFile().name)
+
+    name = pathlib.Path(name)
+
+    with tempfile.TemporaryDirectory() as t_temp_dir:
+        temp_dir = pathlib.Path(t_temp_dir)
+        tar_filepath = temp_dir / name.with_suffix(".tar")
+
+        # Create a tar file with the JSON files
+        with tarfile.open(tar_filepath, "w") as tar:
+            for filepath in filepaths:
+                tar.add(filepath, arcname=filepath.name)
+
+        # Compress the tar file using gzip
+        gzip_filepath = temp_dir / name.with_suffix(".tar.gz")
+
+        with open(tar_filepath, 'rb') as f_in:
+            with gzip.open(gzip_filepath, 'wb') as f_out:
+                f_out.writelines(f_in)
+
+        try:
+            yield gzip_filepath
+        finally:
+            # Ensure any cleanup if needed, though the context manager will handle temp directory cleanup
+            pass
 
 
 async def create_folder_for_org(o: dict, drive: Drive, base_folder: str):
@@ -103,33 +136,6 @@ async def download_endpoint(
         return filepath
 
 
-def compress_files(
-    filepaths: List[pathlib.Path], name: pathlib.Path | str | None = None
-):
-    if name is None:
-        name = pathlib.Path(tempfile.NamedTemporaryFile().name)
-
-    name = pathlib.Path(name)
-
-    with tempfile.TemporaryDirectory() as t_temp_dir:
-        temp_dir = pathlib.Path(t_temp_dir)
-        tar_filepath = temp_dir / name.with_suffix(".tar")
-
-        # Create a tar file with the JSON files
-        with tarfile.open(tar_filepath, "w") as tar:
-            for filepath in filepaths:
-                tar.add(filepath, arcname=filepath.name)
-
-        # Compress the tar file using gzip
-        gzip_filepath = temp_dir / name.with_suffix(".tar.gz")
-
-        with open(tar_filepath, 'rb') as f_in:
-            with gzip.open(gzip_filepath, 'wb') as f_out:
-                f_out.writelines(f_in)
-
-        return gzip_filepath
-
-
 async def process_org_folder(
     base_url: str, org_folders: dict, endpoints: list, headers: dict
 ):
@@ -161,22 +167,21 @@ async def process_org_folder(
 
             logger.info(f"Compressing {len(filepaths)} files for {name}...")
 
-            gzip_filepath = compress_files(filepaths=filepaths, name=name)
+            with compress_files(filepaths=filepaths, name="done") as gzip_filepath:
+                size_in_mb = get_size_in_mb(gzip_filepath)
 
-            size_in_mb = get_size_in_mb(gzip_filepath)
+                logger.info(
+                    f"Uploading {gzip_filepath.name}; size {size_in_mb} MB for {name}..."
+                )
 
-            logger.info(
-                f"Uploading {gzip_filepath.name}; size {size_in_mb} MB for {name}..."
-            )
+                drive.upload(
+                    filepath=gzip_filepath,
+                    name=gzip_filepath.name,
+                    to_mime_type=GoogleMimeTypes.zip,
+                    parents=folder["id"],
+                )
 
-            drive.upload(
-                filepath=gzip_filepath,
-                name=gzip_filepath.name,
-                to_mime_type=GoogleMimeTypes.zip,
-                parents=folder["id"],
-            )
-
-            logger.info(f"Uploaded {gzip_filepath.name} for {name}")
+                logger.info(f"Uploaded {gzip_filepath.name} for {name}")
 
 
 drive = Drive()
