@@ -209,6 +209,8 @@ def get_dkim_record(domain: str, ns: str = DEFAULT_NS):
                 f"{selector}._domainkey.{domain}", "TXT", ns=ns
             )
         ) and "dkim" in dkim_record.lower():
+            logger.info(f"Found DKIM record for {domain} with selector: {selector}")
+
             return dkim_record
 
 
@@ -247,6 +249,8 @@ def get_dns_info_for_domain(domain: str):
         if not record:
             continue
 
+        logger.info(f"Found {record_type} record for {domain}: {record}")
+
         dns_records[key] = record
 
         record = record.strip().lower()
@@ -260,17 +264,25 @@ def get_dns_info_for_domain(domain: str):
         dns_records["DMARC Record"] = dmarc_record
         dns_info["Has DMARC"] = True
 
+        logger.info(f"Found DMARC record for {domain}: {dmarc_record}")
+
     if dkim_record := get_dkim_record(domain=domain, ns=ns):
         dns_records["DKIM Record"] = dkim_record
         dns_info["Has DKIM"] = True
+
+        logger.info(f"Found DKIM record for {domain}: {dkim_record}")
 
     if mta_sts_record := get_dns_record(f"_mta-sts.{domain}", "TXT"):
         dns_records["MTA-STS Record"] = mta_sts_record
         dns_info["Has MTA-STS"] = True
 
+        logger.info(f"Found MTA-STS record for {domain}: {mta_sts_record}")
+
     if bimi_record := get_dns_record(f"_bimi.{domain}", "TXT"):
         dns_records["BIMI Record"] = bimi_record
         dns_info["Has BIMI"] = True
+
+        logger.info(f"Found BIMI record for {domain}: {bimi_record}")
 
     return dns_info, dns_records
 
@@ -320,6 +332,8 @@ addresses_df = sheets.to_frame(
     )
 )
 
+logger.info(f"Got {len(addresses_df)} domains")
+
 dig_df = sheets.to_frame(
     sheets.values(
         spreadsheet_id=sheet_url,
@@ -357,7 +371,7 @@ for n, row in addresses_df.iterrows():
 
     dns_info, dns_records = get_dns_info_for_domain(domain=domain)
 
-    logger.info(f"Scanned DNS records")
+    logger.info(f"Got DNS info for {domain}")
 
     dns_analysis = analyze_dns_records(
         domain=domain,
@@ -366,7 +380,7 @@ for n, row in addresses_df.iterrows():
         prompt=prompt,
     )
 
-    logger.info(f"Analyzed DNS records")
+    logger.info(f"Analyzed DNS records with GPT")
 
     dns_report = create_dns_report(
         template_path=TEMPLATE_PATH,
@@ -377,6 +391,8 @@ for n, row in addresses_df.iterrows():
         dns_analysis=dns_analysis,
     )
 
+    logger.info(f"Created templated DNS report")
+
     dns_report_file = upload_html_to_google_doc(
         html=dns_report,
         filename=filename,
@@ -385,7 +401,7 @@ for n, row in addresses_df.iterrows():
     )
     dns_report_file = drive.get(dns_report_file["id"])
 
-    logger.info(f"Created report at: {dns_report_file['webViewLink']}")
+    logger.info(f"Uploaded report at: {dns_report_file['webViewLink']}")
 
     row_dict = {
         **row,
