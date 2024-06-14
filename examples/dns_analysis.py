@@ -175,16 +175,32 @@ def get_dns_record(domain: str, record_type: str, ns: str = DEFAULT_NS):
 def get_dkim_record(domain: str, ns: str = DEFAULT_NS):
     """Fetches DKIM record using dig"""
     SELECTORS = [
-        "default",
-        "mail",
-        "email",
-        "dkim",
-        "google",
-        "selector1",
-        "selector2",
-        "smtp",
-        "k1",
-        "m1",
+        "default",  # Generic default selector, could be used by various organizations
+        "mail",  # Generic selector, commonly used across multiple organizations
+        "email",  # Generic selector, commonly used across multiple organizations
+        "dkim",  # Various (this is a generic selector name and could be used by multiple organizations)
+        "google",  # Organization: Google
+        "selector1",  # Organization: Microsoft
+        "selector2",  # Organization: Microsoft
+        "smtp",  # Generic selector, commonly used across multiple organizations
+        "k1",  # Likely associated with organizations using third-party email services, but not a well-known standard.
+        "m1",  # Placeholder for m1, as it wasn't explicitly mentioned
+        "mimecast",  # Organization: Mimecast
+        "tm1",  # Organization: Trend Micro
+        "tm2",  # Organization: Trend Micro
+        "k2",  # Likely associated with organizations using third-party email services, but not a well-known standard.
+        "k3",  # Likely associated with organizations using third-party email services, but not a well-known standard.
+        "mandrill",  # Organization: Mandrill (a transactional email API for Mailchimp users)
+        "fd",  # Organization: FastDomain
+        "fd2",  # Organization: FastDomain
+        "s2",  # Organization: SparkPost
+        "mxvault",  # Organization: MX Guarddog
+        "amazon",  # Organization: Amazon SES (Simple Email Service)
+        "api",  # Likely associated with various organizations using APIs for email services, not a specific standard.
+        "s1",  # Organization: SparkPost
+        "fdm",  # Organization: FastDomain
+        "protonmail13",  # Organization: ProtonMail
+        "zmail",  # Organization: Zoho Mail
     ]
 
     for selector in SELECTORS:
@@ -382,7 +398,7 @@ for n, row in addresses_df.iterrows():
 
     sheets.batch_update(
         spreadsheet_id=sheet_url,
-        data={row_slice: [row_dict]},
+        data={row_slice: [row_dict]},  # type: ignore
     )
 
     logger.info(f"Updated sheet at: {range_url}")
