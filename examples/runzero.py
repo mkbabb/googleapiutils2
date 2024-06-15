@@ -11,7 +11,7 @@ import tempfile
 from typing import *
 
 import requests
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from loguru import logger
 
 from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, retry
@@ -135,7 +135,12 @@ async def process_org_folder(
     endpoints: list,
     headers: dict,
 ):
-    async with ClientSession() as session:
+
+    async with ClientSession(
+        timeout=ClientTimeout(
+            total=30 * 60
+        ),  # 30 minute timeout for the entire process
+    ) as session:
         for (name, oid), folder in org_folders.items():
 
             logger.info(f"Processing {name}: {folder['webViewLink']}...")
@@ -159,14 +164,7 @@ async def process_org_folder(
                 )
                 tasks.append(task)
 
-            # results = await asyncio.gather(*tasks)
-            # run the tasks synchronously to avoid rate limiting:
-            results = []
-            for task in tasks:
-                try:
-                    results.append(await task)
-                except Exception as e:
-                    logger.error(f"Failed to download {task}: {e}")
+            results = await asyncio.gather(*tasks)
 
             if (all_cached := all(cached for _, cached in results)) and (
                 (
@@ -245,6 +243,55 @@ org_folders = dict(
         for org in orgs
     )
 )
+
+# for each org folder, look for a file that ends with .tar.gz - rename it to the name of the org.tar.gz:
+for (name, oid), folder in org_folders.items():
+    if (
+        (
+            tar_file := next(
+                drive.list(folder["id"], query="name contains '.tar.gz'"), None
+            )
+        )
+    ) is not None:
+        current_name = tar_file["name"]
+
+        if current_name == f"{name}.tar.gz":
+            logger.info(f"Skipping rename for {name}: already renamed")
+            continue
+
+        logger.info(f"Renaming {current_name} to {name}.tar.gz")
+
+        drive.update(file_id=tar_file["id"], name=f"{name}.tar.gz")
+
+        # now download the file as a tmp file, make sure that the tar when unzipped has a folder with the name of the org
+        with tempfile.TemporaryDirectory() as t_temp_dir:
+            temp_dir = pathlib.Path(t_temp_dir)
+            tar_filepath = temp_dir / current_name
+
+            drive.download(filepath=tar_filepath, file_id=tar_file["id"])
+
+            with tarfile.open(tar_filepath, "r:gz") as tar:
+                tar.extractall(path=temp_dir)
+
+            # now rezip the folder with the name of the org
+            with compress_files(
+                filepaths=list(temp_dir.iterdir()), name=name
+            ) as gzip_filepath:
+                size_in_mb = get_size_in_mb(gzip_filepath)
+
+                logger.info(
+                    f"Uploading {gzip_filepath.name}; size {size_in_mb} MB for {name}..."
+                )
+
+                drive.upload(
+                    filepath=gzip_filepath,
+                    name=gzip_filepath.name,
+                    to_mime_type=GoogleMimeTypes.zip,
+                    parents=folder["id"],
+                )
+
+                logger.info(f"Uploaded {gzip_filepath.name} for {name}")
+
 
 asyncio.run(
     process_org_folder(
