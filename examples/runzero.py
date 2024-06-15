@@ -14,9 +14,9 @@ import requests
 from aiohttp import ClientSession, ClientTimeout
 from loguru import logger
 
-from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, retry
+from googleapiutils2 import Drive, GoogleMimeTypes, retry
 
-logger.add("./log/log.log", rotation="1 MB")
+logger.add(f"./log/{pathlib.Path(__file__).stem}.log", rotation="1 MB")
 
 
 def get_size_in_mb(filepath: pathlib.Path) -> float:
@@ -32,16 +32,16 @@ def compress_files(
 
     name = pathlib.Path(name)
 
+    logger.info(f"Compressing {len(filepaths)} files for {name}...")
+
     with tempfile.TemporaryDirectory() as t_temp_dir:
         temp_dir = pathlib.Path(t_temp_dir)
         tar_filepath = temp_dir / name.with_suffix(".tar")
 
-        # Create a tar file with the JSON files
         with tarfile.open(tar_filepath, "w") as tar:
             for filepath in filepaths:
                 tar.add(filepath, arcname=filepath.name)
 
-        # Compress the tar file using gzip
         gzip_filepath = temp_dir / name.with_suffix(".tar.gz")
 
         with open(tar_filepath, 'rb') as f_in:
@@ -54,11 +54,32 @@ def compress_files(
             pass
 
 
-async def create_folder_for_org(org: dict, drive: Drive, parent: str):
+def compress_and_upload_files(
+    filepaths: list[pathlib.Path], drive: Drive, name: pathlib.Path | str | None = None
+):
+    with compress_files(filepaths=filepaths, name=name) as gzip_filepath:
+        size_in_mb = get_size_in_mb(gzip_filepath)
+
+        logger.info(f"Uploading {gzip_filepath.name}; size {size_in_mb} MB...")
+
+        drive.upload(
+            filepath=gzip_filepath,
+            name=gzip_filepath.name,
+            to_mime_type=GoogleMimeTypes.zip,
+        )
+
+        logger.info(f"Uploaded {gzip_filepath.name}")
+
+
+async def create_folder_for_org(
+    org: dict,
+    parent: str,
+    drive: Drive,
+):
     name, oid = org["name"], org["id"]
 
     # Replace any slashes in the name with underscores
-    name = name.replace("/", "_")
+    name = str(name).replace("/", "_")
 
     folder = drive.create(
         name=name,
@@ -70,6 +91,37 @@ async def create_folder_for_org(org: dict, drive: Drive, parent: str):
     logger.info(f"Created folder for {name}")
 
     return (name, oid), folder
+
+
+async def normalize_org_tar(org_item: tuple, drive: Drive):
+    (name, oid), folder = org_item
+
+    tar_file = next(drive.list(folder["id"], query="name contains '.tar.gz'"), None)
+
+    if tar_file is None:
+        return
+
+    current_name = tar_file["name"]
+    new_name = pathlib.Path(name).with_suffix(".tar.gz").name
+
+    logger.info(f"Renaming {current_name} to {new_name} for {name}...")
+
+    drive.update(file_id=tar_file["id"], name=new_name)
+
+    with tempfile.TemporaryDirectory() as t_temp_dir:
+        temp_dir = pathlib.Path(t_temp_dir)
+        tar_filepath = temp_dir / current_name
+
+        drive.download(filepath=tar_filepath, file_id=tar_file["id"])
+
+        with tarfile.open(tar_filepath, "r:gz") as tar:
+            tar.extractall(path=temp_dir)
+
+        tar_filepath.unlink()
+
+        compress_and_upload_files(
+            filepaths=list(temp_dir.iterdir()), name=name, drive=drive
+        )
 
 
 @retry(retries=10, exponential_backoff=True)
@@ -129,175 +181,133 @@ async def download_endpoint(
         return filepath, False
 
 
-async def process_org_folder(
-    org_folders: dict,
+async def process_org_item(
+    org_item: tuple,
     base_url: str,
     endpoints: list,
     headers: dict,
+    drive: Drive,
 ):
+    (name, oid), folder = org_item
 
     async with ClientSession(
         timeout=ClientTimeout(
             total=30 * 60
         ),  # 30 minute timeout for the entire process
     ) as session:
-        for (name, oid), folder in org_folders.items():
+        logger.info(f"Processing {name}: {folder['webViewLink']}...")
 
-            logger.info(f"Processing {name}: {folder['webViewLink']}...")
+        if (
+            done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
+        ) is not None:
+            drive.delete(done_file["id"])
 
-            if (
-                done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
-            ) is not None:
-                drive.delete(done_file["id"])
-
-            tasks = []
-            for endpoint in endpoints:
-                task = asyncio.create_task(
-                    download_endpoint(
-                        name=name,
-                        oid=oid,
-                        session=session,
-                        base_url=base_url,
-                        endpoint=endpoint,
-                        headers=headers,
-                    )
+        tasks = [
+            asyncio.create_task(
+                download_endpoint(
+                    name=name,
+                    oid=oid,
+                    session=session,
+                    base_url=base_url,
+                    endpoint=endpoint,
+                    headers=headers,
                 )
-                tasks.append(task)
-
-            results = await asyncio.gather(*tasks)
-
-            if (all_cached := all(cached for _, cached in results)) and (
-                (
-                    done_file := next(
-                        drive.list(folder["id"], query="name contains '.tar.gz'"), None
-                    )
-                )
-                is not None
-            ):
-                logger.info(
-                    f"Skipping compression and upload for {name}: already uploaded"
-                )
-                continue
-
-            filepaths = [filepath for filepath, _ in results]
-
-            logger.info(f"Compressing {len(filepaths)} files for {name}...")
-
-            with compress_files(filepaths=filepaths, name=name) as gzip_filepath:
-                size_in_mb = get_size_in_mb(gzip_filepath)
-
-                logger.info(
-                    f"Uploading {gzip_filepath.name}; size {size_in_mb} MB for {name}..."
-                )
-
-                drive.upload(
-                    filepath=gzip_filepath,
-                    name=gzip_filepath.name,
-                    to_mime_type=GoogleMimeTypes.zip,
-                    parents=folder["id"],
-                )
-
-                logger.info(f"Uploaded {gzip_filepath.name} for {name}")
-
-
-drive = Drive()
-sheets = Sheets()
-
-export_folder = (
-    "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"
-)
-
-runzero_token = os.getenv("RUNZERO_TOKEN")
-
-base_url = "https://console.runzero.com/api/v1.0/"
-
-headers = {
-    "Authorization": f"Bearer {runzero_token}",
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-}
-
-endpoints = [
-    "export/org/assets.json",
-    "export/org/services.json",
-    "export/org/sites.json",
-    "export/org/wireless.json",
-    "export/org/software.json",
-    "export/org/vulnerabilities.json",
-    "export/org/users.json",
-    "export/org/groups.json",
-    "account/orgs/{org_id}",
-    "org/explorers",
-    "org/tasks",
-]
-
-get_all_orgs_endpoint = "account/orgs"
-
-orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
-
-logger.info(f"Got {len(orgs)} runZero orgs")
-
-org_folders = dict(
-    (
-        asyncio.run(create_folder_for_org(org=org, drive=drive, parent=export_folder))
-        for org in orgs
-    )
-)
-
-# for each org folder, look for a file that ends with .tar.gz - rename it to the name of the org.tar.gz:
-for (name, oid), folder in org_folders.items():
-    if (
-        (
-            tar_file := next(
-                drive.list(folder["id"], query="name contains '.tar.gz'"), None
             )
-        )
-    ) is not None:
-        current_name = tar_file["name"]
+            for endpoint in endpoints
+        ]
 
-        if current_name == f"{name}.tar.gz":
-            logger.info(f"Skipping rename for {name}: already renamed")
-            continue
+        results = await asyncio.gather(*tasks)
 
-        logger.info(f"Renaming {current_name} to {name}.tar.gz")
-
-        drive.update(file_id=tar_file["id"], name=f"{name}.tar.gz")
-
-        # now download the file as a tmp file, make sure that the tar when unzipped has a folder with the name of the org
-        with tempfile.TemporaryDirectory() as t_temp_dir:
-            temp_dir = pathlib.Path(t_temp_dir)
-            tar_filepath = temp_dir / current_name
-
-            drive.download(filepath=tar_filepath, file_id=tar_file["id"])
-
-            with tarfile.open(tar_filepath, "r:gz") as tar:
-                tar.extractall(path=temp_dir)
-
-            # now rezip the folder with the name of the org
-            with compress_files(
-                filepaths=list(temp_dir.iterdir()), name=name
-            ) as gzip_filepath:
-                size_in_mb = get_size_in_mb(gzip_filepath)
-
-                logger.info(
-                    f"Uploading {gzip_filepath.name}; size {size_in_mb} MB for {name}..."
+        if (all_cached := all(cached for _, cached in results)) and (
+            (
+                done_file := next(
+                    drive.list(folder["id"], query="name contains '.tar.gz'"), None
                 )
+            )
+            is not None
+        ):
+            logger.info(f"Skipping compression and upload for {name}: already uploaded")
+            return
 
-                drive.upload(
-                    filepath=gzip_filepath,
-                    name=gzip_filepath.name,
-                    to_mime_type=GoogleMimeTypes.zip,
-                    parents=folder["id"],
-                )
+        filepaths = [filepath for filepath, _ in results]
 
-                logger.info(f"Uploaded {gzip_filepath.name} for {name}")
+        compress_and_upload_files(filepaths=filepaths, name=name, drive=drive)
 
 
-asyncio.run(
-    process_org_folder(
-        org_folders=org_folders,
+async def process_org(
+    org: dict,
+    parent: str,
+    drive: Drive,
+    base_url: str,
+    endpoints: list,
+    headers: dict,
+):
+    org_item = await create_folder_for_org(org=org, parent=parent, drive=drive)
+
+    await normalize_org_tar(org_item=org_item, drive=drive)
+
+    await process_org_item(
+        org_item=org_item,
         base_url=base_url,
         endpoints=endpoints,
         headers=headers,
+        drive=drive,
     )
-)
+
+
+async def main():
+    drive = Drive()
+
+    export_folder = (
+        "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"
+    )
+
+    base_url = "https://console.runzero.com/api/v1.0/"
+
+    endpoints = [
+        "export/org/assets.json",
+        "export/org/services.json",
+        "export/org/sites.json",
+        "export/org/wireless.json",
+        "export/org/software.json",
+        "export/org/vulnerabilities.json",
+        "export/org/users.json",
+        "export/org/groups.json",
+        "account/orgs/{org_id}",
+        "org/explorers",
+        "org/tasks",
+    ]
+
+    runzero_token = os.getenv("RUNZERO_TOKEN")
+
+    headers = {
+        "Authorization": f"Bearer {runzero_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    get_all_orgs_endpoint = "account/orgs"
+
+    orgs = requests.get(base_url + get_all_orgs_endpoint, headers=headers).json()
+
+    logger.info(f"Got {len(orgs)} runZero orgs")
+
+    tasks = [
+        asyncio.create_task(
+            process_org(
+                org=org,
+                parent=export_folder,
+                drive=drive,
+                base_url=base_url,
+                endpoints=endpoints,
+                headers=headers,
+            )
+        )
+        for org in orgs
+    ]
+
+    await asyncio.gather(*tasks)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
