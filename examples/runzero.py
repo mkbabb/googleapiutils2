@@ -234,27 +234,6 @@ async def process_org_item(
         compress_and_upload_files(filepaths=filepaths, name=name, drive=drive)
 
 
-async def process_org(
-    org: dict,
-    parent: str,
-    drive: Drive,
-    base_url: str,
-    endpoints: list,
-    headers: dict,
-):
-    org_item = await create_folder_for_org(org=org, parent=parent, drive=drive)
-
-    await normalize_org_tar(org_item=org_item, drive=drive)
-
-    await process_org_item(
-        org_item=org_item,
-        base_url=base_url,
-        endpoints=endpoints,
-        headers=headers,
-        drive=drive,
-    )
-
-
 async def main():
     drive = Drive()
 
@@ -292,15 +271,27 @@ async def main():
 
     logger.info(f"Got {len(orgs)} runZero orgs")
 
+    async def process_org(
+        org: dict,
+        parent: str,
+    ):
+        org_item = await create_folder_for_org(org=org, parent=parent, drive=drive)
+
+        await normalize_org_tar(org_item=org_item, drive=drive)
+
+        await process_org_item(
+            org_item=org_item,
+            base_url=base_url,
+            endpoints=endpoints,
+            headers=headers,
+            drive=drive,
+        )
+
     tasks = [
         asyncio.create_task(
             process_org(
                 org=org,
                 parent=export_folder,
-                drive=drive,
-                base_url=base_url,
-                endpoints=endpoints,
-                headers=headers,
             )
         )
         for org in orgs
