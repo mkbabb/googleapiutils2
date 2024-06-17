@@ -16,6 +16,9 @@ from loguru import logger
 
 from googleapiutils2 import Drive, GoogleMimeTypes, retry
 
+if TYPE_CHECKING:
+    from googleapiutils2 import File
+
 logger.add(f"./log/{pathlib.Path(__file__).stem}.log", rotation="1 MB")
 
 
@@ -25,14 +28,18 @@ def get_size_in_mb(filepath: pathlib.Path) -> float:
 
 @contextlib.contextmanager
 def compress_files(
-    filepaths: list[pathlib.Path], name: pathlib.Path | str | None = None
+    filepaths: list[pathlib.Path],
+    name: pathlib.Path | str | None = None,
+    chunk_size: int = 64 * 1024 * 1024,  # Default to 64 MB
 ) -> Iterator[pathlib.Path]:
     if name is None:
         name = pathlib.Path(tempfile.NamedTemporaryFile().name)
 
     name = pathlib.Path(name)
 
-    logger.info(f"Compressing {len(filepaths)} files for {name}...")
+    logger.info(
+        f"Compressing {len(filepaths)} files for {name} with chunk size {chunk_size} bytes..."
+    )
 
     with tempfile.TemporaryDirectory() as t_temp_dir:
         temp_dir = pathlib.Path(t_temp_dir)
@@ -42,11 +49,18 @@ def compress_files(
             for filepath in filepaths:
                 tar.add(filepath, arcname=filepath.name)
 
+        logger.info(f"Created {tar_filepath.name} for {name}; zipping...")
+
         gzip_filepath = temp_dir / name.with_suffix(".tar.gz")
 
-        with open(tar_filepath, 'rb') as f_in:
-            with gzip.open(gzip_filepath, 'wb') as f_out:
-                f_out.writelines(f_in)
+        with open(tar_filepath, 'rb') as f_in, gzip.open(gzip_filepath, 'wb') as f_out:
+            while True:
+                chunk = f_in.read(chunk_size)  # Read in configurable chunks
+                if not chunk:
+                    break
+                f_out.write(chunk)
+
+        logger.info(f"Zipped {gzip_filepath.name} for {name}")
 
         try:
             yield gzip_filepath
@@ -54,18 +68,31 @@ def compress_files(
             pass
 
 
+@retry(retries=5, exponential_backoff=True)
 def compress_and_upload_files(
-    filepaths: list[pathlib.Path], drive: Drive, name: pathlib.Path | str | None = None
+    filepaths: list[pathlib.Path],
+    drive: Drive,
+    folder: File,
+    name: pathlib.Path | str | None = None,
 ):
     with compress_files(filepaths=filepaths, name=name) as gzip_filepath:
         size_in_mb = get_size_in_mb(gzip_filepath)
 
         logger.info(f"Uploading {gzip_filepath.name}; size {size_in_mb} MB...")
 
+        if (
+            extant_file := next(
+                drive.list(query=f"name = '{gzip_filepath.name}'"), None
+            )
+        ) is not None:
+            logger.info(f"Deleting extant {extant_file['name']}...")
+            drive.delete(extant_file["id"])
+
         drive.upload(
             filepath=gzip_filepath,
             name=gzip_filepath.name,
             to_mime_type=GoogleMimeTypes.zip,
+            parents=folder["id"],
         )
 
         logger.info(f"Uploaded {gzip_filepath.name}")
@@ -90,38 +117,15 @@ async def create_folder_for_org(
 
     logger.info(f"Created folder for {name}")
 
+    # clear out all of the folder's files therein:
+    files = list(drive.list(folder["id"]))
+
+    logger.info(f"Deleting {len(files)} files in {name}...")
+
+    for file in files:
+        drive.delete(file["id"])
+
     return (name, oid), folder
-
-
-async def normalize_org_tar(org_item: tuple, drive: Drive):
-    (name, oid), folder = org_item
-
-    tar_file = next(drive.list(folder["id"], query="name contains '.tar.gz'"), None)
-
-    if tar_file is None:
-        return
-
-    current_name = tar_file["name"]
-    new_name = pathlib.Path(name).with_suffix(".tar.gz").name
-
-    logger.info(f"Renaming {current_name} to {new_name} for {name}...")
-
-    drive.update(file_id=tar_file["id"], name=new_name)
-
-    with tempfile.TemporaryDirectory() as t_temp_dir:
-        temp_dir = pathlib.Path(t_temp_dir)
-        tar_filepath = temp_dir / current_name
-
-        drive.download(filepath=tar_filepath, file_id=tar_file["id"])
-
-        with tarfile.open(tar_filepath, "r:gz") as tar:
-            tar.extractall(path=temp_dir)
-
-        tar_filepath.unlink()
-
-        compress_and_upload_files(
-            filepaths=list(temp_dir.iterdir()), name=name, drive=drive
-        )
 
 
 @retry(retries=10, exponential_backoff=True)
@@ -218,20 +222,22 @@ async def process_org_item(
 
         results = await asyncio.gather(*tasks)
 
-        if (all_cached := all(cached for _, cached in results)) and (
-            (
-                done_file := next(
-                    drive.list(folder["id"], query="name contains '.tar.gz'"), None
-                )
-            )
-            is not None
-        ):
-            logger.info(f"Skipping compression and upload for {name}: already uploaded")
-            return
+        # if (all_cached := all(cached for _, cached in results)) and (
+        #     (
+        #         done_file := next(
+        #             drive.list(folder["id"], query="name contains '.tar.gz'"), None
+        #         )
+        #     )
+        #     is not None
+        # ):
+        #     logger.info(f"Skipping compression and upload for {name}: already uploaded")
+        #     return
 
         filepaths = [filepath for filepath, _ in results]
 
-        compress_and_upload_files(filepaths=filepaths, name=name, drive=drive)
+        compress_and_upload_files(
+            filepaths=filepaths, name=name, folder=folder, drive=drive
+        )
 
 
 async def main():
@@ -277,7 +283,7 @@ async def main():
     ):
         org_item = await create_folder_for_org(org=org, parent=parent, drive=drive)
 
-        await normalize_org_tar(org_item=org_item, drive=drive)
+        # await normalize_org_tar(org_item=org_item, drive=drive)
 
         await process_org_item(
             org_item=org_item,

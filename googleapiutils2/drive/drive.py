@@ -270,8 +270,13 @@ class Drive(DriveBase):
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         if float(file["size"]) >= DOWNLOAD_LIMIT:
-            link = file["exportLinks"].get(mime_type.value, "")  # type: ignore
-            return download_large_file(url=link, filepath=filepath)
+            if "exportLinks" in file:
+                link = file["exportLinks"].get(mime_type.value, "")  # type: ignore
+                return download_large_file(url=link, filepath=filepath)
+            else:
+                raise ValueError(
+                    f"File {file['webViewLink']}: {file['name']} is too large to download ({file['size']}). Use the Google Drive web interface to download it."
+                )
         else:
             return self._download(
                 file=file, filepath=filepath, mime_type=mime_type  # type: ignore
