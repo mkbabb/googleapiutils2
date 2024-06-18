@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import gzip
 import http
-import json
 import os
 import pathlib
 import tarfile
@@ -69,7 +68,7 @@ def compress_files(
             pass
 
 
-@retry(retries=5, exponential_backoff=True)
+@retry(retries=3, exponential_backoff=True)
 def compress_and_upload_files(
     filepaths: list[pathlib.Path],
     drive: Drive,
@@ -80,17 +79,6 @@ def compress_and_upload_files(
         size_in_mb = get_size_in_mb(gzip_filepath)
 
         logger.info(f"Uploading {gzip_filepath.name}; size {size_in_mb} MB...")
-
-        if (
-            extant_file := next(
-                drive.list(
-                    parents=folder["id"], query=f"name = '{gzip_filepath.name}'"
-                ),
-                None,
-            )
-        ) is not None:
-            logger.info(f"Deleting extant {extant_file['name']}...")
-            drive.delete(extant_file["id"])
 
         drive.upload(
             filepath=gzip_filepath,
@@ -109,7 +97,6 @@ async def create_folder_for_org(
 ):
     name, oid = org["name"], org["id"]
 
-    # Replace any slashes in the name with underscores
     name = str(name).replace("/", "_")
 
     folder = drive.create(
@@ -213,17 +200,6 @@ async def process_org_item(
 
         results = await asyncio.gather(*tasks)
 
-        # if (all_cached := all(cached for _, cached in results)) and (
-        #     (
-        #         done_file := next(
-        #             drive.list(folder["id"], query="name contains '.tar.gz'"), None
-        #         )
-        #     )
-        #     is not None
-        # ):
-        #     logger.info(f"Skipping compression and upload for {name}: already uploaded")
-        #     return
-
         filepaths = [filepath for filepath, _ in results]
 
         compress_and_upload_files(
@@ -233,6 +209,8 @@ async def process_org_item(
 
 async def main():
     drive = Drive()
+
+    drive.empty_trash()
 
     export_folder = "https://drive.google.com/drive/u/0/folders/0AMXg4ZUfGbSqUk9PVA"
 
