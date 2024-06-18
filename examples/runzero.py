@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import gzip
 import http
+import json
 import os
 import pathlib
 import tarfile
@@ -242,6 +243,45 @@ async def process_org_item(
 
 async def main():
     drive = Drive()
+
+    file_count = 0
+    # find **files** ONLY owned by the service account: reports@friday-institute.iam.gserviceaccount.com;
+    # and not shared with anyone else
+    total_size_in_mb = 0.0
+    query = "mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+
+  
+    drive.empty_trash()
+
+    about = drive.about_get()
+
+    # dump to json file:
+    with open("./data/about.json", "w") as f:
+        json.dump(about, f)
+
+    for file in drive.list(query=query, order_by="modifiedTime asc"):
+        # check if it's shared with anyone else
+        size = int(file.get("size", 0))
+        size_in_mb = round(size / 1024 / 1024, 2)
+
+        permissions = file.get("permissions", file.get("permissionIds", []))
+
+        logger.info(f"Checking {file['name']}...; size {size_in_mb} MB")
+
+        if len(permissions) > 1:
+            logger.info(f"Skipping {file['name']}: shared with {len(permissions)}")
+            continue
+
+        logger.info(f"Deleting {file['name']}...")
+
+        drive.delete(file["id"])
+
+        file_count += 1
+        total_size_in_mb += size_in_mb
+
+        logger.info(
+            f"Deleted {file_count} files; total size deleted {total_size_in_mb} MB"
+        )
 
     export_folder = (
         "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"

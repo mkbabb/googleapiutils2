@@ -72,6 +72,8 @@ class Drive(DriveBase):
             "drive", VERSION, credentials=self.creds
         )  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
+        self.about: DriveResource.AboutResource = self.service.about()
+
         self.team_drives = team_drives
 
     def get(
@@ -481,13 +483,18 @@ class Drive(DriveBase):
         return self.list(query=query, fields=fields)
 
     def _create_nested_folders(
-        self, filepath: Path, parents: List[str], get_extant: bool = True
+        self,
+        filepath: Path,
+        parents: List[str],
+        owners: List[str],
+        get_extant: bool = True,
     ) -> List[str]:
         """Create nested folders in Google Drive. Walks up the filepath creating folders as it goes.
 
         Args:
             filepath (Path): The filepath to create folders for.
             parents (List[str]): The parent folders to create the folders in.
+            owners (List[str]): The owner IDs of the folders.
             get_extant (bool, optional): Whether to get the folder if it already exists. Defaults to True.
         """
 
@@ -505,6 +512,10 @@ class Drive(DriveBase):
                 "parents": parents,
                 "mimeType": GoogleMimeTypes.folder.value,
             }
+
+            if len(owners):
+                body["owners"] = owners
+
             return self.execute(
                 self.files.create(
                     body=body,
@@ -522,6 +533,7 @@ class Drive(DriveBase):
         name: FilePath,
         mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         recursive: bool = False,
         get_extant: bool = False,
         fields: str = DEFAULT_FIELDS,
@@ -535,6 +547,7 @@ class Drive(DriveBase):
             name (FilePath): Filepath to the file to be uploaded.
             mime_type (GoogleMimeTypes): Mime type of the file.
             parents (List[str], optional): List of parent folder IDs wherein the file will be created. Defaults to None.
+            owners (List[str], optional): List of owner IDs. Defaults to None.
             recursive (bool, optional): Create parent folders if they don't exist. Defaults to False.
             get_extant (bool, optional): If a file with the same name already exists, return it. Defaults to False.
             fields (str, optional): Fields to be returned. Defaults to DEFAULT_FIELDS.
@@ -543,9 +556,12 @@ class Drive(DriveBase):
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
 
+        owners = [owners] if isinstance(owners, str) else owners
+        owners = owners if owners is not None else []
+
         if recursive:
             parents = self._create_nested_folders(
-                filepath=filepath, parents=parents, get_extant=get_extant
+                filepath=filepath, parents=parents, owners=owners, get_extant=get_extant
             )
 
         if (
@@ -563,6 +579,8 @@ class Drive(DriveBase):
         }
         if len(parents):
             kwargs["body"]["parents"] = parents
+        if len(owners):
+            kwargs["body"]["owners"] = owners
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
@@ -635,6 +653,7 @@ class Drive(DriveBase):
         filepath: FilePath,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -643,6 +662,9 @@ class Drive(DriveBase):
         filepath = Path(filepath)
         parents = [parents] if isinstance(parents, str) else parents
         parents = list(map(parse_file_id, parents)) if parents is not None else []
+
+        owners = [owners] if isinstance(owners, str) else owners
+        owners = owners if owners is not None else []
 
         file = self.get_if_exists(name=name, parents=parents)
 
@@ -672,6 +694,8 @@ class Drive(DriveBase):
             kwargs["body"]["name"] = name
         if len(parents):
             kwargs["body"]["parents"] = parents
+        if len(owners):
+            kwargs["body"]["owners"] = owners
         if to_mime_type is not None:
             kwargs["body"]["mimeType"] = to_mime_type.value
 
@@ -683,6 +707,7 @@ class Drive(DriveBase):
         name: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
@@ -699,6 +724,7 @@ class Drive(DriveBase):
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
             to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
+            owners (List[str], optional): The list of owner IDs. Defaults to None.
             recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
@@ -718,6 +744,7 @@ class Drive(DriveBase):
                         name=t_file,
                         mime_type=GoogleMimeTypes.folder,
                         parents=parents,
+                        owners=owners,
                         recursive=True,
                         get_extant=True,
                     )["id"]
@@ -729,6 +756,7 @@ class Drive(DriveBase):
                     name=t_file.name,
                     to_mime_type=to_mime_type,
                     parents=t_parents,
+                    owners=owners,
                     recursive=recursive,
                     body=body,
                     update=update,
@@ -747,6 +775,7 @@ class Drive(DriveBase):
             filepath=filepath,
             to_mime_type=to_mime_type,
             parents=parents,
+            owners=owners,
             body=body,
             update=update,
             from_mime_type=from_mime_type,
@@ -759,6 +788,7 @@ class Drive(DriveBase):
         name: str,
         to_mime_type: GoogleMimeTypes,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -787,6 +817,7 @@ class Drive(DriveBase):
                 filepath=tio.name,
                 to_mime_type=to_mime_type,
                 parents=parents,
+                owners=owners,
                 body=body,
                 update=update,
                 from_mime_type=from_mime_type,
@@ -799,6 +830,7 @@ class Drive(DriveBase):
         name: str,
         to_mime_type: GoogleMimeTypes,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -813,6 +845,7 @@ class Drive(DriveBase):
             to_mime_type (GoogleMimeTypes): The mime type of the file.
             file_format (str, optional): The file format ("csv", "xlsx", etc.). Defaults to "csv".
             parents (List[str], optional): The list of parent IDs. Defaults to None.
+            owners (List[str], optional): The list of owner IDs. Defaults to None.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
@@ -844,6 +877,7 @@ class Drive(DriveBase):
                 name=name,
                 to_mime_type=to_mime_type,
                 parents=parents,
+                owners=owners,
                 body=body,
                 update=update,
                 from_mime_type=from_mime_type,
@@ -856,6 +890,7 @@ class Drive(DriveBase):
         name: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: List[str] | str | None = None,
+        owners: List[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
@@ -870,6 +905,7 @@ class Drive(DriveBase):
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
             to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
+            owners (List[str], optional): The list of owner IDs. Defaults to None.
             recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
@@ -880,6 +916,7 @@ class Drive(DriveBase):
                 name=name,
                 to_mime_type=to_mime_type,
                 parents=parents,
+                owners=owners,
                 recursive=recursive,
                 body=body,
                 update=update,
@@ -896,6 +933,7 @@ class Drive(DriveBase):
                 name=name,
                 to_mime_type=to_mime_type,
                 parents=parents,
+                owners=owners,
                 body=body,
                 update=update,
                 from_mime_type=from_mime_type,
@@ -911,6 +949,7 @@ class Drive(DriveBase):
                 name=name,
                 to_mime_type=to_mime_type,
                 parents=parents,
+                owners=owners,
                 body=body,
                 update=update,
                 from_mime_type=from_mime_type,
@@ -963,6 +1002,18 @@ class Drive(DriveBase):
             recursive=recursive,
             overwrite=False,
         )
+
+    def empty_trash(self):
+        """Empty the trash on Google Drive.
+        See https://developers.google.com/drive/api/v3/reference/files/emptyTrash for more information.
+        """
+        return self.execute(self.files.emptyTrash())
+
+    def about_get(self):
+        """Get information about the user's Google Drive account.
+        See https://developers.google.com/drive/api/v3/reference/about/get for more information.
+        """
+        return self.execute(self.about.get(fields=DEFAULT_FIELDS))
 
 
 class Permissions:
