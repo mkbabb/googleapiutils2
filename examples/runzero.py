@@ -260,14 +260,11 @@ async def main():
         )
 
     tasks = [
-        asyncio.create_task(
-            process_org(
-                org=org,
-            )
+        process_org(
+            org=org,
         )
         for org in orgs
     ]
-
     await asyncio.gather(*tasks)
 
 
