@@ -511,8 +511,8 @@ def q_escape(s: str) -> str:
 
 
 def get_oauth2_creds(
-    client_config: FilePath | dict = CONFIG_PATH,
-    token_path: FilePath = TOKEN_PATH,
+    client_config: FilePath | dict | None = CONFIG_PATH,
+    token_path: FilePath | None = TOKEN_PATH,
     scopes: List[str] = SCOPES,
 ) -> Credentials:
     """Get OAuth2 credentials for Google API.
@@ -532,29 +532,28 @@ def get_oauth2_creds(
             https://developers.google.com/identity/protocols/oauth2/scopes
     """
 
-    token_path = Path(token_path)
+    if client_config is not None and not isinstance(client_config, dict):
+        client_config_path = Path(client_config)
 
-    if not isinstance(client_config, dict):
-        path = Path(client_config)
+        if not client_config_path.exists():
+            client_config_path = Path(os.environ.get(CONFIG_ENV_VAR, ""))
 
-        if not path.exists():
-            path = Path(os.environ.get(CONFIG_ENV_VAR, ""))
-
-        if not path.exists():
+        if not client_config_path.exists():
             raise Exception(
-                "No client config file found. Please provide a client config file path or set the GOOGLE_API_CREDENTIALS environment variable."
+                "No client config file found. Please provide a client config file client_config or set the GOOGLE_API_CREDENTIALS environment variable."
             )
 
-        client_config = json.loads(path.read_bytes())
+        client_config = json.loads(client_config_path.read_bytes())
 
-    is_service_account = client_config.get("type", "") == "service_account"  # type: ignore
+    is_service_account = client_config is not None and client_config.get("type", "") == "service_account"  # type: ignore
 
     if is_service_account:
         return service_account.Credentials.from_service_account_info(
             client_config, scopes=scopes
-        )  # type: ignore
-    else:
-        creds: Credentials = None  # type: ignore
+        )
+    elif token_path is not None:
+        token_path = Path(token_path)  # type: ignore
+        creds: Credentials | None = None
 
         if token_path.exists():
             creds = pickle.loads(token_path.read_bytes())
@@ -565,10 +564,13 @@ def get_oauth2_creds(
 
         elif creds is None:
             flow = InstalledAppFlow.from_client_config(client_config, scopes)
-            creds = flow.run_local_server(port=0)  # type: ignore
+            creds = flow.run_local_server(port=0)
+
             token_path.write_bytes(pickle.dumps(creds))
 
-        return creds  # type: ignore
+        return creds
+
+    raise Exception("No token path provided.")
 
 
 def download_large_file(

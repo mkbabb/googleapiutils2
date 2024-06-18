@@ -514,7 +514,7 @@ class Drive(DriveBase):
             }
 
             if len(owners):
-                body["owners"] = owners
+                body["owners"] = owners  # type: ignore
 
             return self.execute(
                 self.files.create(
