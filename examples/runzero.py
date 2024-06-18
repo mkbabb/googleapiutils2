@@ -68,6 +68,7 @@ def compress_files(
             pass
 
 
+@retry(retries=5, exponential_backoff=True)
 def compress_and_upload_files(
     filepaths: list[pathlib.Path],
     drive: Drive,
@@ -81,7 +82,10 @@ def compress_and_upload_files(
 
         if (
             extant_file := next(
-                drive.list(query=f"name = '{gzip_filepath.name}'"), None
+                drive.list(
+                    parents=folder["id"], query=f"name = '{gzip_filepath.name}'"
+                ),
+                None,
             )
         ) is not None:
             logger.info(f"Deleting extant {extant_file['name']}...")
@@ -191,11 +195,6 @@ async def process_org_item(
         ),  # 30 minute timeout for the entire process
     ) as session:
         logger.info(f"Processing {name}: {folder['webViewLink']}...")
-
-        if (
-            done_file := next(drive.list(folder["id"], query="name = 'done'"), None)
-        ) is not None:
-            drive.delete(done_file["id"])
 
         tasks = [
             asyncio.create_task(
