@@ -68,7 +68,6 @@ def compress_files(
             pass
 
 
-@retry(retries=5, exponential_backoff=True)
 def compress_and_upload_files(
     filepaths: list[pathlib.Path],
     drive: Drive,
@@ -117,18 +116,10 @@ async def create_folder_for_org(
 
     logger.info(f"Created folder for {name}")
 
-    # clear out all of the folder's files therein:
-    files = list(drive.list(folder["id"]))
-
-    logger.info(f"Deleting {len(files)} files in {name}...")
-
-    for file in files:
-        drive.delete(file["id"])
-
     return (name, oid), folder
 
 
-@retry(retries=10, exponential_backoff=True)
+@retry(retries=5, exponential_backoff=True)
 async def download_endpoint(
     name: str,
     oid: str,
@@ -243,9 +234,7 @@ async def process_org_item(
 async def main():
     drive = Drive()
 
-    export_folder = (
-        "https://drive.google.com/drive/u/0/folders/1JGyx-4tsi1VME0Pab-cjX9ygs_kkgGj1"
-    )
+    export_folder = "https://drive.google.com/drive/u/0/folders/0AMXg4ZUfGbSqUk9PVA"
 
     base_url = "https://console.runzero.com/api/v1.0/"
 
@@ -279,11 +268,10 @@ async def main():
 
     async def process_org(
         org: dict,
-        parent: str,
     ):
-        org_item = await create_folder_for_org(org=org, parent=parent, drive=drive)
-
-        # await normalize_org_tar(org_item=org_item, drive=drive)
+        org_item = await create_folder_for_org(
+            org=org, parent=export_folder, drive=drive
+        )
 
         await process_org_item(
             org_item=org_item,
@@ -297,7 +285,6 @@ async def main():
         asyncio.create_task(
             process_org(
                 org=org,
-                parent=export_folder,
             )
         )
         for org in orgs
