@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import gzip
 import http
+import json
 import os
 import pathlib
 import tarfile
