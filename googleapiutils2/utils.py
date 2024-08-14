@@ -510,6 +510,46 @@ def q_escape(s: str) -> str:
     return f"'{s}'"
 
 
+def path_or_str_to_json(path_or_str: FilePath | str) -> dict:
+    if isinstance(path_or_str, str):
+        try:
+            return json.loads(path_or_str)
+        except json.JSONDecodeError:
+            pass
+
+        path = Path(path_or_str)
+
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        else:
+            path_or_str = path
+
+    return json.loads(path_or_str.read_bytes())
+
+
+def load_client_config(
+    client_config: FilePath | dict | None = CONFIG_PATH,
+):
+    # If the client config is None, or it's a filepath that doesn't exist, load the environment variable
+    if client_config is None:
+        client_config = os.environ.get(CONFIG_ENV_VAR, None)
+    elif isinstance(client_config, (str, Path)):
+        client_config_path = Path(client_config)
+
+        if not client_config_path.exists():
+            client_config = os.environ.get(CONFIG_ENV_VAR, None)
+
+    if client_config is None:
+        raise Exception(
+            "No client config found. Please provide a client config file or dict object, or set the GOOGLE_API_CREDENTIALS environment variable."
+        )
+
+    if isinstance(client_config, dict):
+        return client_config
+    elif isinstance(client_config, (str, Path)):
+        return path_or_str_to_json(client_config)
+
+
 def get_oauth2_creds(
     client_config: FilePath | dict | None = CONFIG_PATH,
     token_path: FilePath | None = TOKEN_PATH,
@@ -532,18 +572,7 @@ def get_oauth2_creds(
             https://developers.google.com/identity/protocols/oauth2/scopes
     """
 
-    if client_config is not None and not isinstance(client_config, dict):
-        client_config_path = Path(client_config)
-
-        if not client_config_path.exists():
-            client_config_path = Path(os.environ.get(CONFIG_ENV_VAR, ""))
-
-        if not client_config_path.exists():
-            raise Exception(
-                "No client config file found. Please provide a client config file client_config or set the GOOGLE_API_CREDENTIALS environment variable."
-            )
-
-        client_config = json.loads(client_config_path.read_bytes())
+    client_config = load_client_config(client_config=client_config)
 
     is_service_account = client_config is not None and client_config.get("type", "") == "service_account"  # type: ignore
 
