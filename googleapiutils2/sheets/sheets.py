@@ -534,6 +534,24 @@ class Sheets(DriveBase):
             )
         )
 
+    def value(
+        self,
+        spreadsheet_id: str,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
+        value_render_option: ValueRenderOption = ValueRenderOption.unformatted,
+        **kwargs: Any,
+    ) -> Any:
+        """Get a single value from a spreadsheet within a range.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet ID.
+            range_name (SheetsRange, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
+            value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
+        """
+        return self.values(
+            spreadsheet_id, range_name, value_render_option, **kwargs
+        ).get("values", [[]])[0][0]
+
     def _dict_to_values_align_columns(
         self,
         spreadsheet_id: str,
@@ -636,23 +654,30 @@ class Sheets(DriveBase):
             for sheet_slice in sheet_slices
         ]
 
-        for sheet_slice in sheet_slices:
+        def resize_sheet(
+            sheet_slice: SheetSliceT,
+        ):
             sheet_name = sheet_slice.sheet_name
             rows, cols = shapes[sheet_name]
 
             t_rows, t_cols = sheet_slice.rows.stop, sheet_slice.columns.stop
 
-            if t_rows > rows or t_cols > cols:
-                rows, cols = max(t_rows, rows), max(t_cols, cols)
-                self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
+            if t_rows <= rows and t_cols <= cols:
+                return
 
-                shape = (rows, cols)
-                self._set_sheet_cache(
-                    cache_key="shape",
-                    value=shape,
-                    spreadsheet_id=spreadsheet_id,
-                    name=sheet_name,
-                )
+            rows, cols = max(t_rows, rows), max(t_cols, cols)
+            self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
+
+            shape = (rows, cols)
+            self._set_sheet_cache(
+                cache_key="shape",
+                value=shape,
+                spreadsheet_id=spreadsheet_id,
+                name=sheet_name,
+            )
+
+        for sheet_slice in sheet_slices:
+            resize_sheet(sheet_slice=sheet_slice)
 
     def update(
         self,
