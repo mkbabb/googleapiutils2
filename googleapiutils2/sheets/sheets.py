@@ -159,7 +159,7 @@ class Sheets(DriveBase):
             self.spreadsheets.batchUpdate(
                 spreadsheetId=spreadsheet_id, body=body, **kwargs
             )
-        )
+        )  # type: ignore
 
     def create(
         self,
@@ -532,7 +532,7 @@ class Sheets(DriveBase):
                 valueRenderOption=value_render_option.value,
                 **kwargs,
             )
-        )
+        )  # type: ignore
 
     def value(
         self,
@@ -758,7 +758,7 @@ class Sheets(DriveBase):
                 spreadsheetId=spreadsheet_id,
                 body=body,
             )
-        )
+        )  # type: ignore
 
     def batch_update(
         self,
@@ -879,7 +879,7 @@ class Sheets(DriveBase):
                 insertDataOption=insert_data_option.value,
                 valueInputOption=value_input_option.value,
             )
-        )
+        )  # type: ignore
 
     def clear(
         self,
@@ -899,7 +899,7 @@ class Sheets(DriveBase):
             self.spreadsheets.values().clear(
                 spreadsheetId=spreadsheet_id, range=str(sheet_slice)
             )
-        )
+        )  # type: ignore
 
     def resize(
         self,
@@ -1053,8 +1053,11 @@ class Sheets(DriveBase):
             end_row (int, optional): The ending row of the range to format. Defaults to None.
             end_col (int, optional): The ending column of the range to format. Defaults to None.
         """
-        end_row = end_row if end_row is not None else start_row + 1
-        end_col = end_col if end_col is not None else start_col + 1
+        end_row = end_row if end_row is not None else start_row
+        end_col = end_col if end_col is not None else start_col
+
+        if start_row - 1 < 0 or start_col - 1 < 0:
+            raise ValueError("The row and column indices must be greater than 0.")
 
         return {
             "repeatCell": {
@@ -1274,22 +1277,29 @@ class Sheets(DriveBase):
             if not len(t_sheets_formats) or t_sheets_formats[0].cell_formats is None:
                 return formats
 
-            for n, row in enumerate(t_sheets_formats[0].cell_formats):
-                for m, format in enumerate(row):
-                    start_row = rows.start + n
-                    start_col = cols.start + m
+            formats = []
+            cell_formats = t_sheets_formats[0].cell_formats
 
-                    t_cell_format = cell_format.copy()
+            for n in range(rows.start - 1, rows.stop):
+                for m in range(cols.start - 1, cols.stop):
+                    format = None
 
-                    deep_update(format, t_cell_format)  # type: ignore
+                    if n < len(cell_formats) and m < len(cell_formats[n]):
+                        format = cell_formats[n][m]
+
+                        t_cell_format = cell_format.copy()
+
+                        deep_update(format, t_cell_format)  # type: ignore
+                    else:
+                        format = cell_format
 
                     formats.append(
                         self._create_format_body(
                             sheet_id,
-                            start_row=start_row,
-                            end_row=start_row + 1,
-                            start_col=start_col,
-                            end_col=start_col + 1,
+                            start_row=n + 1,
+                            end_row=n + 1,
+                            start_col=m + 1,
+                            end_col=m + 1,
                             cell_format=format,
                         )
                     )
@@ -1299,7 +1309,9 @@ class Sheets(DriveBase):
         requests = []
         for range_name in range_names:
             sheet_slice = to_sheet_slice(range_name)
+
             sheet_id = self.id(spreadsheet_id, sheet_slice.sheet_name)
+
             shape = self.shape(spreadsheet_id, sheet_slice.sheet_name)
 
             sheet_slice = sheet_slice.with_shape(shape)
@@ -1480,9 +1492,9 @@ class Sheets(DriveBase):
 
         columns = columns if columns is not None else []
         # if we have extant columns, append to them instead of replacing them
-        columns += rows[0]
+        columns += rows[0]  # type: ignore
 
-        rows = rows[1:] if len(rows) > 1 else []
+        rows = rows[1:] if len(rows) > 1 else []  # type: ignore
 
         df = pd.DataFrame(rows, **kwargs)
 
@@ -1533,9 +1545,17 @@ class Sheets(DriveBase):
     @staticmethod
     def _resize_dimension(
         sheet: Sheet,
-        sizes: int | list[int] | None = None,
+        sizes: list[int] | list[int | None] | int | None = None,
         dimension: SheetsDimension = SheetsDimension.columns,
     ) -> list:
+        """Internal method to create dimension resize requests.
+
+        Args:
+            sheet: Sheet object containing properties
+            sizes: If None, auto-resize all columns/rows. If int, set all to that size.
+                If list, can contain None to auto-resize specific columns/rows.
+            dimension: Whether to resize rows or columns
+        """
         sheet_id = sheet["properties"]["sheetId"]
         grid_properties = sheet["properties"]["gridProperties"]
         count = (
@@ -1544,87 +1564,163 @@ class Sheets(DriveBase):
             else grid_properties["rowCount"]
         )
 
-        make_range = lambda i: {
-            "sheetId": sheet_id,
-            "dimension": dimension.value,
-            "startIndex": i,
-            "endIndex": i + 1,
-        }
+        # Helper to create dimension range
+        def make_range(start: int, end: int | None = None) -> dict:
+            return {
+                "sheetId": sheet_id,
+                "dimension": dimension.value,
+                "startIndex": start,
+                "endIndex": end if end is not None else start + 1,
+            }
 
+        # Case 1: Auto-resize all
         if sizes is None:
+            return [{"autoResizeDimensions": {"dimensions": make_range(0, count)}}]
+
+        # Case 2: Single size for all
+        if isinstance(sizes, int):
             return [
                 {
-                    "autoResizeDimensions": {
-                        "dimensions": make_range(i),
+                    "updateDimensionProperties": {
+                        "range": make_range(0, count),
+                        "properties": {"pixelSize": sizes},
+                        "fields": "pixelSize",
                     }
                 }
-                for i in range(count)
             ]
 
-        if isinstance(sizes, int):
-            sizes = [sizes] * count
+        # Case 3: List of sizes with possible None values
+        requests: list = []
 
-        if not len(sizes):
-            return []
+        # Group consecutive None values for batch auto-resize
+        i = 0
+        while i < min(len(sizes), count):
+            if sizes[i] is None:
+                # Find end of None sequence
+                j = i + 1
+                while j < min(len(sizes), count) and sizes[j] is None:
+                    j += 1
+                requests.append(
+                    {"autoResizeDimensions": {"dimensions": make_range(i, j)}}
+                )
+                i = j
+            else:
+                requests.append(
+                    {
+                        "updateDimensionProperties": {
+                            "range": make_range(i),
+                            "properties": {"pixelSize": sizes[i]},
+                            "fields": "pixelSize",  # type: ignore
+                        }
+                    }
+                )
+                i += 1
 
-        return [
-            {
-                "updateDimensionProperties": {
-                    "range": make_range(i),
-                    "properties": {"pixelSize": sizes[i]},
-                    "fields": "pixelSize",
-                }
-            }
-            for i in range(min(len(sizes), count))
-        ]
+        return requests
 
     def resize_dimensions(
         self,
         spreadsheet_id: str,
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
-        sizes: list[int] | int | None = 100,
+        sizes: list[int] | list[int | None] | int | None = 100,
         dimension: SheetsDimension = SheetsDimension.columns,
     ) -> BatchUpdateSpreadsheetResponse:
         """Resizes the dimensions of a sheet.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (str): The name of the sheet to resize.
-            sizes (list[int] | int | None, optional): The sizes to resize to.
-                If None, the columns will be auto resized. Defaults to 100.
-                If an int, all columns will be resized to that size.
-            dimension (SheetsDimension, optional): The dimension to resize. Defaults to SheetsDimension.columns.
+            spreadsheet_id: The spreadsheet to update
+            sheet_name: The name of the sheet to resize
+            sizes: The sizes to resize to:
+                - If None, auto-resize all columns/rows
+                - If int, set all columns/rows to that size
+                - If list, can contain None to auto-resize specific columns/rows
+            dimension: Whether to resize rows or columns
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
-
         sheet = self.get(spreadsheet_id, name=sheet_name)
 
-        def resize():
-            body: BatchUpdateSpreadsheetRequest = {
-                "requests": self._resize_dimension(
-                    sheet=sheet,
-                    sizes=sizes,
-                    dimension=dimension,
-                )
-            }
-            return self.execute(
-                self.service.spreadsheets().batchUpdate(
-                    spreadsheetId=spreadsheet_id, body=body
-                )
+        # Create and execute resize request
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": self._resize_dimension(
+                sheet=sheet,
+                sizes=sizes,
+                dimension=dimension,
             )
+        }
+        res = self.execute(
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id, body=body
+            )
+        )
 
-        if sizes is None and dimension == SheetsDimension.columns:
-            # This is a hack to ameliorate the fact that autoResizeDimensions
-            # doesn't include the header in its calculations.
-            header = self.header(spreadsheet_id, sheet_name)
-            res = self.append(spreadsheet_id, sheet_name, [header])
-            updated_range = res["updates"]["updatedRange"]
+        return res  # type: ignore
 
-            res = resize()
+    def freeze(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str = DEFAULT_SHEET_NAME,
+        rows: int = 0,
+        columns: int = 0,
+    ):
+        """Freezes rows and/or columns in a sheet.
 
-            self.clear(spreadsheet_id, updated_range)
-            return res  # type: ignore
-        else:
-            return resize()
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet
+            sheet_name (str, optional): Name of the sheet to freeze. Defaults to DEFAULT_SHEET_NAME.
+            rows (int, optional): Number of rows to freeze from top. Defaults to 0.
+            columns (int, optional): Number of columns to freeze from left. Defaults to 0.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet_id = self.id(spreadsheet_id, sheet_name)
+
+        body: BatchUpdateSpreadsheetRequest = {
+            "requests": [
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "gridProperties": {
+                                "frozenRowCount": rows,
+                                "frozenColumnCount": columns,
+                            },
+                        },
+                        "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+                    }
+                }
+            ]
+        }
+
+        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+
+    def format_header(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str = DEFAULT_SHEET_NAME,
+        auto_resize: bool = True,
+    ):
+        """Formats the header row of a sheet by freezing and bolding it, with optional column auto-resizing.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet to format
+            sheet_name (str, optional): Name of the sheet to format. Defaults to DEFAULT_SHEET_NAME.
+            auto_resize (bool, optional): Whether to auto-resize columns. Defaults to True.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
+        # Freeze first row
+        self.freeze(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, rows=1)
+
+        # Format first row bold
+        sheet_slice = SheetSlice[sheet_name, 1, ...]
+        self.format(spreadsheet_id=spreadsheet_id, range_names=sheet_slice, bold=True)
+
+        # Auto-resize columns if requested
+        if auto_resize:
+            self.resize_dimensions(
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name,
+                sizes=None,
+                dimension=SheetsDimension.columns,
+            )

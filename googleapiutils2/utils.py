@@ -280,7 +280,6 @@ def raise_for_status(status: str) -> None:
 def on_http_exception(e: Exception) -> bool:
     if isinstance(e, googleapiclient.errors.HttpError):
         status = e.resp.status
-
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
 
     return False
@@ -394,7 +393,7 @@ class DriveBase:
     @retry(
         retries=10, delay=30, exponential_backoff=False, on_exception=on_http_exception
     )
-    def execute(self, request: googleapiclient.http.HttpRequest):
+    def execute(self, request: googleapiclient.http.HttpRequest) -> Any:
         if self.execute_time == 0:
             return request.execute()
 
@@ -579,7 +578,7 @@ def get_oauth2_creds(
     if is_service_account:
         return service_account.Credentials.from_service_account_info(
             client_config, scopes=scopes
-        )
+        ) # type: ignore
     elif token_path is not None:
         token_path = Path(token_path)  # type: ignore
         creds: Credentials | None = None

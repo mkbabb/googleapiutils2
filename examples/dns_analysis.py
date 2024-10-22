@@ -325,6 +325,20 @@ reports_folder = (
 
 sheet_url = "https://docs.google.com/spreadsheets/d/1YMIIldmiclGQciVqkU_9PjqX4mS4bWQejvRIEUHjMlU/edit#gid=0"
 
+sheets.clear_formatting(spreadsheet_id=sheet_url, sheet_name="Cleaned Domain List")
+
+sheets.format(
+    spreadsheet_id=sheet_url,
+    range_names="'Cleaned Domain List'!1:1",
+    text_color="#f2f2",
+)
+
+sheets.format_header(
+    spreadsheet_id=sheet_url,
+    sheet_name="Cleaned Domain List",
+)
+
+
 addresses_df = sheets.to_frame(
     sheets.values(
         spreadsheet_id=sheet_url,
