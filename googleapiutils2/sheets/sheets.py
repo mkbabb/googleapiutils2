@@ -1796,7 +1796,12 @@ class Sheets(DriveBase):
 
         # Format first row bold
         sheet_slice = SheetSlice[sheet_name, 1, ...]
-        self.format(spreadsheet_id=spreadsheet_id, range_names=sheet_slice, bold=True)
+        self.format(
+            spreadsheet_id=spreadsheet_id,
+            range_names=sheet_slice,
+            bold=True,
+            wrap_strategy=WrapStrategy.WRAP,
+        )
 
         # Auto-resize columns if requested
         if auto_resize:

@@ -17,8 +17,14 @@ rows = [
     },
 ]
 
+
 sheets.update(
     spreadsheet_id=SHEET_URL,
     range_name=Sheet1.sheet_name,
     values=rows,
+)
+
+sheets.format_header(
+    spreadsheet_id=SHEET_URL,
+    sheet_name=Sheet1.sheet_name,
 )
