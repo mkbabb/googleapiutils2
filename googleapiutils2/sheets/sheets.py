@@ -74,6 +74,10 @@ if TYPE_CHECKING:
         RowData,
     )
 
+pd.set_option('future.no_silent_downcasting', True)
+
+DUPE_SUFFIX = '__dupe__'
+
 
 class Sheets(DriveBase):
     """A wrapper around the Google Sheets API.
@@ -552,6 +556,34 @@ class Sheets(DriveBase):
             spreadsheet_id, range_name, value_render_option, **kwargs
         ).get("values", [[]])[0][0]
 
+    @staticmethod
+    def _add_dupe_suffix(df: pd.DataFrame, suffix: str = DUPE_SUFFIX):
+        """
+        Add suffix to duplicate columns in a DataFrame and return modified DataFrame and header
+
+        Args:
+            df: DataFrame to process
+            suffix: Suffix to append to duplicate columns (default: '__dupe__')
+
+        Returns:
+            tuple[pd.DataFrame, list[str]]: (Modified DataFrame, list of new column names)
+        """
+        cols = df.columns.tolist()
+        new_cols: list = []
+        seen: dict = {}
+
+        for i, col in enumerate(cols):
+            if col in seen:
+                seen[col] += 1
+                new_cols.append(f"{col}{suffix}{seen[col]}")
+            else:
+                seen[col] = 0
+                new_cols.append(col)
+
+        df.columns = new_cols
+
+        return df
+
     def _dict_to_values_align_columns(
         self,
         spreadsheet_id: str,
@@ -559,37 +591,61 @@ class Sheets(DriveBase):
         rows: list[dict[SheetsRange, Any]],
         align_columns: bool = True,
         insert_header: bool = True,
-    ):
+    ) -> list[list[Any]]:
         """Transforms a list of dictionaries into a list of lists, aligning the columns with the header.
         If new columns were added, the header is appended to the right; the header of the sheet is updated.
-
+        For existing columns not present in the input data, the original values are preserved.
         Args:
-            spreadsheet_id (str): The spreadsheet ID.
-            range_name (SheetsRange): The range to update.
-            rows (list[dict[SheetsRange, Any]]): The rows to update.
-            align_columns (bool, optional): Whether to align the columns with the header. Defaults to True.
-            insert_header (bool, optional): Whether to insert the header if the range starts at the first row. Defaults to True.
+        spreadsheet_id (str): The spreadsheet ID.
+        sheet_slice (SheetSliceT): The range to update.
+        rows (list[dict[SheetsRange, Any]]): The rows to update.
+        align_columns (bool, optional): Whether to align the columns with the header. Defaults to True.
+        insert_header (bool, optional): Whether to insert the header if the range starts at the first row. Defaults to True.
+        Returns:
+        list[list[Any]]: The aligned values with original data preserved where appropriate.
         """
+
         if not align_columns:
             return [list(row.values()) for row in rows]
 
         sheet_name = sheet_slice.sheet_name
 
+        # Get existing header and data
         header = self.header(spreadsheet_id, sheet_name)
         header = pd.Index(header).astype(str)
 
-        frame = pd.DataFrame(rows)
-        frame = frame.reindex(
-            list(rows[0].keys()), axis=1
-        )  # preserve the insertion order
-        frame.index = frame.index.astype(str)
+        # Get current values
+        current_values = self.values(
+            spreadsheet_id=spreadsheet_id,
+            range_name=sheet_slice,
+            value_render_option=ValueRenderOption.formula,
+        ).get('values', [])
 
-        if len(diff := frame.columns.difference(header)):
-            header = header.append(diff)
-            header = list(header)
+        # Create DataFrame from current values if they exist
+        current_df: pd.DataFrame | None = None
+        if len(current_values) > 0:
+            current_df = pd.DataFrame(current_values)
+            if insert_header:
+                current_df.columns = current_df.iloc[0].astype(str)
+                current_df = current_df.drop(0).reset_index(drop=True)
+                current_df = self._add_dupe_suffix(current_df)
+        else:
+            current_df = pd.DataFrame()
 
+        # Create DataFrame from new data and handle dupes
+        new_df = pd.DataFrame(rows)
+        new_df = new_df.reindex(columns=list(rows[0].keys()))
+        new_df = self._add_dupe_suffix(new_df)
+
+        # Convert header to list and handle dupes
+        header = pd.DataFrame(columns=header)
+        header = self._add_dupe_suffix(header)
+        header = header.columns.tolist()
+
+        # Check for new columns
+        if len(diff := new_df.columns.difference(header)):
+            header = header + list(diff)
             header_slc = SheetSlice[sheet_name, 1, ...]
-
             self.update(
                 spreadsheet_id,
                 header_slc,
@@ -603,13 +659,30 @@ class Sheets(DriveBase):
                 name=sheet_name,
             )
 
-        header = list(header)
-        frame = frame.reindex(columns=header)
-        values = frame.fillna("").values.tolist()
+        for col in header:
+            # If col doesn't exist in either df, create blank column
+            if col not in current_df.columns and col not in new_df.columns:
+                new_df[col] = ''
+                continue
 
-        # insert the header if the range starts at the first row
+            # Skip if col already exists in new_df
+            if col in new_df.columns:
+                continue
+
+            new_df[col] = current_df[col]
+
+        new_df = new_df.reindex(columns=header)
+        # Strip dupe suffixes at the end
+        new_df.columns = new_df.columns.str.replace(
+            fr'{DUPE_SUFFIX}\d+', '', regex=True
+        )
+
+        # Convert to list format, replacing None/NaN with empty string
+        values = new_df.fillna("").values.tolist()
+
+        # Insert the header if the range starts at the first row
         if insert_header and sheet_slice.rows.start == 1:
-            values.insert(0, header)
+            values.insert(0, list(new_df.columns))
 
         return values
 
@@ -644,6 +717,9 @@ class Sheets(DriveBase):
 
         sheet_slices = [to_sheet_slice(range_name) for range_name in ranges]
         sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
+
+        # Ensure each sheet exists:
+        self.add(spreadsheet_id, names=sheet_names)  # type: ignore
 
         shapes = {
             sheet_name: self.shape(spreadsheet_id, sheet_name)
@@ -684,7 +760,7 @@ class Sheets(DriveBase):
         spreadsheet_id: str,
         range_name: SheetsRange = DEFAULT_SHEET_NAME,
         values: SheetsValues | None = None,
-        value_input_option: ValueInputOption = ValueInputOption.raw,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
         ensure_shape: bool = False,
     ) -> UpdateValuesResponse:
@@ -1004,11 +1080,17 @@ class Sheets(DriveBase):
 
         # reset the sheet to the default shape
         if resize:
+            cols = (
+                max(len(header), DEFAULT_SHEET_SHAPE[1])
+                if len(header) and preserve_header
+                else DEFAULT_SHEET_SHAPE[1]
+            )
+
             self.resize(
                 spreadsheet_id,
                 sheet_name=sheet_name,
                 rows=DEFAULT_SHEET_SHAPE[0],
-                cols=DEFAULT_SHEET_SHAPE[1],
+                cols=cols,
             )
 
         # reset the columns to the default width
