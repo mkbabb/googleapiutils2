@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 from io import BytesIO
 from pathlib import Path
@@ -21,9 +22,9 @@ from ..utils import (
     download_large_file,
     export_mime_type,
     guess_mime_type,
+    mime_type_to_google_mime_type,
     parse_file_id,
     q_escape,
-    mime_type_to_google_mime_type,
 )
 from .misc import (
     DEFAULT_FIELDS,
@@ -105,7 +106,7 @@ class Drive(DriveBase):
             kwargs |= self._team_drives_payload(self.team_drives, kind="update")
             file_id = parse_file_id(file_id)
 
-            return self.execute(self.files.get(fileId=file_id, fields=fields, **kwargs))
+            return self.execute(self.files.get(fileId=file_id, fields=fields, **kwargs))  # type: ignore
         elif name is None:
             raise ValueError("Either file_id or name must be specified.")
 
@@ -256,6 +257,12 @@ class Drive(DriveBase):
 
         file = self.get(file_id=file_id)
 
+        # If the filepath exists, check if the file has the same md5 hash:
+        if filepath.exists():
+            md5 = hashlib.md5(filepath.read_bytes()).hexdigest()
+            if file.get("md5Checksum") == md5:
+                return filepath
+
         mime_type = (
             mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
         )
@@ -380,7 +387,7 @@ class Drive(DriveBase):
         if name is not None:
             kwargs["body"]["name"] = name
 
-        return self.execute(self.files.copy(**kwargs))
+        return self.execute(self.files.copy(**kwargs))  # type: ignore
 
     @staticmethod
     def _team_drives_payload(
@@ -498,7 +505,7 @@ class Drive(DriveBase):
             get_extant (bool, optional): Whether to get the folder if it already exists. Defaults to True.
         """
 
-        def create_or_get_if_exists(name: str, parents: List[str]):
+        def create_or_get_if_exists(name: str, parents: List[str]) -> File:
             folders = self._query_children(
                 parents=parents,
                 name=name,
@@ -520,7 +527,7 @@ class Drive(DriveBase):
                 self.files.create(
                     body=body,
                 )
-            )
+            )  # type: ignore
 
         for dirname in filepath.parts[:-1]:
             folder = create_or_get_if_exists(dirname, parents)
@@ -586,7 +593,7 @@ class Drive(DriveBase):
 
         kwargs |= self._team_drives_payload(self.team_drives, kind="update")
 
-        return self.execute(self.files.create(**kwargs))
+        return self.execute(self.files.create(**kwargs))  # type: ignore
 
     def update(
         self,
@@ -622,7 +629,7 @@ class Drive(DriveBase):
         if mime_type is not None:
             kwargs["body"]["mimeType"] = mime_type.value
 
-        return self.execute(self.files.update(**kwargs))
+        return self.execute(self.files.update(**kwargs))  # type: ignore
 
     def delete(self, file_id: str, trash: bool = True, **kwargs: Any) -> File:
         """Delete a file from Google Drive.
@@ -642,9 +649,9 @@ class Drive(DriveBase):
                     fileId=file_id,
                     body={"trashed": True},
                 )
-            )
+            )  # type: ignore
         else:
-            return self.execute(self.files.delete(fileId=file_id, **kwargs))
+            return self.execute(self.files.delete(fileId=file_id, **kwargs))  # type: ignore
 
     def _upload(
         self,
@@ -668,6 +675,12 @@ class Drive(DriveBase):
 
         file = self.get_if_exists(name=name, parents=parents)
 
+        # If the filepath exists, check if the file has the same md5 hash:
+        if file is not None:
+            md5 = hashlib.md5(filepath.read_bytes()).hexdigest()
+            if file.get("md5Checksum") == md5:
+                return file
+
         if from_mime_type is None:
             if file is not None:
                 from_mime_type = mime_type_to_google_mime_type(file["mimeType"])
@@ -688,7 +701,7 @@ class Drive(DriveBase):
 
         if update and file is not None:
             kwargs["fileId"] = file["id"]
-            return self.execute(self.files.update(**kwargs))
+            return self.execute(self.files.update(**kwargs))  # type: ignore
 
         if name is not None:
             kwargs["body"]["name"] = name
@@ -699,7 +712,7 @@ class Drive(DriveBase):
         if to_mime_type is not None:
             kwargs["body"]["mimeType"] = to_mime_type.value
 
-        return self.execute(self.files.create(**kwargs))
+        return self.execute(self.files.create(**kwargs))  # type: ignore
 
     def _upload_file(
         self,
@@ -738,7 +751,12 @@ class Drive(DriveBase):
 
         if recursive and filepath.is_dir():
             for file in filepath.glob("*"):
+                # Ignore .DS_Store files:
+                if file.name == ".DS_Store":
+                    continue
+
                 t_file = file.relative_to(filepath)
+
                 t_parents = (
                     self.create(
                         name=t_file,
@@ -751,6 +769,7 @@ class Drive(DriveBase):
                     if file.is_dir()
                     else parents
                 )
+
                 self._upload_file(
                     filepath=file,
                     name=t_file.name,
@@ -970,7 +989,7 @@ class Drive(DriveBase):
             mime_type (GoogleMimeTypes): The mime type to export to.
         """
         file_id = parse_file_id(file_id)
-        return self.execute(self.files.export(fileId=file_id, mimeType=mime_type.value))
+        return self.execute(self.files.export(fileId=file_id, mimeType=mime_type.value))  # type: ignore
 
     def sync(
         self,
@@ -1031,7 +1050,7 @@ class Permissions:
         file_id = parse_file_id(file_id)
         return self.drive.execute(
             self.permissions.get(fileId=file_id, permissionId=permission_id, **kwargs)
-        )
+        )  # type: ignore
 
     def list(
         self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
@@ -1107,7 +1126,7 @@ class Permissions:
                 sendNotificationEmail=sendNotificationEmail,
                 **kwargs,
             )
-        )
+        )  # type: ignore
 
     def delete(self, file_id: str, permission_id: str, **kwargs: Any) -> Permission:
         """Deletes a permission from a file.
@@ -1121,4 +1140,4 @@ class Permissions:
             self.permissions.delete(
                 fileId=file_id, permissionId=permission_id, **kwargs
             )
-        )
+        )  # type: ignore

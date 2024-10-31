@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         BatchUpdateSpreadsheetResponse,
         BatchUpdateValuesRequest,
         BatchUpdateValuesResponse,
+        CellData,
         CellFormat,
         ClearValuesResponse,
         Color,
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         NumberFormat,
         Padding,
         Request,
+        RowData,
         Sheet,
         SheetProperties,
         SheetsResource,
@@ -70,8 +72,6 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
-        CellData,
-        RowData,
     )
 
 pd.set_option('future.no_silent_downcasting', True)

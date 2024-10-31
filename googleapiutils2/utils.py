@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import datetime
 import functools
 import hashlib
 import http
@@ -12,7 +13,6 @@ import random
 import time
 import urllib.parse
 from collections import defaultdict
-from datetime import datetime, timedelta
 from enum import Enum
 from functools import cache
 from mimetypes import guess_type
@@ -20,7 +20,6 @@ from pathlib import Path
 from queue import Queue
 from threading import Thread
 from typing import *
-
 import googleapiclient.http
 import requests
 from cachetools import TTLCache
@@ -578,7 +577,7 @@ def get_oauth2_creds(
     if is_service_account:
         return service_account.Credentials.from_service_account_info(
             client_config, scopes=scopes
-        ) # type: ignore
+        )  # type: ignore
     elif token_path is not None:
         token_path = Path(token_path)  # type: ignore
         creds: Credentials | None = None
@@ -762,101 +761,112 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
+def normalize_for_hash(obj: Any) -> Any:
+    """Normalize data structures for consistent hashing."""
+    if isinstance(obj, (list, tuple)):
+        return [normalize_for_hash(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {
+            str(key): normalize_for_hash(value)
+            for key, value in sorted(obj.items(), key=lambda x: str(x[0]))
+        }
+    elif isinstance(obj, (set, frozenset)):
+        return sorted(normalize_for_hash(item) for item in obj)
+    elif isinstance(obj, datetime.datetime):
+        return obj.isoformat()
+    elif isinstance(obj, datetime.timedelta):
+        return obj.total_seconds()
+    elif isinstance(obj, Path):
+        return str(obj.absolute())
+    elif hasattr(obj, '__dict__'):
+        # Handle custom objects by converting their __dict__ to a sorted dict
+        return normalize_for_hash(obj.__dict__)
+    return obj
+
+
+def consistent_hash(obj: Any) -> str:
+    """Create a consistent hash for any supported Python object."""
+    try:
+        normalized = normalize_for_hash(obj)
+        # Use dumps with sort_keys=True for consistent ordering
+        json_str = json.dumps(normalized, sort_keys=True, default=str)
+        return hashlib.md5(json_str.encode()).hexdigest()
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Unable to hash object: {e}")
+
+
 def cache_with_stale_interval(
-    stale_interval: timedelta | None = None,
+    stale_interval: datetime.timedelta | None = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Cache the output of a function, specifying the interval wherein the cache is considered stale.
+    """
+    Cache decorator with optional staleness checking.
 
     Args:
-        stale_interval (timedelta, optional): The interval after which the cache is considered stale.
-            If None, the cache will never be considered stale.
+        stale_interval: If provided, cached results older than this will be considered stale
+
+    Returns:
+        Decorated function that implements caching with the specified staleness interval
     """
 
-    def get_paths(*args: P.args, **kwargs: P.kwargs):
-        # Hash the input arguments
-        input_data = {
-            "args": args,
-            "kwargs": kwargs,
-        }
-        input_hash = hashlib.md5(
-            json.dumps(input_data, default=str, sort_keys=True).encode()
-        ).hexdigest()
-
-        cache_dir = get_cache_dir()
-
-        output_path = cache_dir / f"{input_hash}_output.json"
-        pickled_output_path = cache_dir / f"{input_hash}_output.pkl"
-
-        return output_path, pickled_output_path
-
-    def cache_get(output_path: Path, pickled_output_path: Path) -> R | None:
-        # Check if the output file exists and isn't empty:
-        if output_path.exists() and output_path.stat().st_size > 0:
-            # Load the cached output from the file
-            with output_path.open("r") as f:
-                cached_data = json.load(f)
-                cached_timestamp = datetime.fromisoformat(cached_data["timestamp"])
-
-                if stale_interval is None or (
-                    datetime.now() - cached_timestamp <= stale_interval
-                ):
-                    with open(cached_data["pickled_output_path"], "rb") as pkl_file:
-                        return pickle.load(pkl_file)
-
-        return None
-
-    def cache_set(output_path: Path, pickled_output_path: Path, output_data: R) -> R:
-        # Pickle the output data and save the file path
-        with open(pickled_output_path, "wb") as pkl_file:
-            pickle.dump(output_data, pkl_file)
-
-        # Save the metadata to the JSON output file with the current timestamp
-        with output_path.open("w") as f:
-            json.dump(
-                {
-                    "pickled_output_path": str(pickled_output_path),
-                    "timestamp": datetime.now().isoformat(),
-                },
-                f,
-                indent=4,
-            )
-
-        return output_data
-
-    def decorator(func: Callable[P, R]) -> Callable[P, R] | Callable[P, Awaitable[R]]:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(func)
-        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            output_path, pickled_output_path = get_paths(*args, **kwargs)  # type: ignore
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            # Create input data dictionary and hash it consistently
+            input_data = {"func_name": func.__name__, "args": args, "kwargs": kwargs}
 
-            if (output_data := cache_get(output_path, pickled_output_path)) is not None:
-                return output_data
+            try:
+                input_hash = consistent_hash(input_data)
+            except ValueError as e:
+                raise ValueError(f"Failed to hash function inputs: {e}")
 
-            output_data = await func(*args, **kwargs)  # type: ignore
+            cache_dir = get_cache_dir()
+            output_path = cache_dir / f"{input_hash}_output.json"
+            pickled_output_path = cache_dir / f"{input_hash}_output.pkl"
 
-            return cache_set(
-                output_path=output_path,
-                pickled_output_path=pickled_output_path,
-                output_data=output_data,
-            )
+            # Check if the output file exists and is not stale
+            if output_path.exists():
+                try:
+                    with output_path.open("r") as f:
+                        cached_data = json.load(f)
 
-        @functools.wraps(func)
-        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            output_path, pickled_output_path = get_paths(*args, **kwargs)  # type: ignore
+                    cached_timestamp = datetime.datetime.fromisoformat(
+                        cached_data["timestamp"]
+                    )
 
-            if (output_data := cache_get(output_path, pickled_output_path)) is not None:
-                return output_data
+                    if stale_interval is None or (
+                        datetime.datetime.now() - cached_timestamp <= stale_interval
+                    ):
+                        with open(cached_data["pickled_output_path"], "rb") as pkl_file:
+                            return pickle.load(pkl_file)
+                except (json.JSONDecodeError, OSError, pickle.PickleError) as e:
+                    # If there's any error reading the cache, log it and continue to recalculate
+                    logger.error(f"Cache read error: {e}")
 
+            # Call the original function
             output_data = func(*args, **kwargs)
 
-            return cache_set(
-                output_path=output_path,
-                pickled_output_path=pickled_output_path,
-                output_data=output_data,
-            )
+            try:
+                # Pickle the output data and save the file path
+                with open(pickled_output_path, "wb") as pkl_file:
+                    pickle.dump(output_data, pkl_file)
 
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
+                # Save the metadata to the JSON output file with the current timestamp
+                with output_path.open("w") as f:
+                    json.dump(
+                        {
+                            "pickled_output_path": str(pickled_output_path),
+                            "timestamp": datetime.datetime.now().isoformat(),
+                        },
+                        f,
+                        indent=4,
+                    )
+            except (OSError, pickle.PickleError) as e:
+                logger.error(f"Cache write error: {e}")
+                # Return the calculated result even if caching fails
+                return output_data
 
-    return decorator  # type: ignore
+            return output_data
+
+        return wrapper
+
+    return decorator
