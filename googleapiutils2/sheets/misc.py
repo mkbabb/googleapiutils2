@@ -20,7 +20,14 @@ DEFAULT_SHEET_SHAPE = (1000, 26)
 BASE = 26
 OFFSET = 1
 
-SheetsValues = list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[object]
+DUPE_SUFFIX = '__dupe__'
+
+DEFAULT_CHUNK_SIZE_BYTES = 1 * 1024 * 1024  # 1MB default chunk size
+
+
+SheetsValues = (
+    list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[dict] | list[object]
+)
 
 
 @dataclass
@@ -258,8 +265,8 @@ def expand_slices(
             return ix
         elif isinstance(ix, str):
             if ":" in ix:
-                ix = ix.split(":")
-                return slice(A1_to_int(ix[0]), A1_to_int(ix[1]))
+                ix = ix.split(":") # type: ignore
+                return slice(A1_to_int(ix[0]), A1_to_int(ix[1])) # type: ignore
             else:
                 ix = A1_to_int(ix)
                 return slice(ix, ix)
@@ -378,8 +385,8 @@ class SheetSliceT:
             A1_to_slices(self.range_name, shape=self.shape)
             if self.range_name is not None
             else (
-                slice(1, self.shape[0] + 1),
-                slice(1, self.shape[1] + 1),
+                slice(1, self.shape[0]),
+                slice(1, self.shape[1]),
             )
         )
 

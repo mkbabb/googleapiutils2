@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import datetime
+import difflib
 import functools
 import json
-from dataclasses import dataclass, field
 import sys
+import time
+from dataclasses import dataclass, field
 from typing import *
 
+import loguru
 import pandas as pd
 from litellm import ModelResponse, completion
 from loguru import logger
-import loguru
-import difflib
 
-
-from googleapiutils2 import Drive, GoogleMimeTypes, Sheets, SheetSlice, get_oauth2_creds
+from googleapiutils2 import (
+    Drive,
+    GoogleMimeTypes,
+    Sheets,
+    SheetSlice,
+    cache_with_stale_interval,
+    get_oauth2_creds,
+)
 
 # Conditional import for type checking
 if TYPE_CHECKING:
@@ -54,7 +62,7 @@ class ReconcileInput:
 
     name_col: str
 
-    match_col: str | None = None
+    match_cols: list[str] | str | None = None
 
     models: Model | list[Model] | None = None
 
@@ -116,6 +124,7 @@ def handle_response(response: ModelResponse) -> dict[str, str] | None:
     return None
 
 
+@cache_with_stale_interval(datetime.timedelta(days=1))
 def find_name_match(
     input_name: str,
     match_list: list[str],
@@ -182,9 +191,9 @@ def reconcile_list(
 
     try:
         best_match = match[0]
-        best_match_index = match_list_names.index(best_match)
+        best_match_ix = match_list_names.index(best_match)
 
-        return (best_match_index, best_match)
+        return (best_match_ix, best_match)
     except Exception as e:
         logger.error(f"Error reconciling list: {e}")
         return None
@@ -217,13 +226,17 @@ def reconcile_lists(
                     df=match_list.df,
                     name=match_list.name,
                     name_col=match_list.name_col,
-                    match_col=match_list.match_col,
-                    models=model,
+                    match_cols=match_list.match_cols,
+                    models=model,  # type: ignore
                 )
             )
 
-    match_lists_names: list[list[str]] = [
-        match_list.df[match_list.name_col].tolist() for match_list in match_lists_models
+    match_lists_names_dfs = [
+        match_list.df[match_list.name_col].drop_duplicates()
+        for match_list in match_lists_models
+    ]
+    match_lists_names: list[tuple[list[int], list[str]]] = [
+        (df.index.to_list(), df.to_list()) for df in match_lists_names_dfs
     ]
 
     for n, row in input_list.df.iterrows():
@@ -233,24 +246,26 @@ def reconcile_lists(
 
         out_row = row.to_dict()
 
-        for m, (match_list, match_list_names) in enumerate(
+        for m, (match_list, (match_list_names_ixs, match_list_names)) in enumerate(
             zip(match_lists_models, match_lists_names)
         ):
             model = match_list.models  # type: ignore
 
             match = reconcile_list(
-                input_name=name,
+                input_name=name,  # type: ignore
                 match_list_names=match_list_names,
-                match_func=functools.partial(match_func, model=model),
+                match_func=functools.partial(match_func, model=model),  # type: ignore
             )
 
             if match is None:
-                logger.warning(f"No match found.")
+                logger.warning("No match found.")
                 continue
 
-            match_index, match_name = match
+            t_match_ix, match_name = match
 
-            match_percent = difflib.SequenceMatcher(None, name, match[1]).ratio()
+            match_ix = match_list_names_ixs[t_match_ix]
+
+            match_percent = difflib.SequenceMatcher(None, name, match[1]).ratio()  # type: ignore
 
             logger.success(f"Match found: {match_name}")
 
@@ -259,23 +274,23 @@ def reconcile_lists(
                 name = model
 
             out_row[f"{match_list.name} Match"] = match_name
-            out_row[f"{match_list.name} Match Index"] = match_index
+            out_row[f"{match_list.name} Match Index"] = match_ix
             out_row[f"{match_list.name} Match Percent"] = match_percent
 
-            if match_list.match_col is None:
+            if match_list.match_cols is None:
                 # Add the entire row
                 # Colliding columns should be suffixed with the name of the dataframe
                 suffix = f" {match_list.name}"
 
                 out_row = update_dict_suffixed(
                     out_row,
-                    match_list.df.iloc[match_index].to_dict(),
+                    match_list.df.iloc[match_ix].to_dict(),
                     suffix=suffix,
                 )
             else:
-                out_row[match_list.match_col] = match_list.df.iloc[match_index][
-                    match_list.match_col
-                ]
+                # Add only the specified columns
+                for col in match_list.match_cols:
+                    out_row[col] = match_list.df.iloc[match_ix][col]
 
         yield n, out_row
 
@@ -287,28 +302,27 @@ sheets = Sheets(creds=creds)
 
 
 # file_id = "https://docs.google.com/spreadsheets/d/1gKHtEhsp-eb_TUZqUhdUSmsfNAKz1n-PZf2IUukISlo/edit#gid=1560048052"
-file_id = "https://docs.google.com/spreadsheets/d/1YX1kKWz6-AHKnRlf88fQtBFGh9pSQPg9dfUvKoXjKmI/edit?gid=2066933374#gid=2066933374"
+# file_id = "https://docs.google.com/spreadsheets/d/1YX1kKWz6-AHKnRlf88fQtBFGh9pSQPg9dfUvKoXjKmI/edit?gid=2066933374#gid=2066933374"
+file_id = "https://docs.google.com/spreadsheets/d/141XsLL8Je02MarFvIn4CEHwkBELgrCSVeJrdA-FpgSg/edit?gid=1116451230#gid=1116451230"
 
 
-class_link_df = sheets.to_frame(
+names_df = sheets.to_frame(
     sheets.values(
         spreadsheet_id=file_id,
-        range_name="ClassLink Names",
+        range_name="2024-471s",
     )
 )
 
-svf_df = sheets.to_frame(
+match_df = sheets.to_frame(
     sheets.values(
         spreadsheet_id=file_id,
-        range_name="Districts Pivot",
+        range_name="2408 Full Invoice $1,899,804.01",
     )
 )
 
 # remove rows that already have a PSU code from the pricing df; check blank and na:
-if "PSU ID" in class_link_df.columns:
-    class_link_df = class_link_df[
-        class_link_df["PSU ID"].isna() | class_link_df["PSU ID"].eq("")
-    ]
+if "LEA ID" in names_df.columns:
+    names_df = names_df[names_df["LEA ID"].isna() | names_df["LEA ID"].eq("")]
 
 
 match_func: ModelMatchFunction = functools.partial(
@@ -317,35 +331,41 @@ match_func: ModelMatchFunction = functools.partial(
 Wherein SD = school district""",
 )
 
+match_cols = ["LEA ID", "Circuit"]
+
 reconciled_data = reconcile_lists(
     input_list=ReconcileInput(
-        df=class_link_df,
-        name="ClassLink",
-        name_col="LEA Name",
-        match_col="PSU ID",
+        df=names_df,
+        name="Invoice",
+        name_col="Recipient's Organization Name",
     ),
     match_lists=[
         ReconcileInput(
-            df=svf_df,
+            df=match_df,
             name="SVF",
             name_col="LEA Name",
-            models=["gpt-4o-mini", "claude-3-5-sonnet-20240620"],
+            models="gpt-4o",
+            match_cols=match_cols,
         )
     ],
     match_func=match_func,
 )
 
-output_sheet_name = "ClassLink Names"
+output_sheet_name = "2024-471s"
 
 for n, data in reconciled_data:  # Start from row 2
     n = int(n) + 2  # type: ignore
     row_slice = SheetSlice[output_sheet_name, n, ...]
 
-    data: dict = {
-        row_slice: [data],
-    } # type: ignore
+    # keep only LEA ID and Circuit columns from the dict
+    data = {k: v for k, v in data.items() if k in match_cols}
 
     sheets.batch_update(
         spreadsheet_id=file_id,
-        data=data,  # type: ignore
+        data={
+            row_slice: [data],
+        },  # type: ignore
+        batch_size=10,
     )
+
+sheets.batch_update_remaining_auto()

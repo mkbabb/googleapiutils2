@@ -75,9 +75,9 @@ for i in range(100):
         key: "go frunk yourself",
     }
     batches[Sheet1[7 + i, ...]] = [row]
-    sheets.batch_update(SHEET_URL, batches, batch_size=10, ensure_shape=True)
+    sheets.batch_update(SHEET_URL, batches, ensure_shape=True)
 
-sheets.batched_update_remaining(SHEET_URL)
+
 
 
 # time.sleep(10)

@@ -9,6 +9,7 @@ import pandas as pd
 from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
+from loguru import logger
 
 from googleapiutils2.sheets.sheets_slice import (
     SheetSlice,
@@ -21,6 +22,7 @@ from ..utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
+    Throttler,
     deep_update,
     hex_to_rgb,
     named_methodkey,
@@ -28,8 +30,10 @@ from ..utils import (
     parse_file_id,
 )
 from .misc import (
+    DEFAULT_CHUNK_SIZE_BYTES,
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
+    DUPE_SUFFIX,
     VERSION,
     HorizontalAlignment,
     HyperlinkDisplayType,
@@ -45,7 +49,7 @@ from .misc import (
 )
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.sheets.v4.resources import (
+    from googleapiclient._apis.sheets.v4.resources import (  # type: ignore
         AddSheetRequest,
         AppendValuesResponse,
         BatchUpdateSpreadsheetRequest,
@@ -75,8 +79,6 @@ if TYPE_CHECKING:
     )
 
 pd.set_option('future.no_silent_downcasting', True)
-
-DUPE_SUFFIX = '__dupe__'
 
 
 class Sheets(DriveBase):
@@ -111,7 +113,9 @@ class Sheets(DriveBase):
             defaultdict(dict)
         )
 
-        atexit.register(self._batch_update_remaining_auto)
+        self._batch_update_throttler = Throttler(throttle_time)
+
+        atexit.register(self.batch_update_remaining_auto)
 
     def _reset_sheet_cache(
         self,
@@ -149,6 +153,7 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         body: BatchUpdateSpreadsheetRequest,
+        queue: bool = False,
         **kwargs: Any,
     ) -> BatchUpdateSpreadsheetResponse:
         """Executes a batch update spreadsheet request.
@@ -159,10 +164,11 @@ class Sheets(DriveBase):
             **kwargs: Additional arguments to pass to self.sheets.batchUpdate.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        return self.execute(
-            self.spreadsheets.batchUpdate(
-                spreadsheetId=spreadsheet_id, body=body, **kwargs
-            )
+        request = self.spreadsheets.batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body, **kwargs
+        )
+        return (
+            self.execute(request) if not queue else self.execute_queue(request)
         )  # type: ignore
 
     def create(
@@ -265,13 +271,14 @@ class Sheets(DriveBase):
         ranges = ranges if isinstance(ranges, list) else [ranges]
         ranges = [str(range_name) for range_name in ranges]
 
-        return self.execute(
-            self.spreadsheets.get(
-                spreadsheetId=spreadsheet_id,
-                includeGridData=include_grid_data,
-                ranges=ranges,  # type: ignore
-            )
-        )
+        kwargs = {
+            "spreadsheetId": spreadsheet_id,
+            "includeGridData": include_grid_data,
+        }
+        if len(ranges) > 0:
+            kwargs["ranges"] = ranges
+
+        return self.execute(self.spreadsheets.get(**kwargs))  # type: ignore
 
     def _get_sheet_id(
         self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
@@ -403,6 +410,7 @@ class Sheets(DriveBase):
         cols: int = DEFAULT_SHEET_SHAPE[1],
         index: int | None = None,
         ignore_existing: bool = True,
+        queue: bool = False,
     ):
         """Add one or more sheets to a spreadsheet.
 
@@ -455,6 +463,7 @@ class Sheets(DriveBase):
         return self.batch_update_spreadsheet(
             spreadsheet_id=spreadsheet_id,
             body=body,
+            queue=queue,
         )
 
     def delete(
@@ -462,6 +471,7 @@ class Sheets(DriveBase):
         spreadsheet_id: str,
         names: str | list[str],
         ignore_not_existing: bool = True,
+        queue: bool = False,
     ):
         """Deletes a sheet from a spreadsheet.
 
@@ -510,6 +520,7 @@ class Sheets(DriveBase):
         return self.batch_update_spreadsheet(
             spreadsheet_id=spreadsheet_id,
             body=body,
+            queue=queue,
         )
 
     def values(
@@ -580,7 +591,7 @@ class Sheets(DriveBase):
                 seen[col] = 0
                 new_cols.append(col)
 
-        df.columns = new_cols
+        df.columns = new_cols  # type: ignore
 
         return df
 
@@ -608,6 +619,8 @@ class Sheets(DriveBase):
         if not align_columns:
             return [list(row.values()) for row in rows]
 
+        insert_header = insert_header and (sheet_slice.rows.start == 1)
+
         sheet_name = sheet_slice.sheet_name
 
         # Get existing header and data
@@ -622,15 +635,32 @@ class Sheets(DriveBase):
         ).get('values', [])
 
         # Create DataFrame from current values if they exist
-        current_df: pd.DataFrame | None = None
+        current_df: pd.DataFrame = None  # type: ignore
+
         if len(current_values) > 0:
-            current_df = pd.DataFrame(current_values)
+            current_df = pd.DataFrame(current_values)  # type: ignore
+
             if insert_header:
-                current_df.columns = current_df.iloc[0].astype(str)
+                current_df.columns = current_df.iloc[0].astype(str)  # type: ignore
                 current_df = current_df.drop(0).reset_index(drop=True)
                 current_df = self._add_dupe_suffix(current_df)
+            else:
+                # ensure the header is padded with empty strings to match the current data
+                if len(header) < current_df.shape[1]:
+                    header = header.append(
+                        pd.Index([''] * (current_df.shape[1] - len(header)))
+                    )
+                    current_df.columns = header
+                # ensure the current data is padded with nans to match the header
+                elif len(header) > current_df.shape[1]:
+                    current_df.columns = header[: current_df.shape[1]]
+                    current_df = current_df.reindex(columns=header)
+                else:
+                    current_df.columns = header
         else:
             current_df = pd.DataFrame()
+
+        current_df = self._add_dupe_suffix(current_df)
 
         # Create DataFrame from new data and handle dupes
         new_df = pd.DataFrame(rows)
@@ -680,8 +710,7 @@ class Sheets(DriveBase):
         # Convert to list format, replacing None/NaN with empty string
         values = new_df.fillna("").values.tolist()
 
-        # Insert the header if the range starts at the first row
-        if insert_header and sheet_slice.rows.start == 1:
+        if insert_header:
             values.insert(0, list(new_df.columns))
 
         return values
@@ -705,7 +734,9 @@ class Sheets(DriveBase):
         else:
             return values  # type: ignore
 
-    def _ensure_sheet_shape(self, spreadsheet_id: str, ranges: List[SheetsRange]):
+    def _ensure_sheet_shape(
+        self, spreadsheet_id: str, ranges: List[SheetsRange], queue: bool = False
+    ):
         """For a given sheet, ensure that every range is within the sheet's size.
         If it's not, resize the sheet to fit the ranges.
 
@@ -719,7 +750,7 @@ class Sheets(DriveBase):
         sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
 
         # Ensure each sheet exists:
-        self.add(spreadsheet_id, names=sheet_names)  # type: ignore
+        self.add(spreadsheet_id, names=sheet_names, queue=queue)  # type: ignore
 
         shapes = {
             sheet_name: self.shape(spreadsheet_id, sheet_name)
@@ -742,7 +773,8 @@ class Sheets(DriveBase):
                 return
 
             rows, cols = max(t_rows, rows), max(t_cols, cols)
-            self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
+
+            self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols, queue=queue)
 
             shape = (rows, cols)
             self._set_sheet_cache(
@@ -753,7 +785,127 @@ class Sheets(DriveBase):
             )
 
         for sheet_slice in sheet_slices:
-            resize_sheet(sheet_slice=sheet_slice)
+            resize_sheet(
+                sheet_slice=sheet_slice,
+            )
+
+    def _update_chunked(
+        self,
+        spreadsheet_id: str,
+        range_name: SheetsRange,
+        values: SheetsValues,
+        value_input_option: ValueInputOption = ValueInputOption.user_entered,
+        align_columns: bool = True,
+        ensure_shape: bool = True,
+        chunk_size_bytes: int | None = DEFAULT_CHUNK_SIZE_BYTES,
+        queue: bool = False,
+    ) -> UpdateValuesResponse | None:
+        """Updates a range of values in chunks to avoid API timeouts.
+
+        Args:
+            spreadsheet_id (str): The spreadsheet to update.
+            range_name (SheetsRange): The range to update.
+            values (SheetsValues): The values to update.
+            value_input_option (ValueInputOption): How input data should be interpreted.
+            align_columns (bool): Whether to align columns with header.
+            chunk_size_bytes (int): Maximum size in bytes for each chunk.
+
+        Returns:
+            UpdateValuesResponse | None: Response from the update, or None if no updates made.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet_slice = to_sheet_slice(range_name)
+
+        # Process values with column alignment if needed
+        processed_values = self._process_sheets_values(
+            spreadsheet_id=spreadsheet_id,
+            sheet_slice=sheet_slice,
+            values=values,
+            align_columns=align_columns,
+        )
+
+        if not processed_values:
+            return None
+
+        sheet_slice = sheet_slice.with_shape(
+            shape=(len(processed_values), len(processed_values[0]))
+        )
+        # Estimate total size
+        total_size = sum(
+            sum(len(str(cell)) for cell in row) for row in processed_values
+        )
+
+        # If under chunk size, use standard update
+        # if chunk_size_bytes is None or total_size <= chunk_size_bytes:
+        #     self._ensure_sheet_shape(
+        #         spreadsheet_id=spreadsheet_id, ranges=[sheet_slice], queue=queue
+        #     )
+        #     request = self.spreadsheets.values().update(
+        #         spreadsheetId=spreadsheet_id,
+        #         range=str(sheet_slice),
+        #         body={"values": processed_values},
+        #         valueInputOption=value_input_option.value,
+        #     )
+        #     return (
+        #         self.execute(request) if not queue else self.execute_queue(request)  # type: ignore
+        #     )  # type: ignore
+
+        # Split into chunks
+        current_chunk: list[list[Any]] = []
+        current_size = 0
+
+        start_row = sheet_slice.rows.start
+
+        for i, row in enumerate(processed_values):
+            row_size = sum(len(str(cell)) for cell in row)
+
+            # If adding this row would exceed chunk size, start new chunk
+            if current_chunk and current_size + row_size > chunk_size_bytes:
+                t_sheet_slice = SheetSlice[
+                    sheet_slice.sheet_name,
+                    start_row : start_row + i - 1,
+                    sheet_slice.columns,
+                ]
+
+                self._batch_update(
+                    spreadsheet_id=spreadsheet_id,
+                    data={
+                        t_sheet_slice: current_chunk,
+                    },
+                    value_input_option=value_input_option,
+                    align_columns=align_columns,
+                    # Enforce shape for chunked updates
+                    ensure_shape=True,
+                    queue=True,
+                )  # type: ignore
+
+                current_chunk = []
+                current_size = 0
+
+                start_row = sheet_slice.rows.start + i
+
+            current_chunk.append(row)
+            current_size += row_size
+
+        # Add final chunk if any rows remain
+        if len(current_chunk):
+            t_sheet_slice = SheetSlice[
+                sheet_slice.sheet_name,
+                start_row : start_row + len(processed_values) - 1,
+                sheet_slice.columns,
+            ]
+            self._batch_update(
+                spreadsheet_id=spreadsheet_id,
+                data={
+                    t_sheet_slice: current_chunk,
+                },
+                value_input_option=value_input_option,
+                align_columns=align_columns,
+                ensure_shape=True,
+                queue=True,
+            )  # type: ignore
+
+        return None
 
     def update(
         self,
@@ -762,42 +914,47 @@ class Sheets(DriveBase):
         values: SheetsValues | None = None,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        ensure_shape: bool = False,
-    ) -> UpdateValuesResponse:
+        ensure_shape: bool = True,
+        chunk_size_bytes: int | None = DEFAULT_CHUNK_SIZE_BYTES,
+        queue: bool = False,
+    ) -> UpdateValuesResponse | None:
         """Updates a range of values in a spreadsheet.
 
         If `values` is a list of dicts, the keys of the first dict will be used as the header row.
         Further, if the input is a list of dicts and `align_columns` is True, the columns of the spreadsheet
         will be aligned with the keys of the first dict.
 
+        Large updates are automatically chunked to avoid API timeouts.
+
         Args:
             spreadsheet_id (str): The spreadsheet to update.
             range_name (SheetsRange): The range to update.
             values (SheetsValues): The values to update.
-            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
-            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+            value_input_option (ValueInputOption, optional): How the input data should be interpreted.
+            align_columns (bool, optional): Whether to align the columns with the keys of the first row.
+            ensure_shape (bool, optional): Whether to ensure the sheet has enough rows/columns.
+            chunk_size_bytes (int, optional): Maximum size in bytes for each chunk.
+
+        Returns:
+            UpdateValuesResponse | None: Response from the update, or None if no updates made
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_slice = to_sheet_slice(range_name)
+        values = values if values is not None else [[]]
 
         if ensure_shape:
-            self._ensure_sheet_shape(spreadsheet_id, [sheet_slice])
-
-        values = values if values is not None else [[]]
-        values = self._process_sheets_values(
-            spreadsheet_id=spreadsheet_id,
-            sheet_slice=sheet_slice,
-            values=values,
-            align_columns=align_columns,
-        )
-
-        return self.execute(
-            self.spreadsheets.values().update(
-                spreadsheetId=spreadsheet_id,
-                range=str(sheet_slice),
-                body={"values": values},  # type: ignore
-                valueInputOption=value_input_option.value,
+            self._ensure_sheet_shape(
+                spreadsheet_id=spreadsheet_id, ranges=[range_name], queue=queue
             )
+
+        return self._update_chunked(
+            spreadsheet_id=spreadsheet_id,
+            range_name=range_name,
+            values=values,
+            value_input_option=value_input_option,
+            align_columns=align_columns,
+            ensure_shape=ensure_shape,
+            chunk_size_bytes=chunk_size_bytes,
+            queue=queue,
         )
 
     def _batch_update(
@@ -806,11 +963,15 @@ class Sheets(DriveBase):
         data: dict[SheetsRange, SheetsValues],
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        ensure_shape: bool = False,
-    ) -> BatchUpdateValuesResponse:
-        """Internal method for batch updating values. Use `batch_update` instead."""
+        ensure_shape: bool = True,
+        queue: bool = False,
+    ) -> BatchUpdateValuesResponse | None:
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+
         if ensure_shape:
-            self._ensure_sheet_shape(spreadsheet_id, list(data.keys()))
+            self._ensure_sheet_shape(
+                spreadsheet_id=spreadsheet_id, ranges=list(data.keys()), queue=queue
+            )
 
         new_data: list[ValueRange] = [
             {
@@ -829,11 +990,14 @@ class Sheets(DriveBase):
             "valueInputOption": value_input_option.value,
             "data": new_data,
         }
-        return self.execute(
-            self.spreadsheets.values().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body=body,
-            )
+
+        request = self.spreadsheets.values().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=body,
+        )
+
+        return (
+            self.execute(request) if not queue else self.execute_queue(request)  # type: ignore
         )  # type: ignore
 
     def batch_update(
@@ -844,6 +1008,7 @@ class Sheets(DriveBase):
         align_columns: bool = True,
         batch_size: int | None = None,
         ensure_shape: bool = False,
+        queue: bool = False,
     ):
         """Updates a series of range values in a spreadsheet. Much faster version of calling `update` multiple times.
         See `update` for more details.
@@ -869,32 +1034,29 @@ class Sheets(DriveBase):
                 value_input_option=value_input_option,
                 align_columns=align_columns,
                 ensure_shape=ensure_shape,
+                queue=False,
             )
 
-        def on_every_call():
-            batched_data = self._batched_data[spreadsheet_id]
+        batched_data = self._batched_data[spreadsheet_id]
 
-            if data is not None:
-                self._batched_data[spreadsheet_id] |= data
+        if data is not None:
+            self._batched_data[spreadsheet_id] |= data
 
-            return len(batched_data) >= batch_size
-
-        def on_final_call():
+        if len(batched_data) >= batch_size and not (
+            self._batch_update_throttler.dt() > 0
+        ):
             self._batch_update(
                 spreadsheet_id=spreadsheet_id,
                 data=self._batched_data[spreadsheet_id],
                 value_input_option=value_input_option,
                 align_columns=align_columns,
                 ensure_shape=ensure_shape,
+                queue=True,
             )
             self._batched_data[spreadsheet_id].clear()
-
-        return self.throttle_fn(on_every_call, on_final_call)
-
-    def _batch_update_remaining_auto(self):
-        """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
-        for spreadsheet_id in self._batched_data:
-            self.batched_update_remaining(spreadsheet_id)
+            self._batch_update_throttler.reset()
+        else:
+            return None
 
     def batched_update_remaining(self, spreadsheet_id: str):
         """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
@@ -904,9 +1066,17 @@ class Sheets(DriveBase):
         res = self._batch_update(
             spreadsheet_id=spreadsheet_id,
             data=batched_data,
+            queue=True,
         )
+
         self._batched_data[spreadsheet_id].clear()
+
         return res
+
+    def batch_update_remaining_auto(self):
+        """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
+        for spreadsheet_id in self._batched_data:
+            self.batched_update_remaining(spreadsheet_id)
 
     def append(
         self,
@@ -916,7 +1086,8 @@ class Sheets(DriveBase):
         insert_data_option: InsertDataOption = InsertDataOption.overwrite,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-    ) -> AppendValuesResponse:
+        queue: bool = False,
+    ) -> AppendValuesResponse | None:
         """Appends values to a spreadsheet. Like `update`, but searches for the next available range to append to.
 
         The next available range is determined by the last **cleared/deleted** row and column set.
@@ -947,21 +1118,22 @@ class Sheets(DriveBase):
             )
         }
 
-        return self.execute(
-            self.spreadsheets.values().append(
-                spreadsheetId=spreadsheet_id,
-                range=str(sheet_slice),
-                body=body,
-                insertDataOption=insert_data_option.value,
-                valueInputOption=value_input_option.value,
-            )
-        )  # type: ignore
+        request = self.spreadsheets.values().append(
+            spreadsheetId=spreadsheet_id,
+            range=str(sheet_slice),
+            body=body,
+            insertDataOption=insert_data_option.value,
+            valueInputOption=value_input_option.value,
+        )
+
+        return self.execute(request) if not queue else self.execute_queue(request)  # type: ignore
 
     def clear(
         self,
         spreadsheet_id: str,
         range_name: SheetsRange = DEFAULT_SHEET_NAME,
-    ) -> ClearValuesResponse:
+        queue: bool = False,
+    ) -> ClearValuesResponse | None:
         """Clears a range of values in a spreadsheet.
 
         Args:
@@ -971,11 +1143,11 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
 
-        return self.execute(
-            self.spreadsheets.values().clear(
-                spreadsheetId=spreadsheet_id, range=str(sheet_slice)
-            )
-        )  # type: ignore
+        request = self.spreadsheets.values().clear(
+            spreadsheetId=spreadsheet_id, range=str(sheet_slice)
+        )
+
+        return self.execute(request) if not queue else self.execute_queue(request)  # type: ignore
 
     def resize(
         self,
@@ -983,6 +1155,7 @@ class Sheets(DriveBase):
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
         rows: int = DEFAULT_SHEET_SHAPE[0],
         cols: int = DEFAULT_SHEET_SHAPE[1],
+        queue: bool = False,
     ):
         """Resizes a sheet to the given number of rows and columns.
 
@@ -1013,10 +1186,15 @@ class Sheets(DriveBase):
                 }
             ]
         }
-        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id, body=body, queue=queue
+        )
 
     def clear_formatting(
-        self, spreadsheet_id: str, sheet_name: SheetsRange = DEFAULT_SHEET_NAME
+        self,
+        spreadsheet_id: str,
+        sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
+        queue: bool = False,
     ):
         """Clears all formatting from a sheet.
 
@@ -1041,7 +1219,9 @@ class Sheets(DriveBase):
                 }
             ]
         }
-        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id, body=body, queue=queue
+        )
 
     def reset_sheet(
         self,
@@ -1049,6 +1229,7 @@ class Sheets(DriveBase):
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
         resize: bool = True,
         preserve_header: bool = False,
+        queue: bool = False,
     ):
         """Resets a sheet back to a default state. This includes:
             - clearing all values
@@ -1076,7 +1257,11 @@ class Sheets(DriveBase):
             spreadsheet_id=spreadsheet_id, range_name=header_slice
         )
 
-        self.clear(spreadsheet_id, sheet_name)
+        self.clear(
+            spreadsheet_id=spreadsheet_id,
+            range_name=sheet_name,
+            queue=queue,
+        )
 
         # reset the sheet to the default shape
         if resize:
@@ -1091,24 +1276,34 @@ class Sheets(DriveBase):
                 sheet_name=sheet_name,
                 rows=DEFAULT_SHEET_SHAPE[0],
                 cols=cols,
+                queue=queue,
             )
 
         # reset the columns to the default width
         self.resize_dimensions(
-            spreadsheet_id, sheet_name=sheet_name, dimension=SheetsDimension.columns
+            spreadsheet_id,
+            sheet_name=sheet_name,
+            dimension=SheetsDimension.columns,
+            queue=queue,
         )
 
-        self.clear_formatting(spreadsheet_id, sheet_name=sheet_name)
+        self.clear_formatting(
+            spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, queue=queue
+        )
 
         if preserve_header and len(header):
             self.update(
-                spreadsheet_id=spreadsheet_id, range_name=header_slice, values=header
+                spreadsheet_id=spreadsheet_id,
+                range_name=header_slice,
+                values=header,
+                queue=queue,
             )
             self.format(
                 spreadsheet_id=spreadsheet_id,
                 range_names=header_slice,
                 sheets_format=header_fmt[0],
                 update=True,
+                queue=queue,
             )
         else:
             self._reset_sheet_cache(
@@ -1243,6 +1438,7 @@ class Sheets(DriveBase):
         spreadsheet_id: str,
         range_names: SheetsRange | list[SheetsRange],
         update: bool = True,
+        queue: bool = False,
         bold: bool | None = None,
         italic: bool | None = None,
         underline: bool | None = None,
@@ -1325,6 +1521,7 @@ class Sheets(DriveBase):
                         sheet_name=sheet_slice.sheet_name,
                         sizes=sheets_format.column_sizes,
                         dimension=SheetsDimension.columns,
+                        queue=queue,
                     )
 
             if sheets_format.row_sizes is not None:
@@ -1335,6 +1532,7 @@ class Sheets(DriveBase):
                         sheet_name=sheet_slice.sheet_name,
                         sizes=sheets_format.row_sizes,
                         dimension=SheetsDimension.rows,
+                        queue=queue,
                     )
 
             formats = [
@@ -1392,9 +1590,13 @@ class Sheets(DriveBase):
         for range_name in range_names:
             sheet_slice = to_sheet_slice(range_name)
 
-            sheet_id = self.id(spreadsheet_id, sheet_slice.sheet_name)
+            sheet_id = self.id(
+                spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name
+            )
 
-            shape = self.shape(spreadsheet_id, sheet_slice.sheet_name)
+            shape = self.shape(
+                spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name
+            )
 
             sheet_slice = sheet_slice.with_shape(shape)
 
@@ -1404,12 +1606,14 @@ class Sheets(DriveBase):
 
         body: BatchUpdateSpreadsheetRequest = {"requests": requests}
 
-        self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+        self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id, body=body, queue=queue
+        )
 
         return None
 
     @staticmethod
-    def _destructure_row_data(cell_data: CellData) -> CellFormat | None:
+    def _destructure_row_format_data(cell_data: CellData) -> CellFormat | None:
         if "effectiveFormat" not in cell_data or "userEnteredFormat" not in cell_data:
             return None
 
@@ -1516,7 +1720,9 @@ class Sheets(DriveBase):
                 row_formats: list[CellFormat] = []
 
                 for value in row["values"]:
-                    if (t_cell_format := self._destructure_row_data(value)) is not None:
+                    if (
+                        t_cell_format := self._destructure_row_format_data(value)
+                    ) is not None:
                         row_formats.append(t_cell_format)
 
                 cell_formats.append(row_formats)
@@ -1706,7 +1912,8 @@ class Sheets(DriveBase):
         sheet_name: SheetsRange = DEFAULT_SHEET_NAME,
         sizes: list[int] | list[int | None] | int | None = 100,
         dimension: SheetsDimension = SheetsDimension.columns,
-    ) -> BatchUpdateSpreadsheetResponse:
+        queue: bool = False,
+    ) -> BatchUpdateSpreadsheetResponse | None:
         """Resizes the dimensions of a sheet.
 
         Args:
@@ -1731,13 +1938,10 @@ class Sheets(DriveBase):
                 dimension=dimension,
             )
         }
-        res = self.execute(
-            self.service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id, body=body
-            )
-        )
 
-        return res  # type: ignore
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id, body=body, queue=queue
+        )  # type: ignore
 
     def freeze(
         self,
@@ -1745,6 +1949,7 @@ class Sheets(DriveBase):
         sheet_name: str = DEFAULT_SHEET_NAME,
         rows: int = 0,
         columns: int = 0,
+        queue: bool = False,
     ):
         """Freezes rows and/or columns in a sheet.
 
@@ -1774,13 +1979,16 @@ class Sheets(DriveBase):
             ]
         }
 
-        return self.batch_update_spreadsheet(spreadsheet_id=spreadsheet_id, body=body)
+        return self.batch_update_spreadsheet(
+            spreadsheet_id=spreadsheet_id, body=body, queue=queue
+        )
 
     def format_header(
         self,
         spreadsheet_id: str,
         sheet_name: str = DEFAULT_SHEET_NAME,
-        auto_resize: bool = True,
+        auto_resize: bool = False,
+        queue: bool = False,
     ):
         """Formats the header row of a sheet by freezing and bolding it, with optional column auto-resizing.
 
@@ -1792,7 +2000,9 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         # Freeze first row
-        self.freeze(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, rows=1)
+        self.freeze(
+            spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, rows=1, queue=queue
+        )
 
         # Format first row bold
         sheet_slice = SheetSlice[sheet_name, 1, ...]
@@ -1801,6 +2011,7 @@ class Sheets(DriveBase):
             range_names=sheet_slice,
             bold=True,
             wrap_strategy=WrapStrategy.WRAP,
+            queue=queue,
         )
 
         # Auto-resize columns if requested
@@ -1810,4 +2021,5 @@ class Sheets(DriveBase):
                 sheet_name=sheet_name,
                 sizes=None,
                 dimension=SheetsDimension.columns,
+                queue=queue,
             )

@@ -10,16 +10,19 @@ import json
 import os
 import pickle
 import random
+import socket
 import time
 import urllib.parse
 from collections import defaultdict
 from enum import Enum
-from functools import cache
+from functools import cache, wraps
 from mimetypes import guess_type
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 from threading import Thread
+import threading
 from typing import *
+
 import googleapiclient.http
 import requests
 from cachetools import TTLCache
@@ -28,6 +31,10 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from loguru import logger
+
+DEFAULT_TIMEOUT = 8 * 60  # 8 minutes
+
+socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
 FilePath = str | Path
 
@@ -39,9 +46,9 @@ if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import Color, Spreadsheet
 
 
-EXECUTE_TIME = 0
+EXECUTE_TIME = 1
 
-THROTTLE_TIME = 30
+THROTTLE_TIME = 5
 
 
 SCOPES = [
@@ -280,13 +287,12 @@ def on_http_exception(e: Exception) -> bool:
     if isinstance(e, googleapiclient.errors.HttpError):
         status = e.resp.status
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
-
     return False
 
 
 def retry(
     retries: int = 10,
-    delay: int = 5,
+    delay: float = 5.0,
     exponential_backoff: bool = False,
     on_exception: Callable[[Exception], Union[bool, None]] | None = None,
 ):
@@ -348,101 +354,170 @@ def retry(
     return inner
 
 
-class DriveBase:
-    """Args:
-    creds (Credentials, optional): The credentials to use. If None, the following paths will be tried:
-        - ~/auth/credentials.json
-        - env var: GOOGLE_API_CREDENTIALS
-    execute_time (float, optional): The time to wait between calls to execute. Defaults to None.
-    throttle_time (float, optional): The time to wait between requests. Defaults to THROTTLE_TIME (30).
-    """
+class Throttler:
+    """Manages throttling for function calls."""
+
+    def __init__(self, throttle_time: float = THROTTLE_TIME):
+        self._throttle_time = throttle_time
+        self._prev_time: Optional[float] = None
+
+    def dt(self) -> float:
+        if self._throttle_time == 0:
+            return 0
+
+        if self._prev_time is not None:
+            dt = time.perf_counter() - self._prev_time
+
+            return max(0, self._throttle_time - dt)
+
+        return 0
+
+    def reset(self):
+        self._prev_time = time.perf_counter()
+
+    def throttle(self) -> float:
+        dt = self.dt()
+
+        if dt > 0:
+            logger.debug(f"Throttling for {dt:.2f} seconds")
+            time.sleep(dt)
+
+        self.reset()
+
+        return dt
+
+
+class DriveThread:
+    """Handles threaded execution of Google Drive API requests."""
 
     def __init__(
         self,
-        creds: Credentials | None,
+        worker_func: Callable[[googleapiclient.http.HttpRequest], Any],
+    ):
+        """
+        Initialize the drive thread.
+
+        Args:
+            worker_func: Function to process each request
+            name: Name for the worker thread
+        """
+
+        self._worker_func = worker_func
+
+        self._request_queue: Queue[Optional[googleapiclient.http.HttpRequest]] = Queue()
+
+        self._request_thread: Optional[Thread] = None
+
+        self._monitor_thread: Optional[Thread] = None
+
+        self._init_worker()
+
+        self._init_monitor()
+
+    def _init_worker(self) -> None:
+        """Initialize the worker thread for processing queued requests."""
+
+        def _worker() -> None:
+            while True:
+                try:
+                    # Get with timeout to allow checking stop flag
+                    request = self._request_queue.get(timeout=1.0)
+                except Empty:
+                    continue
+
+                if request is None:
+                    break
+
+                try:
+                    t = time.perf_counter()
+
+                    logger.debug(f"Executing request: {request}")
+
+                    self._worker_func(request)
+
+                    dt = time.perf_counter() - t
+
+                    logger.debug(f"Request completed in {dt:.2f} seconds")
+
+                except Exception as e:
+                    logger.error(f"Error executing request: {e}")
+                finally:
+                    self._request_queue.task_done()
+
+            logger.debug("Worker thread stopped")
+
+        self._request_thread = Thread(
+            target=_worker,
+            daemon=False,
+        )
+        self._request_thread.start()
+
+    def _init_monitor(self) -> None:
+        def monitor_thread():
+            main_thread = threading.main_thread()
+
+            main_thread.join()
+
+            self._cleanup()
+
+        self._monitor_thread = Thread(target=monitor_thread, daemon=True)
+        self._monitor_thread.start()
+
+    def enqueue(self, request: googleapiclient.http.HttpRequest | None) -> None:
+        """Add a request to the execution queue."""
+        logger.debug(f"Enqueuing request {id(self._request_queue)}: {request}")
+        self._request_queue.put(request)
+
+    def _cleanup(self) -> None:
+        """Clean up resources and ensure graceful shutdown."""
+        # Wait for remaining items in queue
+        if self._request_thread is None:
+            return
+
+        self.enqueue(None)
+
+        self._request_queue.join()
+
+        self._request_thread.join()
+
+
+class DriveBase:
+    """Base class for Google Drive API operations with throttling and request queueing."""
+
+    def __init__(
+        self,
+        creds: Optional[Credentials] = None,
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
-        # Google Drive API service creds
+        # Google Drive API service credentials
         self.creds = creds if creds is not None else get_oauth2_creds()
-        # throttle time in seconds; used in throttled_fn
-        self.throttle_time = throttle_time
-        # time to wait between calls to execute
-        self.execute_time = execute_time
-        # used to throttle calls to throttled_fn
-        self._prev_time_throttle: Optional[float] = None
-        # used to throttle calls to execute
-        self._prev_time_execute: Optional[float] = None
-        # TTL cache for various functions; used by way of "@cachedmethod(operator.attrgetter("_cache"))"
+
+        # Create throttlers for different operations
+        self._execute_throttler = Throttler(execute_time)
+        self._execute_queue_throttler = Throttler(throttle_time)
+
+        # TTL cache for various functions
         self._cache: TTLCache = TTLCache(maxsize=128, ttl=80)
-        # queue for requests to execute
-        self._request_queue: Queue[googleapiclient.http.HttpRequest] = Queue()
 
-        def _worker():
-            while True:
-                request = self._request_queue.get()
-                self._request_queue.task_done()
-                request.execute()
-
-        self._request_thread = Thread(target=_worker, daemon=True)
-        self._request_thread.start()
-
-        atexit.register(self._request_queue.join)
+        # Initialize drive thread
+        self._drive_thread = DriveThread(worker_func=self.execute)
 
     @retry(
-        retries=10, delay=30, exponential_backoff=False, on_exception=on_http_exception
+        retries=10,
+        delay=30.0,
+        exponential_backoff=False,
+        on_exception=on_http_exception,
     )
     def execute(self, request: googleapiclient.http.HttpRequest) -> Any:
-        if self.execute_time == 0:
-            return request.execute()
+        """Execute a request with retry and throttling."""
+        self._execute_throttler.throttle()
 
-        curr_time = time.perf_counter()
-        dt = (
-            curr_time - self._prev_time_execute
-            if self._prev_time_execute is not None
-            else 0
-        )
-        if dt < self.execute_time:
-            time.sleep(dt)
+        return request.execute(num_retries=1)
 
-        res = request.execute()
-        self._prev_time_execute = curr_time
-
-        return res
-
-    def execute_queue(self, request: googleapiclient.http.HttpRequest) -> Any:
-        self._request_queue.put(request)
-        return None
-
-    def throttle_fn(
-        self,
-        on_every_call: Callable[[], bool | None],
-        on_final_call: Callable[[], None],
-    ):
-        """Throttles a function to be called at most once every throttle_time seconds.
-
-        Args:
-            on_every_call (Callable[[], bool | None]): Function that is called on every call to throttled_fn.
-                If this function returns False, throttled_fn will not call on_final_call.
-                If this function returns None, throttled_fn will call on_final_call.
-            on_final_call (Callable[[], None]): Function that is called on the final call to throttled_fn.
-        """
-        can_call = on_every_call()
-        can_call = can_call if can_call is not None else True
-
-        curr_time = time.perf_counter()
-        dt = (
-            curr_time - self._prev_time_throttle
-            if self._prev_time_throttle is not None
-            else self.throttle_time
-        )
-
-        if not (dt >= self.throttle_time and can_call):
-            return None
-
-        self._prev_time_throttle = curr_time
-
-        return on_final_call()
+    def execute_queue(self, request: googleapiclient.http.HttpRequest) -> None:
+        """Add a request to the execution queue."""
+        self._drive_thread.enqueue(request)
 
 
 def named_methodkey(name: str):
@@ -591,11 +666,11 @@ def get_oauth2_creds(
 
         elif creds is None:
             flow = InstalledAppFlow.from_client_config(client_config, scopes)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))
 
-        return creds
+        return creds  # type: ignore
 
     raise Exception("No token path provided.")
 
