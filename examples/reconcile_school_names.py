@@ -11,7 +11,7 @@ from typing import *
 
 import loguru
 import pandas as pd
-from litellm import ModelResponse, completion
+from litellm import ModelResponse, completion  # type: ignore
 from loguru import logger
 
 from googleapiutils2 import (
@@ -166,7 +166,7 @@ Match list:
         drop_params=True,
     )
 
-    data = handle_response(response=response)
+    data = handle_response(response=response)  # type: ignore
 
     if data is None:
         return None

@@ -5,7 +5,7 @@ from typing import *
 from cachetools import cached
 
 from googleapiutils2.sheets.misc import (
-    DEFAULT_SHEET_SHAPE,
+    INIT_SHEET_SHAPE,
     SheetSliceT,
     split_sheet_range,
 )
@@ -34,9 +34,9 @@ def to_sheet_slice(sheets_range: SheetsRange) -> SheetSliceT:
         return sheets_range
     else:
         shape = (
-            sheets_range.shape()
+            sheets_range.shape()  # type: ignore
             if hasattr(sheets_range, "shape")
-            else DEFAULT_SHEET_SHAPE
+            else INIT_SHEET_SHAPE
         )
         sheets_range = str(sheets_range)
 

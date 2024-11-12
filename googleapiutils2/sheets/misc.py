@@ -5,8 +5,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from types import EllipsisType
 from typing import *
+from functools import cache
+from cachetools import cachedmethod
 
-from ..utils import to_base
+from ..utils import named_methodkey, to_base
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import CellFormat
@@ -16,6 +18,10 @@ VERSION = "v4"
 DEFAULT_SHEET_NAME = "'Sheet1'"
 
 DEFAULT_SHEET_SHAPE = (1000, 26)
+
+INIT_SHEET_SHAPE = (..., ...)
+
+SheetShape = tuple[int | EllipsisType, int | EllipsisType]
 
 BASE = 26
 OFFSET = 1
@@ -28,6 +34,8 @@ DEFAULT_CHUNK_SIZE_BYTES = 1 * 1024 * 1024  # 1MB default chunk size
 SheetsValues = (
     list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[dict] | list[object]
 )
+
+SHEET_SLICE_CACHE: dict[str, tuple[slice, slice]] = {}
 
 
 @dataclass
@@ -219,9 +227,8 @@ def A1_to_rc(a1: str) -> tuple[int | None, int | None]:
     return row, col
 
 
-def A1_to_slices(
-    a1: str, shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
-) -> tuple[slice, slice]:
+@cache
+def A1_to_slices(a1: str, shape: SheetShape = INIT_SHEET_SHAPE) -> tuple[slice, slice]:
     # Parse sheet and range
     _, range_name = split_sheet_range(a1)
 
@@ -242,8 +249,8 @@ def A1_to_slices(
     start_col = start_col if start_col is not None else 1
 
     # If end indices are not specified, set them to the maximum row/column
-    end_row = end_row if end_row is not None else shape[0]
-    end_col = end_col if end_col is not None else shape[1]
+    end_row = end_row if end_row is not None else shape[0]  # type: ignore
+    end_col = end_col if end_col is not None else shape[1]  # type: ignore
 
     return slice(start_row, end_row), slice(start_col, end_col)
 
@@ -255,18 +262,19 @@ def slices_to_A1(row_ix: slice, col_ix: slice) -> tuple[str, str]:
     )
 
 
+@cache
 def expand_slices(
     row_ix: slice | int | EllipsisType,
     col_ix: slice | int | EllipsisType,
-    shape: tuple[int, int] = DEFAULT_SHEET_SHAPE,
+    shape: SheetShape = INIT_SHEET_SHAPE,
 ) -> str | None:
     def to_slice(ix: slice | int) -> slice:
         if isinstance(ix, slice):
             return ix
         elif isinstance(ix, str):
             if ":" in ix:
-                ix = ix.split(":") # type: ignore
-                return slice(A1_to_int(ix[0]), A1_to_int(ix[1])) # type: ignore
+                ix = ix.split(":")  # type: ignore
+                return slice(A1_to_int(ix[0]), A1_to_int(ix[1]))  # type: ignore
             else:
                 ix = A1_to_int(ix)
                 return slice(ix, ix)
@@ -289,14 +297,20 @@ def expand_slices(
         start = 1 if start is ... else start
         stop = max_dim if stop is ... else stop
         # handle negative indices
-        start = max_dim + start + 1 if start < 0 else start
-        stop = max_dim + stop + 1 if stop < 0 else stop
+        start = max_dim + start + 1 if start is not ... and start < 0 else start
+        stop = max_dim + stop + 1 if stop is not ... and stop < 0 else stop
+
         return slice(start, stop, step)
 
-    row_is_ellipsis = row_ix is ...
-    col_is_ellipsis = col_ix is ...
-
     row_ix, col_ix = to_slice(row_ix), to_slice(col_ix)  # type: ignore
+
+    row_is_ellipsis = row_ix.start == 1 and (
+        row_ix.stop == shape[0] or row_ix.stop is ...
+    )
+    col_is_ellipsis = col_ix.start == 1 and (
+        col_ix.stop == shape[1] or col_ix.stop is ...
+    )
+
     row_ix, col_ix = normalize_ix(row_ix, shape[0]), normalize_ix(col_ix, shape[1])  # type: ignore
 
     if col_is_ellipsis:
@@ -310,7 +324,7 @@ def expand_slices(
 
 
 def parse_sheet_slice_ixs(
-    ixs: str | tuple[Any, ...], shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
+    ixs: str | tuple[Any, ...], shape: SheetShape = INIT_SHEET_SHAPE
 ) -> tuple[str | None, str | None]:
     def parse():
         match ixs:
@@ -376,7 +390,8 @@ class SheetSliceT:
 
     sheet_name: str = DEFAULT_SHEET_NAME
     range_name: str | None = None
-    shape: tuple[int, int] = DEFAULT_SHEET_SHAPE
+
+    shape: SheetShape = INIT_SHEET_SHAPE
 
     slices: tuple[slice, slice] = field(init=False, repr=False, hash=False)
 

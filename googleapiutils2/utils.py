@@ -32,21 +32,21 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from loguru import logger
 
-DEFAULT_TIMEOUT = 8 * 60  # 8 minutes
 
-socket.setdefaulttimeout(DEFAULT_TIMEOUT)
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3.resources import File
+    from googleapiclient._apis.sheets.v4.resources import Color, Spreadsheet
 
 FilePath = str | Path
 
 T = TypeVar("T")
 P = ParamSpec("P")
 
-if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3.resources import File
-    from googleapiclient._apis.sheets.v4.resources import Color, Spreadsheet
+DEFAULT_TIMEOUT = 8 * 60  # 8 minutes
 
+socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
-EXECUTE_TIME = 1
+EXECUTE_TIME = 0.5
 
 THROTTLE_TIME = 5
 
@@ -284,8 +284,8 @@ def raise_for_status(status: str) -> None:
 
 
 def on_http_exception(e: Exception) -> bool:
-    if isinstance(e, googleapiclient.errors.HttpError):
-        status = e.resp.status
+    if isinstance(e, googleapiclient.errors.HttpError): # type: ignore
+        status = e.resp.status # type: ignore
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
     return False
 
