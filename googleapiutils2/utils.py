@@ -46,9 +46,9 @@ DEFAULT_TIMEOUT = 8 * 60  # 8 minutes
 
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
-EXECUTE_TIME = 0.5
+EXECUTE_TIME = 0.1
 
-THROTTLE_TIME = 5
+THROTTLE_TIME = 1
 
 
 SCOPES = [
@@ -113,6 +113,7 @@ class GoogleMimeTypes(Enum):
     video = "application/vnd.google-apps.video"
 
     xls = "application/vnd.ms-excel"
+    xlsm = "application/vnd.ms-excel.sheet.macroenabled.12"
     xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ods = "application/vnd.oasis.opendocument.spreadsheet"
     csv = "text/csv"

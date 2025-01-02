@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.14.9"
+version = "0.15.0"
 description = "Wrapper for Google's Python API."
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
@@ -19,33 +19,34 @@ repository = "https://github.com/mkbabb/googleapiutils2"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-mypy = "^1.13.0"
+mypy = "^1.14.1"
 google-api-python-client-stubs = "^1.28.0"
 google-auth-oauthlib = "^1.2.1"
-google-api-python-client = "^2.149.0"
+google-api-python-client = "^2.157.0"
 google-auth-httplib2 = "^0.2.0"
 requests = "^2.32.3"
 cachetools = "^5.5.0"
-google-auth = "^2.35.0"
+google-auth = "^2.37.0"
 openpyxl = "^3.1.5"
 pandas = "^2.2.3"
 loguru = "^0.7.2"
 
 [tool.poetry.group.dev.dependencies]
 anthropic = "^0.32.0"
-litellm = "^1.50.4"
+litellm = "^1.56.6"
 types-requests = "^2.32.0.20241016"
 types-cachetools = "^5.5.0.20240820"
-pytest = "^8.3.3"
-pandas-stubs = "^2.2.3.241009"
+pytest = "^8.3.4"
+pandas-stubs = "^2.2.3.241126"
 black = "^24.10.0"
-openai = "^1.52.2"
-pypdf = "^5.0.1"
+openai = "^1.58.1"
+pypdf = "^5.1.0"
 ipinfo = "^5.1.1"
-pyarrow = "^17.0.0"
-markdown2 = "^2.5.1"
-jinja2 = "^3.1.4"
+pyarrow = "^18.1.0"
+markdown2 = "^2.5.2"
+jinja2 = "^3.1.5"
 jinja-markdown2 = "^0.3.0"
+pypdf2 = "^3.0.1"
 
 [tool.mypy]
 python_version = "3.12"

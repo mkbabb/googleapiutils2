@@ -26,6 +26,22 @@ rows = [
 ]
 
 
+sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)
+
+
+#  total size of the payload in bytes and MB:
+total_size = sum(len(json.dumps(row)) for row in rows)
+
+print(f"Total size of payload: {total_size} bytes, {total_size / 1024 / 1024} MB")
+
+tmp = SheetSlice[row_count, col_count]
+
+sheets.update(
+    spreadsheet_id=SHEET_URL,
+    range_name=Sheet1.sheet_name,
+    values=rows,
+)
+
 sheets.batch_update(
     spreadsheet_id=SHEET_URL,
     data={
@@ -41,25 +57,8 @@ sheets.batch_update(
     chunk_size_bytes=10,
 )
 
-# sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)
 
-
-# # total size of the payload in bytes and MB:
-# total_size = sum(len(json.dumps(row)) for row in rows)
-
-# print(f"Total size of payload: {total_size} bytes, {total_size / 1024 / 1024} MB")
-
-# tmp = SheetSlice[row_count, col_count]
-
-# sheets.update(
-#     spreadsheet_id=SHEET_URL,
-#     range_name=Sheet1.sheet_name,
-#     values=rows,
-# )
-
-
-print("hey")
-# sheets.format_header(
-#     spreadsheet_id=SHEET_URL,
-#     sheet_name=Sheet1.sheet_name,
-# )
+sheets.format_header(
+    spreadsheet_id=SHEET_URL,
+    sheet_name=Sheet1.sheet_name,
+)
