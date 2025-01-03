@@ -1069,7 +1069,8 @@ class Sheets(DriveBase):
             values=list(data.values()),
         )
 
-        new_data: list[ValueRange] = []
+        flat_range_names = []
+        flat_values = []
 
         for range_name, values in flat_data.items():
             sheet_slice = to_sheet_slice(range_name)
@@ -1085,19 +1086,15 @@ class Sheets(DriveBase):
 
             sheet_slice = sheet_slice.with_shape((len(values), len(values[0])))
 
-            new_data.append(
-                {
-                    "range": str(sheet_slice),
-                    "values": values,
-                }
-            )
+            flat_range_names.append(str(sheet_slice))
+            flat_values.append(values)
 
         # Flatten once more to handle ellipsis expansion
         flat_data = self._flatten_value_ranges(
-            range_names=list(data.keys()),
-            values=list(data.values()),
+            range_names=flat_range_names,
+            values=flat_values,
         )
-        new_data = [
+        new_data: list[ValueRange] = [
             {
                 "range": str(range_name),
                 "values": values,
@@ -1206,6 +1203,9 @@ class Sheets(DriveBase):
         """Updates any remaining batched data that's been left over from previous calls to `batch_update`."""
         spreadsheet_id = parse_file_id(spreadsheet_id)
         batched_data = self._batched_data[spreadsheet_id]
+
+        if len(batched_data) == 0:
+            return None
 
         res = self._batch_update(
             spreadsheet_id=spreadsheet_id,
