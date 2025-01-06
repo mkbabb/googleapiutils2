@@ -1089,6 +1089,9 @@ class Sheets(DriveBase):
             flat_range_names.append(str(sheet_slice))
             flat_values.append(values)
 
+        if len(flat_range_names) == 0:
+            return None
+
         # Flatten once more to handle ellipsis expansion
         flat_data = self._flatten_value_ranges(
             range_names=flat_range_names,
@@ -1578,6 +1581,7 @@ class Sheets(DriveBase):
 
         return {"textFormat": text_format, **cell_format_dict}  # type: ignore
 
+    # TODO! fix hyperlink formatting update - does not preserve extant hyperlinks
     def format(
         self,
         spreadsheet_id: str,
