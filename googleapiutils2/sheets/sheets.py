@@ -713,7 +713,7 @@ class Sheets(DriveBase):
         current_df.columns = new_df.columns
 
         # Convert to list format, replacing None/NaN with empty string
-        values: list[list] = new_df.fillna("").values.tolist()
+        values: list[list] = new_df.fillna("").values.tolist() # type: ignore
 
         if insert_header:
             values.insert(0, list(new_df.columns))
@@ -1069,8 +1069,8 @@ class Sheets(DriveBase):
             values=list(data.values()),
         )
 
-        flat_range_names = []
-        flat_values = []
+        flat_range_names: list = []
+        flat_values: list = []
 
         for range_name, values in flat_data.items():
             sheet_slice = to_sheet_slice(range_name)
@@ -1973,7 +1973,7 @@ class Sheets(DriveBase):
         if as_dict:
             return df.to_dict(orient="records")
 
-        data: list = df.values.tolist()
+        data: list = df.values.tolist() # type: ignore
         data.insert(0, list(df.columns))
         return data
 
