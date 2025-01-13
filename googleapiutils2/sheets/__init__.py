@@ -13,7 +13,7 @@ from .misc import (
     WrapStrategy,
 )
 from .sheets import Sheets
-from .sheets_slice import SheetSlice, to_sheet_slice
+from .sheets_slice import SheetSlice, SheetsRange, to_sheet_slice
 from .sheets_value_range import SheetsValueRange
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         ColorStyle,
         CopySheetToAnotherSpreadsheetRequest,
         DeleteSheetRequest,
+        NumberFormat,
         Padding,
         Request,
         Sheet,
@@ -42,5 +43,4 @@ if TYPE_CHECKING:
         UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
-        NumberFormat,
     )
