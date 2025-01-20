@@ -22,6 +22,7 @@ from ..utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
+    ServiceAccountCredentials,
     Throttler,
     deep_update,
     hex_to_rgb,
@@ -94,7 +95,7 @@ class Sheets(DriveBase):
 
     def __init__(
         self,
-        creds: Credentials | None = None,
+        creds: Credentials | ServiceAccountCredentials | None = None,
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):

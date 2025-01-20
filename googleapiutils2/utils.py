@@ -29,6 +29,7 @@ from cachetools import TTLCache
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from loguru import logger
 
@@ -57,9 +58,16 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
     # Google Sheets API
     "https://www.googleapis.com/auth/spreadsheets",
+    # Gmail
+    "https://www.googleapis.com/auth/gmail.send",
+    # Google Cloud platform:
+    "https://www.googleapis.com/auth/cloud-platform",
+    # Google Admin SDK API
+    "https://www.googleapis.com/auth/admin.directory.user",
+    "https://www.googleapis.com/auth/admin.directory.user.security",
+    "https://www.googleapis.com/auth/admin.directory.domain",
     # Google Groups Settings API
     "https://www.googleapis.com/auth/admin.directory.group",
-    "https://apps-apis.google.com/a/feeds/groups/",
 ]
 
 
@@ -285,8 +293,8 @@ def raise_for_status(status: str) -> None:
 
 
 def on_http_exception(e: Exception) -> bool:
-    if isinstance(e, googleapiclient.errors.HttpError): # type: ignore
-        status = e.resp.status # type: ignore
+    if isinstance(e, googleapiclient.errors.HttpError):  # type: ignore
+        status = e.resp.status  # type: ignore
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
     return False
 
@@ -487,7 +495,7 @@ class DriveBase:
 
     def __init__(
         self,
-        creds: Optional[Credentials] = None,
+        creds: Credentials | ServiceAccountCredentials | None = None,
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
@@ -627,8 +635,10 @@ def load_client_config(
 def get_oauth2_creds(
     client_config: FilePath | dict | None = CONFIG_PATH,
     token_path: FilePath | None = TOKEN_PATH,
-    scopes: List[str] = SCOPES,
-) -> Credentials:
+    scopes: list[str] = SCOPES,
+    *args: Any,
+    **kwargs: Any,
+) -> Credentials | ServiceAccountCredentials | Any:
     """Get OAuth2 credentials for Google API.
 
     If the client config provided is for a service account, we return the credentials.
@@ -652,7 +662,7 @@ def get_oauth2_creds(
 
     if is_service_account:
         return service_account.Credentials.from_service_account_info(
-            client_config, scopes=scopes
+            client_config, scopes=scopes, *args, **kwargs
         )  # type: ignore
     elif token_path is not None:
         token_path = Path(token_path)  # type: ignore
@@ -666,7 +676,9 @@ def get_oauth2_creds(
                 creds.refresh(Request())
 
         elif creds is None:
-            flow = InstalledAppFlow.from_client_config(client_config, scopes)
+            flow = InstalledAppFlow.from_client_config(
+                client_config, scopes=scopes, *args, **kwargs
+            )
             creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))

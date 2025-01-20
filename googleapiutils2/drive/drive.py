@@ -19,6 +19,7 @@ from ..utils import (
     DriveBase,
     FilePath,
     GoogleMimeTypes,
+    ServiceAccountCredentials,
     download_large_file,
     export_mime_type,
     guess_mime_type,
@@ -60,7 +61,7 @@ class Drive(DriveBase):
 
     def __init__(
         self,
-        creds: Credentials | None = None,
+        creds: Credentials | ServiceAccountCredentials | None = None,
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
         team_drives: bool = True,

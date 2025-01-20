@@ -12,6 +12,7 @@ from ..utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
+    ServiceAccountCredentials,
     named_methodkey,
 )
 from .misc import DEFAULT_FIELDS, VERSION
@@ -38,7 +39,7 @@ class Groups(DriveBase):
 
     def __init__(
         self,
-        creds: Credentials | None = None,
+        creds: Credentials | ServiceAccountCredentials | None = None,
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
@@ -60,7 +61,7 @@ class Groups(DriveBase):
         fields: str = DEFAULT_FIELDS,
     ) -> Group:
 
-        return self.execute(self.groups.get(groupKey=group_id, fields=fields))
+        return self.execute(self.groups.get(groupKey=group_id, fields=fields))  # type: ignore
 
     def list(
         self,
@@ -108,14 +109,14 @@ class Groups(DriveBase):
         if description is not None:
             group["description"] = description
 
-        return self.execute(self.groups.insert(body=group))
+        return self.execute(self.groups.insert(body=group))  # type: ignore
 
     def update(
         self,
         group_id: str,
         group: Group,
     ) -> Group:
-        return self.execute(self.groups.update(groupKey=group_id, body=group))
+        return self.execute(self.groups.update(groupKey=group_id, body=group))  # type: ignore
 
     def delete(self, group_id: str) -> None:
         self.execute(self.groups.delete(groupKey=group_id))
@@ -130,7 +131,9 @@ class Groups(DriveBase):
                 groupKey=group_key,
                 memberKey=member_key,
             )
-        ).get("isMember", False)
+        ).get(
+            "isMember", False
+        )  # type: ignore
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("members_get"))
     def members_get(
