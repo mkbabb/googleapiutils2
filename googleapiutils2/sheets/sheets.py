@@ -626,19 +626,22 @@ class Sheets(DriveBase):
         header = pd.Index(header).astype(str)
 
         # Get current values
-        current_values = (
-            self.values(
+        current_values: list = []
+        if (
+            update
+            and self._check_sheet_shape(
+                sheet_slice=sheet_slice,
+                shape=self.shape(spreadsheet_id, sheet_name),
+            )[0]
+        ):
+            current_values = self.values(
                 spreadsheet_id=spreadsheet_id,
                 range_name=sheet_slice,
                 value_render_option=ValueRenderOption.formula,
-            ).get('values', [])
-            if update
-            else []
-        )
+            ).get("values", [])
 
         # Create DataFrame from current values if they exist
         current_df: pd.DataFrame = None  # type: ignore
-
         if len(current_values) > 0:
             current_df = pd.DataFrame(current_values)  # type: ignore
 
@@ -714,7 +717,7 @@ class Sheets(DriveBase):
         current_df.columns = new_df.columns
 
         # Convert to list format, replacing None/NaN with empty string
-        values: list[list] = new_df.fillna("").values.tolist() # type: ignore
+        values: list[list] = new_df.fillna("").values.tolist()  # type: ignore
 
         if insert_header:
             values.insert(0, list(new_df.columns))
@@ -746,6 +749,45 @@ class Sheets(DriveBase):
         else:
             return values  # type: ignore
 
+    def _check_sheet_shape(
+        self,
+        sheet_slice: SheetSliceT,
+        shape: tuple[int, int],
+    ) -> tuple[bool, tuple[int, int]]:
+        """Check if a sheet slice fits within the given sheet shape.
+
+        Args:
+            sheet_slice (SheetSliceT): The sheet slice to check
+            shape (tuple[int, int]): The current shape of the sheet (rows, cols)
+
+        Returns:
+            tuple[bool, tuple[int, int]]: A tuple containing:
+                - bool: Whether the slice fits within the current shape
+                - tuple[int, int]: The minimum shape needed to fit the slice
+        """
+        current_rows, current_cols = shape
+
+        needed_rows = sheet_slice.rows.stop
+        needed_rows = needed_rows if needed_rows is not ... else current_rows
+
+        needed_cols = sheet_slice.columns.stop
+        needed_cols = needed_cols if needed_cols is not ... else current_cols
+
+        row_fit = needed_rows <= current_rows
+        col_fit = needed_cols <= current_cols
+
+        fits = row_fit and col_fit
+
+        # this should grow by 1.25x the current size
+        GROWTH_FACTOR = 1.25
+
+        needed_rows = max(needed_rows, int(current_rows * GROWTH_FACTOR))
+        needed_cols = max(needed_cols, int(current_cols * GROWTH_FACTOR))
+
+        needed_shape = (needed_rows, needed_cols)
+
+        return fits, needed_shape
+
     def _ensure_sheet_shape(self, spreadsheet_id: str, ranges: List[SheetsRange]):
         """For a given sheet, ensure that every range is within the sheet's size.
         If it's not, resize the sheet to fit the ranges.
@@ -775,14 +817,13 @@ class Sheets(DriveBase):
             sheet_slice: SheetSliceT,
         ):
             sheet_name = sheet_slice.sheet_name
-            rows, cols = shapes[sheet_name]
 
-            t_rows, t_cols = sheet_slice.rows.stop, sheet_slice.columns.stop
-
-            if t_rows <= rows and t_cols <= cols:
+            fits, (rows, cols) = self._check_sheet_shape(
+                sheet_slice=sheet_slice,
+                shape=shapes[sheet_slice.sheet_name],
+            )
+            if fits:
                 return
-
-            rows, cols = max(t_rows, rows), max(t_cols, cols)
 
             self.resize(spreadsheet_id, sheet_name, rows=rows, cols=cols)
 
@@ -1974,7 +2015,7 @@ class Sheets(DriveBase):
         if as_dict:
             return df.to_dict(orient="records")
 
-        data: list = df.values.tolist() # type: ignore
+        data: list = df.values.tolist()  # type: ignore
         data.insert(0, list(df.columns))
         return data
 
