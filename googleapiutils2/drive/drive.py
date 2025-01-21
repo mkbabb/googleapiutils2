@@ -1088,7 +1088,7 @@ class Permissions:
         file_id: str,
         email_address: str,
         permission: Permission | None = None,
-        sendNotificationEmail: bool = True,
+        send_notification_email: bool = True,
         get_extant: bool = False,
         update: bool = False,
         **kwargs: Any,
@@ -1099,7 +1099,7 @@ class Permissions:
             file_id (str): The ID of the file.
             email_address (str): The email address of the user to give permission to.
             permission (Permission, optional): The permission to give. Defaults to None, which will give a reader permission of type user.
-            sendNotificationEmail (bool, optional): Whether to send a notification email. Defaults to True.
+            send_notification_email (bool, optional): Whether to send a notification email. Defaults to True.
             get_extant (bool, optional): Whether to get_extant the permission if it already exists. Defaults to False.
         """
         file_id = parse_file_id(file_id)
@@ -1113,13 +1113,11 @@ class Permissions:
         if permission is not None:
             user_permission.update(permission)
 
-        if (
-            not get_extant
-            and (p := self._permission_update_if_exists(file_id, user_permission))
-            is not None
-        ):
+        if (get_extant or update) and (
+            p := self._permission_update_if_exists(file_id, user_permission)
+        ) is not None:
             if update:
-                user_permission = p.update(user_permission) # type: ignore
+                user_permission = p.update(user_permission)  # type: ignore
             else:
                 return p
 
@@ -1128,7 +1126,7 @@ class Permissions:
                 fileId=file_id,
                 body=user_permission,
                 fields=DEFAULT_FIELDS,
-                sendNotificationEmail=sendNotificationEmail,
+                sendNotificationEmail=send_notification_email,
                 **kwargs,
             )
         )  # type: ignore
