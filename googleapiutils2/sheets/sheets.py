@@ -629,6 +629,8 @@ class Sheets(DriveBase):
         current_values: list = []
         if (
             update
+            # Check if the slice fits within the current shape;
+            # if not, skip
             and self._check_sheet_shape(
                 sheet_slice=sheet_slice,
                 shape=self.shape(spreadsheet_id, sheet_name),
@@ -1323,6 +1325,39 @@ class Sheets(DriveBase):
         )
 
         return self.execute(request)  # type: ignore
+
+    def get_append_range(
+        self,
+        spreadsheet_id: str,
+        range_name: SheetsRange = DEFAULT_SHEET_NAME,
+    ) -> SheetSliceT:
+        """Get the range wherein Google Sheets would append data.
+
+        This is done by first appending a null value to the sheet, checking the range of the appended value, and then deleting it.
+        """
+        spreadsheet_id = parse_file_id(spreadsheet_id)
+        sheet_slice = to_sheet_slice(range_name)
+
+        res = self.append(
+            spreadsheet_id=spreadsheet_id,
+            range_name=sheet_slice,
+            values=[[]],
+            value_input_option=ValueInputOption.user_entered,
+            align_columns=False,
+        )
+
+        if res is None:
+            return sheet_slice
+
+        appended_range = res["updates"]["updatedRange"] # type: ignore
+        appended_range_slc = to_sheet_slice(appended_range) # type: ignore
+
+        self.clear(
+            spreadsheet_id=spreadsheet_id,
+            range_name=appended_range,
+        )
+
+        return appended_range_slc # type: ignore
 
     def clear(
         self,

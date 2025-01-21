@@ -228,12 +228,16 @@ def A1_to_rc(a1: str) -> tuple[int | None, int | None]:
 
 
 @cache
-def A1_to_slices(a1: str, shape: SheetShape = INIT_SHEET_SHAPE) -> tuple[slice, slice]:
+def A1_to_slices(
+    a1: str, shape: SheetShape = INIT_SHEET_SHAPE, default_to_sheet: bool = True
+) -> tuple[slice, slice]:
     # Parse sheet and range
     _, range_name = split_sheet_range(a1)
 
-    if not range_name:  # The entire sheet is the range
+    if not range_name and default_to_sheet:  # The entire sheet is the range
         return slice(1, shape[0]), slice(1, shape[1])
+
+    range_name = range_name or a1
 
     if ":" in range_name:  # Range is specified
         start_a1, end_a1 = range_name.split(":")
@@ -262,56 +266,78 @@ def slices_to_A1(row_ix: slice, col_ix: slice) -> tuple[str, str]:
     )
 
 
+def ix_to_slice(ix: slice | int | str | EllipsisType) -> slice:
+    if isinstance(ix, slice):
+        return ix
+    elif isinstance(ix, str):
+        if ":" in ix:
+            ix = ix.split(":")  # type: ignore
+            return slice(A1_to_int(ix[0]), A1_to_int(ix[1]))  # type: ignore
+        else:
+            ix = A1_to_int(ix)
+            return slice(ix, ix)
+    elif isinstance(ix, int):
+        return slice(ix, ix)
+    elif ix is ...:
+        return slice(..., ...)
+    else:
+        raise TypeError("Indices must be slices or integers.")
+
+
+def normalize_slice(slc: slice, max_dim: int | EllipsisType) -> slice:
+    start, stop, step = slc.start, slc.stop, slc.step
+    max_dim_is_ellipsis = max_dim is ...
+
+    # handle None
+    start = 1 if start is None else start
+    stop = max_dim if stop is None else stop
+
+    # check if A1 notation is used
+    start = A1_to_int(start) if isinstance(start, str) else start
+    stop = A1_to_int(stop) if isinstance(stop, str) else stop
+
+    # handle ellipsis
+    start = 1 if start is ... else start
+    stop = max_dim if stop is ... else stop
+
+    # handle negative indices
+    start = (
+        max_dim + start + 1
+        if (start is not ... and start < 0 and not max_dim_is_ellipsis)
+        else start
+    )
+    stop = (
+        max_dim + stop + 1
+        if (stop is not ... and stop < 0 and not max_dim_is_ellipsis)
+        else stop
+    )
+
+    return slice(start, stop, step)
+
+
+def ix_to_norm_slice(
+    ix: slice | int | str | EllipsisType,
+    max_dim: int | EllipsisType,
+) -> tuple[slice, bool]:
+
+    slc = ix_to_slice(ix)
+
+    is_ellipsis = slc.start == 1 and (slc.stop == max_dim or slc.stop is ...)
+
+    slc = normalize_slice(slc, max_dim)
+
+    return slc, is_ellipsis
+
+
 @cache
 def expand_slices(
     row_ix: slice | int | EllipsisType,
     col_ix: slice | int | EllipsisType,
     shape: SheetShape = INIT_SHEET_SHAPE,
 ) -> str | None:
-    def to_slice(ix: slice | int) -> slice:
-        if isinstance(ix, slice):
-            return ix
-        elif isinstance(ix, str):
-            if ":" in ix:
-                ix = ix.split(":")  # type: ignore
-                return slice(A1_to_int(ix[0]), A1_to_int(ix[1]))  # type: ignore
-            else:
-                ix = A1_to_int(ix)
-                return slice(ix, ix)
-        elif isinstance(ix, int):
-            return slice(ix, ix)
-        elif ix is ...:
-            return slice(..., ...)
-        else:
-            raise TypeError("Indices must be slices or integers.")
 
-    def normalize_ix(slc: slice, max_dim: int) -> slice:
-        start, stop, step = slc.start, slc.stop, slc.step
-        # handle None
-        start = 1 if start is None else start
-        stop = max_dim if stop is None else stop
-        # check if A1 notation is used
-        start = A1_to_int(start) if isinstance(start, str) else start
-        stop = A1_to_int(stop) if isinstance(stop, str) else stop
-        # handle ellipsis
-        start = 1 if start is ... else start
-        stop = max_dim if stop is ... else stop
-        # handle negative indices
-        start = max_dim + start + 1 if start is not ... and start < 0 else start
-        stop = max_dim + stop + 1 if stop is not ... and stop < 0 else stop
-
-        return slice(start, stop, step)
-
-    row_ix, col_ix = to_slice(row_ix), to_slice(col_ix)  # type: ignore
-
-    row_is_ellipsis = row_ix.start == 1 and (
-        row_ix.stop == shape[0] or row_ix.stop is ...
-    )
-    col_is_ellipsis = col_ix.start == 1 and (
-        col_ix.stop == shape[1] or col_ix.stop is ...
-    )
-
-    row_ix, col_ix = normalize_ix(row_ix, shape[0]), normalize_ix(col_ix, shape[1])  # type: ignore
+    row_ix, row_is_ellipsis = ix_to_norm_slice(row_ix, shape[0])
+    col_ix, col_is_ellipsis = ix_to_norm_slice(col_ix, shape[1])
 
     if col_is_ellipsis:
         return f"{row_ix.start}:{row_ix.stop}"
@@ -320,6 +346,7 @@ def expand_slices(
         return f"{start}:{stop}"
 
     row_ix, col_ix = slices_to_A1(row_ix, col_ix)  # type: ignore
+
     return f"{row_ix}:{col_ix}" if row_ix != "" and col_ix != "" else None  # type: ignore
 
 
@@ -344,6 +371,7 @@ def parse_sheet_slice_ixs(
                 raise IndexError(f"Invalid index: {ixs}")
 
     sheet_name, range_name = parse()
+
     return (
         normalize_sheet_name(sheet_name) if sheet_name is not None else sheet_name,
         range_name,
@@ -397,7 +425,7 @@ class SheetSliceT:
 
     def __post_init__(self) -> None:
         self.slices = (
-            A1_to_slices(self.range_name, shape=self.shape)
+            A1_to_slices(self.range_name, shape=self.shape, default_to_sheet=False)
             if self.range_name is not None
             else (
                 slice(1, self.shape[0]),
@@ -430,9 +458,22 @@ class SheetSliceT:
         if isinstance(ixs, tuple) and not len(ixs):
             raise IndexError("Empty index")
 
-        sheet_name, range_name = parse_sheet_slice_ixs(ixs, shape=self.shape)
+        shape = self.shape
+
+        sheet_name, range_name = parse_sheet_slice_ixs(ixs, shape=shape)
+
+        # if range_name is not None:
+        #     row_slc, col_slc = A1_to_slices(
+        #         range_name, shape=shape, default_to_sheet=False
+        #     )
+
+        #     shape = (
+        #         shape[0] if row_slc is ... else row_slc.stop,
+        #         shape[1] if col_slc is ... else col_slc.stop,
+        #     )
+
         return SheetSliceT(
             sheet_name if sheet_name is not None else self.sheet_name,
             range_name if range_name is not None else self.range_name,
-            self.shape,
+            shape=shape,
         )
