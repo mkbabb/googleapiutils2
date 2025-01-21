@@ -1089,6 +1089,7 @@ class Permissions:
         email_address: str,
         permission: Permission | None = None,
         sendNotificationEmail: bool = True,
+        get_extant: bool = False,
         update: bool = False,
         **kwargs: Any,
     ) -> Permission:
@@ -1099,7 +1100,7 @@ class Permissions:
             email_address (str): The email address of the user to give permission to.
             permission (Permission, optional): The permission to give. Defaults to None, which will give a reader permission of type user.
             sendNotificationEmail (bool, optional): Whether to send a notification email. Defaults to True.
-            update (bool, optional): Whether to update the permission if it already exists. Defaults to False.
+            get_extant (bool, optional): Whether to get_extant the permission if it already exists. Defaults to False.
         """
         file_id = parse_file_id(file_id)
 
@@ -1113,11 +1114,14 @@ class Permissions:
             user_permission.update(permission)
 
         if (
-            not update
+            not get_extant
             and (p := self._permission_update_if_exists(file_id, user_permission))
             is not None
         ):
-            return p
+            if update:
+                user_permission = p.update(user_permission) # type: ignore
+            else:
+                return p
 
         return self.drive.execute(
             self.permissions.create(
