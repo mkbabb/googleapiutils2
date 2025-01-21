@@ -462,16 +462,6 @@ class SheetSliceT:
 
         sheet_name, range_name = parse_sheet_slice_ixs(ixs, shape=shape)
 
-        # if range_name is not None:
-        #     row_slc, col_slc = A1_to_slices(
-        #         range_name, shape=shape, default_to_sheet=False
-        #     )
-
-        #     shape = (
-        #         shape[0] if row_slc is ... else row_slc.stop,
-        #         shape[1] if col_slc is ... else col_slc.stop,
-        #     )
-
         return SheetSliceT(
             sheet_name if sheet_name is not None else self.sheet_name,
             range_name if range_name is not None else self.range_name,
