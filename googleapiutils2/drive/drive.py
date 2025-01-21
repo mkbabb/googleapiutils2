@@ -1117,7 +1117,8 @@ class Permissions:
             p := self._permission_update_if_exists(file_id, user_permission)
         ) is not None:
             if update:
-                user_permission = p.update(user_permission)  # type: ignore
+                p.update(user_permission)
+                user_permission = p
             else:
                 return p
 
