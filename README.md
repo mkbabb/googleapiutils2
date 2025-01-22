@@ -12,10 +12,10 @@ Currently supports sections of the following resources:
 
 ## Quickstart 🚀
 
-This project requires Python `^3.10` to run.
+This project requires Python `^3.12` to run.
 
 Several dependencies are needed, namely the aforesaid Google Python API, but also
-Google's oauth library, and `requests`. Pre-bundled for ease of use are the fairly
+Google's oauth library, and `requests`. Pre-bundled for ease of use is the fairly
 monolithic `google-api-stubs`, which greatly improves the usage experience.
 
 ### via [`poetry`](https://python-poetry.org/docs/)
@@ -194,7 +194,3 @@ use in updating a sheet's range via `.update()`, for example). Further, a
 Sheet1[2:3, ...].update(rows)
 ...
 ```
-
-### Why "2" 🤔
-
-Don't ask :3
