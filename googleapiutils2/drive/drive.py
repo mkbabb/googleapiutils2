@@ -1086,13 +1086,13 @@ class Permissions:
     def create(
         self,
         file_id: str,
-        email_address: str,
+        email_address: str | List[str],
         permission: Permission | None = None,
         send_notification_email: bool = True,
         get_extant: bool = False,
         update: bool = False,
         **kwargs: Any,
-    ) -> Permission:
+    ) -> Permission | List[Permission]:
         """Creates a permission for a file. Defaults to a reader permission of type user.
 
         Args:
@@ -1101,34 +1101,70 @@ class Permissions:
             permission (Permission, optional): The permission to give. Defaults to None, which will give a reader permission of type user.
             send_notification_email (bool, optional): Whether to send a notification email. Defaults to True.
             get_extant (bool, optional): Whether to get_extant the permission if it already exists. Defaults to False.
+            update (bool, optional): Whether to update the permission if it already exists. Defaults to False.
         """
         file_id = parse_file_id(file_id)
 
-        user_permission: Permission = {
-            "type": "user",
-            "role": "reader",
-            "emailAddress": email_address.strip().lower(),
-        }
+        def _create(email_address: str) -> Permission:
+            user_permission: Permission = {
+                "type": "user",
+                "role": "reader",
+                "emailAddress": email_address.strip().lower(),
+            }
 
-        if permission is not None:
-            user_permission.update(permission)
+            if permission is not None:
+                user_permission.update(permission)
 
-        if (get_extant or update) and (
-            p := self._permission_update_if_exists(file_id, user_permission)
-        ) is not None:
-            if update:
-                p.update(user_permission)
-                user_permission = p
-            else:
-                return p
+            if (get_extant or update) and (
+                p := self._permission_update_if_exists(file_id, user_permission)
+            ) is not None:
+                if update:
+                    return self.update(
+                        file_id=file_id,
+                        permission_id=p["id"],
+                        permission=user_permission,
+                    )
+                else:
+                    return p
 
+            return self.drive.execute(
+                self.permissions.create(
+                    fileId=file_id,
+                    body=user_permission,
+                    fields=DEFAULT_FIELDS,
+                    sendNotificationEmail=send_notification_email,
+                    **kwargs,
+                )
+            )  # type: ignore
+
+        email_addresses = (
+            [email_address] if isinstance(email_address, str) else email_address
+        )
+
+        return (
+            [_create(email_address) for email_address in email_addresses]
+            if len(email_addresses) > 1
+            else _create(email_addresses[0])
+        )
+
+    def update(
+        self,
+        file_id: str,
+        permission_id: str,
+        permission: Permission,
+        **kwargs: Any,
+    ) -> Permission:
+        """Updates a permission for a file.
+
+        Args:
+            file_id (str): The ID of the file.
+            permission_id (str): The ID of the permission.
+            permission (Permission): The new permission.
+        """
+        file_id = parse_file_id(file_id)
         return self.drive.execute(
-            self.permissions.create(
-                fileId=file_id,
-                body=user_permission,
-                fields=DEFAULT_FIELDS,
-                sendNotificationEmail=send_notification_email,
-                **kwargs,
+            self.permissions.update(
+                fileId=file_id, permissionId=permission_id, body=permission, **kwargs
             )
         )  # type: ignore
 
