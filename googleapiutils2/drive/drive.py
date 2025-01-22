@@ -1147,6 +1147,24 @@ class Permissions:
             else _create(email_addresses[0])
         )
 
+    @staticmethod
+    def _sanitize_update_permission(permission: Permission) -> Permission:
+        """Sanitize the permission body for an update request.
+
+        Keeps only:
+        - role
+        - type
+        - allowFileDiscovery
+        - expirationTime
+        """
+        ALLOWED_KEYS = ["role", "type", "allowFileDiscovery", "expirationTime"]
+
+        permission = {
+            k: v for k, v in permission.items() if k in ALLOWED_KEYS
+        }  # type: ignore
+
+        return permission
+
     def update(
         self,
         file_id: str,
@@ -1162,6 +1180,9 @@ class Permissions:
             permission (Permission): The new permission.
         """
         file_id = parse_file_id(file_id)
+
+        permission = self._sanitize_update_permission(permission)
+
         return self.drive.execute(
             self.permissions.update(
                 fileId=file_id, permissionId=permission_id, body=permission, **kwargs
