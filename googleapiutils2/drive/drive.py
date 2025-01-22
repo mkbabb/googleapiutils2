@@ -1074,7 +1074,7 @@ class Permissions:
         for response in list_drive_items(list_func):
             yield from response.get("permissions", [])  # type: ignore
 
-    def _permission_update_if_exists(
+    def _permission_get_if_exists(
         self, file_id: str, user_permission: Permission
     ) -> Permission | None:
         for p in self.list(file_id):
@@ -1116,7 +1116,7 @@ class Permissions:
                 user_permission.update(permission)
 
             if (get_extant or update) and (
-                p := self._permission_update_if_exists(file_id, user_permission)
+                p := self._permission_get_if_exists(file_id, user_permission)
             ) is not None:
                 if update:
                     return self.update(
@@ -1153,11 +1153,10 @@ class Permissions:
 
         Keeps only:
         - role
-        - type
         - allowFileDiscovery
         - expirationTime
         """
-        ALLOWED_KEYS = ["role", "type", "allowFileDiscovery", "expirationTime"]
+        ALLOWED_KEYS = ["role", "allowFileDiscovery", "expirationTime"]
 
         permission = {
             k: v for k, v in permission.items() if k in ALLOWED_KEYS
