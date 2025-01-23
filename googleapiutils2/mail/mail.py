@@ -7,7 +7,6 @@ from typing import *
 
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
-from googleapiclient._apis.gmail.v1.resources import GmailResource
 
 from ..utils import (
     EXECUTE_TIME,
@@ -18,10 +17,11 @@ from ..utils import (
 
 if TYPE_CHECKING:
     from googleapiclient._apis.gmail.v1.resources import (
+        Draft,
+        GmailResource,
+        Label,
         Message,
         MessagePartHeader,
-        Draft,
-        Label,
     )
 
 VERSION = "v1"
