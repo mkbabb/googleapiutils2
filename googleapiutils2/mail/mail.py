@@ -3,12 +3,12 @@ from __future__ import annotations
 import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import *
+from typing import TYPE_CHECKING, Generator, List, Literal
 
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import (
+from googleapiutils2.utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,

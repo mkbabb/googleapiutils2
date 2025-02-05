@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import *
+from typing import Hashable
 
 from cachetools import cached
 

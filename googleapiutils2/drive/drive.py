@@ -4,7 +4,15 @@ import hashlib
 import tempfile
 from io import BytesIO
 from pathlib import Path
-from typing import *
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    List,
+    Literal,
+)
 
 import googleapiclient
 import googleapiclient.http
@@ -12,7 +20,15 @@ import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..utils import (
+from googleapiutils2.drive.misc import (
+    DEFAULT_FIELDS,
+    DOWNLOAD_LIMIT,
+    VERSION,
+    DataFrameExportFileTypes,
+    create_listing_fields,
+    list_drive_items,
+)
+from googleapiutils2.utils import (
     DEFAULT_DOWNLOAD_CONVERSION_MAP,
     EXECUTE_TIME,
     THROTTLE_TIME,
@@ -26,14 +42,6 @@ from ..utils import (
     mime_type_to_google_mime_type,
     parse_file_id,
     q_escape,
-)
-from .misc import (
-    DEFAULT_FIELDS,
-    DOWNLOAD_LIMIT,
-    VERSION,
-    DataFrameExportFileTypes,
-    create_listing_fields,
-    list_drive_items,
 )
 
 if TYPE_CHECKING:

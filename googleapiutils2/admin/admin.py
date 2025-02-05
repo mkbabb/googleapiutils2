@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from typing import *
-import asyncio
-from googleapiclient import discovery
+from typing import TYPE_CHECKING, Any, Generator
+
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from googleapiclient import discovery
 
-from ..utils import (
+from googleapiutils2.utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
-    retry,
     on_http_exception,
+    retry,
 )
 
 if TYPE_CHECKING:

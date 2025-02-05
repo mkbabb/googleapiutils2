@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import *
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from ..utils import parse_file_id
-from .misc import (
+from googleapiutils2.sheets.misc import (
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
     InsertDataOption,
@@ -15,7 +14,8 @@ from .misc import (
     ValueRenderOption,
     format_range_name,
 )
-from .sheets import Sheets, SheetsValues
+from googleapiutils2.sheets.sheets import Sheets, SheetsValues
+from googleapiutils2.utils import parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (

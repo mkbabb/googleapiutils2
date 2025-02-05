@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import *
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (

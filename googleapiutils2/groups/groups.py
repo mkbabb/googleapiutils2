@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import operator
-from typing import *
+from typing import TYPE_CHECKING, Iterable
 
 from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from ..drive.misc import create_listing_fields, list_drive_items
-from ..utils import (
+from googleapiutils2.groups.misc import DEFAULT_FIELDS, VERSION
+from googleapiutils2.utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
     ServiceAccountCredentials,
     named_methodkey,
 )
-from .misc import DEFAULT_FIELDS, VERSION
+
+from ..drive.misc import create_listing_fields, list_drive_items
 
 if TYPE_CHECKING:
     pass
@@ -131,9 +132,9 @@ class Groups(DriveBase):
                 groupKey=group_key,
                 memberKey=member_key,
             )
-        ).get(
+        ).get(  # type: ignore
             "isMember", False
-        )  # type: ignore
+        )
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("members_get"))
     def members_get(

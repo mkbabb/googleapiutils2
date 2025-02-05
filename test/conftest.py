@@ -8,7 +8,7 @@ import pytest
 
 from googleapiutils2.drive import Drive
 from googleapiutils2.sheets import Sheets
-from googleapiutils2.utils import Credentials, GoogleMimeTypes, get_oauth2_creds
+from googleapiutils2.utils.utils import Credentials, GoogleMimeTypes, get_oauth2_creds
 
 
 @pytest.fixture(scope="session", autouse=True)

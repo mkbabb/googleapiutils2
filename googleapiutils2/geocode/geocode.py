@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import *
-
 import requests
 
-from ..utils import raise_for_status, update_url_params
-from .misc import GeocodeResult
+from googleapiutils2.geocode.misc import GeocodeResult
+from googleapiutils2.utils import raise_for_status, update_url_params
 
 
 class Geocode:

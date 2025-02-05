@@ -3,12 +3,13 @@ from __future__ import annotations
 import string
 from dataclasses import dataclass, field
 from enum import Enum
-from types import EllipsisType
-from typing import *
 from functools import cache
-from cachetools import cachedmethod
+from types import EllipsisType
+from typing import TYPE_CHECKING, Any, Hashable
 
-from ..utils import named_methodkey, to_base
+import pandas as pd
+
+from googleapiutils2.utils import to_base
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import CellFormat
@@ -36,6 +37,8 @@ SheetsValues = (
 )
 
 SHEET_SLICE_CACHE: dict[str, tuple[slice, slice]] = {}
+
+pd.set_option('future.no_silent_downcasting', True)
 
 
 @dataclass

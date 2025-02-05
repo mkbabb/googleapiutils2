@@ -11,26 +11,7 @@ from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 
-from googleapiutils2.sheets.sheets_slice import (
-    SheetSlice,
-    SheetSliceT,
-    SheetsRange,
-    to_sheet_slice,
-)
-
-from ..utils import (
-    EXECUTE_TIME,
-    THROTTLE_TIME,
-    DriveBase,
-    ServiceAccountCredentials,
-    Throttler,
-    deep_update,
-    hex_to_rgb,
-    named_methodkey,
-    nested_defaultdict,
-    parse_file_id,
-)
-from .misc import (
+from googleapiutils2.sheets.misc import (
     DEFAULT_CHUNK_SIZE_BYTES,
     DEFAULT_SHEET_NAME,
     DEFAULT_SHEET_SHAPE,
@@ -47,6 +28,24 @@ from .misc import (
     ValueRenderOption,
     VerticalAlignment,
     WrapStrategy,
+)
+from googleapiutils2.sheets.sheets_slice import (
+    SheetSlice,
+    SheetSliceT,
+    SheetsRange,
+    to_sheet_slice,
+)
+from googleapiutils2.utils import (
+    EXECUTE_TIME,
+    THROTTLE_TIME,
+    DriveBase,
+    ServiceAccountCredentials,
+    Throttler,
+    deep_update,
+    hex_to_rgb,
+    named_methodkey,
+    nested_defaultdict,
+    parse_file_id,
 )
 
 if TYPE_CHECKING:
@@ -78,8 +77,6 @@ if TYPE_CHECKING:
         UpdateValuesResponse,
         ValueRange,
     )
-
-pd.set_option('future.no_silent_downcasting', True)
 
 
 class Sheets(DriveBase):
@@ -1349,15 +1346,15 @@ class Sheets(DriveBase):
         if res is None:
             return sheet_slice
 
-        appended_range = res["updates"]["updatedRange"] # type: ignore
-        appended_range_slc = to_sheet_slice(appended_range) # type: ignore
+        appended_range = res["updates"]["updatedRange"]  # type: ignore
+        appended_range_slc = to_sheet_slice(appended_range)  # type: ignore
 
         self.clear(
             spreadsheet_id=spreadsheet_id,
             range_name=appended_range,
         )
 
-        return appended_range_slc # type: ignore
+        return appended_range_slc  # type: ignore
 
     def clear(
         self,
