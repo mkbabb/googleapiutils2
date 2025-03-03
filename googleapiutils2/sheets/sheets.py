@@ -646,7 +646,7 @@ class Sheets(DriveBase):
 
             if insert_header:
                 current_df.columns = current_df.iloc[0].astype(str)  # type: ignore
-                current_df = current_df.drop(0).reset_index(drop=True)
+                current_df = current_df.drop(0).reset_index(drop=True)  # type: ignore
                 current_df = self._add_dupe_suffix(current_df)
             else:
                 # ensure the header is padded with empty strings to match the current data
@@ -668,7 +668,6 @@ class Sheets(DriveBase):
 
         # Create DataFrame from new data and handle dupes
         new_df = pd.DataFrame(rows)
-        new_df = new_df.reindex(columns=list(rows[0].keys()))
         new_df = self._add_dupe_suffix(new_df)
 
         # Convert header to list and handle dupes
