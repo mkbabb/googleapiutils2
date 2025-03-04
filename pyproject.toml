@@ -34,14 +34,14 @@ pydantic = "^2.10.6"
 
 
 [tool.poetry.group.dev.dependencies]
+openai = "^1.65.2"
 anthropic = "^0.32.0"
-litellm = "^1.61.20"
+litellm = "^1.62.1"
 types-requests = "^2.32.0.20250301"
 types-cachetools = "^5.5.0.20240820"
 pytest = "^8.3.5"
 pandas-stubs = "^2.2.3.241126"
 black = "^25.1.0"
-openai = "^1.65.2"
 pypdf = "^5.3.1"
 ipinfo = "^5.1.1"
 pyarrow = "^19.0.1"
