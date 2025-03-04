@@ -103,7 +103,7 @@ def analyze_dns_records(
     prompt = prompt.format(domain=domain, records_str=records_str)
 
     response = openai.chat.completions.create(
-        model="gpt-4o",
+        model="o3-mini",
         messages=[
             {
                 "role": "system",
