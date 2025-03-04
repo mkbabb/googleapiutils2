@@ -12,10 +12,6 @@
 
 {% if dns_info['Has SPF'] %}
 
-### SPF Record
-
-{{ dns_records['SPF Record'] }}
-
 ### SPF Hosts
 
 {% for ip in dns_info['SPF Hostnames'] %}
@@ -34,15 +30,15 @@
 
 ### DMARC Record
 
-{{ dns_records['DMARC Record'] }}
+    {{ dns_records['DMARC Record'] }}
 
 {% endif %}
 
-{% if dns_info['Has DKIM'] %}
+    {% if dns_info['Has DKIM'] %}
 
 ### DKIM Record
 
-{{ dns_records['DKIM Record'] }}
+    {{ dns_records['DKIM Record'] }}
 
 {% endif %}
 
@@ -50,7 +46,7 @@
 
 ### MTA-STS Record
 
-{{ dns_info['MTA-STS Record'] }}
+    {{ dns_info['MTA-STS Record'] }}
 
 {% endif %}
 
@@ -58,7 +54,7 @@
 
 ### BIMI Record
 
-{{ dns_info['BIMI Record'] }}
+    {{ dns_info['BIMI Record'] }}
 
 {% endif %}
 
