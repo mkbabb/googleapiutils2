@@ -12,6 +12,16 @@
 
 {% if dns_info['Has SPF'] %}
 
+### SPF Record
+
+{{ dns_records['SPF Record'] }}
+
+### SPF Hosts
+
+{% for ip in dns_info['SPF Hostnames'] %}
+-   {{ ip }}
+{% endfor %}
+
 ### SPF IPs
 
 {% for ip in dns_info['SPF IPs'] %}
@@ -24,7 +34,7 @@
 
 ### DMARC Record
 
-{{ dns_info['DMARC Record'] }}
+{{ dns_records['DMARC Record'] }}
 
 {% endif %}
 
@@ -32,7 +42,7 @@
 
 ### DKIM Record
 
-{{ dns_info['DKIM Record'] }}
+{{ dns_records['DKIM Record'] }}
 
 {% endif %}
 

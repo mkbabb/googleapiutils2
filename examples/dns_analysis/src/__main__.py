@@ -66,7 +66,7 @@ def create_dns_report(
     )
 
 
-@cache_with_stale_interval(stale_interval=timedelta(days=1))
+# @cache_with_stale_interval(stale_interval=timedelta(days=1))
 def process_document_files(
     client: openai.Client, docs_dir: pathlib.Path = DOCS_DIR
 ) -> str | None:
@@ -133,7 +133,7 @@ def cleanup_uploaded_files(
     client.beta.assistants.delete(assistant_id=assistant_id)
 
 
-@cache_with_stale_interval(stale_interval=timedelta(days=1))
+# @cache_with_stale_interval(stale_interval=timedelta(days=1))
 def create_dns_analyzer_assistant(
     client: openai.Client, system_prompt: str, vector_store_id: str | None = None
 ):
