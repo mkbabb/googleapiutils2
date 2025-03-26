@@ -18,6 +18,7 @@ from .drive import (
     parse_file_id,
     q_escape,
     raise_for_status,
+    html_to_markdown
 )
 from .utils import (
     Throttler,
@@ -28,5 +29,6 @@ from .utils import (
     nested_defaultdict,
     update_url_params,
     to_base,
+    
     
 )

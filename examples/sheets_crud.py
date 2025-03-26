@@ -10,11 +10,13 @@ Demonstrates a few of the features of the Sheets, SheetsValueRange, and SheetSli
     - Formatting the sheet, including bolding text and resizing columns.
     - Converting data to a DataFrame and updating the sheet from that DataFrame.
     - Appending values to the sheet.
-    
-The examples encompass common CRUD operations (Create, Read, Update, Delete) 
+
+The examples encompass common CRUD operations (Create, Read, Update, Delete)
 and illustrate advanced techniques such as slicing, batched updates, alignment, and formatting.
 """
-from typing import *
+
+from __future__ import annotations
+
 import json
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
@@ -78,8 +80,6 @@ for i in range(100):
     sheets.batch_update(SHEET_URL, batches, ensure_shape=True)
 
 
-
-
 # time.sleep(10)
 
 sheets.batch_update(
@@ -119,9 +119,9 @@ sheets.append(
 
 sheemt = sheets.get(
     spreadsheet_id=SHEET_URL,
-    name="Sheet1",
+    sheet_name="Sheet1",
     include_grid_data=True,
-    ranges=Sheet1[1, ...],
+    range_names=Sheet1[1, ...],
 )
 
 # dump to a json file:

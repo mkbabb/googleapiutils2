@@ -1,8 +1,10 @@
-from typing import *
+from __future__ import annotations
+
 import json
-from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 import random
 import string
+
+from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
 
 
 # fn to generate a random blob of string data, up to size in bytes

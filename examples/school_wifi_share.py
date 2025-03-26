@@ -7,10 +7,11 @@ Used to share folders with school districts for the WiFi project.
 - Retrieve all folders from specified locations.
 - Iterate through the responses and grant permission for emails that match the PSU IDs in the folder names.
 """
+from __future__ import annotations
 
 import re
 from itertools import chain
-from typing import *
+
 
 from googleapiutils2 import Drive, Permissions, Sheets
 

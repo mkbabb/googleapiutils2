@@ -106,7 +106,7 @@ class SheetsValueRange:
         return self.sheets.rename(
             spreadsheet_id=self.spreadsheet_id,
             sheet_id=self.sheet_id(),
-            new_name=new_name,
+            new_sheet_name=new_name,
         )
 
     def append(

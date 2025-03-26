@@ -1,5 +1,5 @@
 """
-Provides automation to handle resume processing using Google APIs and OpenAI models. 
+Provides automation to handle resume processing using Google APIs and OpenAI models.
 The functions are designed to work with Google Drive and Sheets, performing the following tasks:
 
 - Locates all resumes in a specified Google Drive folder.
@@ -9,10 +9,11 @@ The functions are designed to work with Google Drive and Sheets, performing the 
 - Downloads and stores the resumes locally.
 """
 
+from __future__ import annotations
+
 import os
 import tempfile
 from pathlib import Path
-from typing import *
 
 import openai
 import pandas as pd

@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import random
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import *
 
 from googleapiutils2 import Drive
 

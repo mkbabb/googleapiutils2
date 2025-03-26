@@ -122,7 +122,9 @@ class Sheets(DriveBase):
         name: str | None = None,
         sheet_id: int | None = None,
     ):
-        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+        sheet_id = self._get_sheet_id(
+            spreadsheet_id, sheet_name=name, sheet_id=sheet_id
+        )
 
         key = (cache_key, spreadsheet_id, name)
 
@@ -139,7 +141,9 @@ class Sheets(DriveBase):
         name: str | None = None,
         sheet_id: int | None = None,
     ):
-        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+        sheet_id = self._get_sheet_id(
+            spreadsheet_id, sheet_name=name, sheet_id=sheet_id
+        )
 
         key = (cache_key, spreadsheet_id, name)
 
@@ -204,7 +208,7 @@ class Sheets(DriveBase):
         )
         from_sheet_id = self._get_sheet_id(
             spreadsheet_id=from_spreadsheet_id,
-            name=from_sheet_name,
+            sheet_name=from_sheet_name,
             sheet_id=from_sheet_id,
         )
 
@@ -231,7 +235,7 @@ class Sheets(DriveBase):
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("shape"))
     def shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        properties = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)[
+        properties = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)[
             "properties"
         ]
         shape = (
@@ -242,7 +246,7 @@ class Sheets(DriveBase):
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("id"))
     def id(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME) -> int:
-        sheet = self.get(spreadsheet_id=spreadsheet_id, name=sheet_name)
+        sheet = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
         return sheet["properties"]["sheetId"]
 
     def create_range_url(self, file_id: str, sheet_slice: SheetSliceT) -> str:
@@ -250,7 +254,7 @@ class Sheets(DriveBase):
 
         sheet_name, range_name = sheet_slice.sheet_name, sheet_slice.range_name
 
-        sheet_id = self._get_sheet_id(spreadsheet_id=file_id, name=sheet_name)
+        sheet_id = self._get_sheet_id(spreadsheet_id=file_id, sheet_name=sheet_name)
 
         return f"https://docs.google.com/spreadsheets/d/{file_id}/edit#gid={sheet_id}&range={range_name}"
 
@@ -258,25 +262,28 @@ class Sheets(DriveBase):
         self,
         spreadsheet_id: str,
         include_grid_data: bool = False,
-        ranges: SheetsRange | list[SheetsRange] | None = None,
+        range_names: SheetsRange | list[SheetsRange] | None = None,
     ) -> Spreadsheet:
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        ranges = ranges if ranges is not None else []
-        ranges = ranges if isinstance(ranges, list) else [ranges]
-        ranges = [str(range_name) for range_name in ranges]
+        range_names = range_names if range_names is not None else []
+        range_names = range_names if isinstance(range_names, list) else [range_names]
+        range_names = [str(range_name) for range_name in range_names]
 
         kwargs = {
             "spreadsheetId": spreadsheet_id,
             "includeGridData": include_grid_data,
         }
-        if len(ranges) > 0:
-            kwargs["ranges"] = ranges
+        if len(range_names) > 0:
+            kwargs["ranges"] = range_names
 
         return self.execute(self.spreadsheets.get(**kwargs))  # type: ignore
 
     def _get_sheet_id(
-        self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
+        self,
+        spreadsheet_id: str,
+        sheet_name: str | None = None,
+        sheet_id: int | None = None,
     ):
         """Get the ID of a sheet from a spreadsheet.
         Either the name or the ID of the sheet must be provided.
@@ -289,12 +296,14 @@ class Sheets(DriveBase):
         """
         if sheet_id is not None:
             return sheet_id
-        elif name is None:
+        elif sheet_name is None:
             raise ValueError("Either the name or the ID of the sheet must be provided.")
 
         def inner():
             t_name = (
-                name.strip("'") if name.startswith("'") and name.endswith("'") else name
+                sheet_name.strip("'")
+                if sheet_name.startswith("'") and sheet_name.endswith("'")
+                else sheet_name
             )
             spreadsheet = self.get_spreadsheet(spreadsheet_id)
 
@@ -303,7 +312,7 @@ class Sheets(DriveBase):
                 if properties["title"] == t_name:
                     return properties["sheetId"]
 
-        key = ("sheet_id", spreadsheet_id, name)
+        key = ("sheet_id", spreadsheet_id, sheet_name)
 
         try:
             return self._cache[key]
@@ -313,14 +322,17 @@ class Sheets(DriveBase):
         sheet_id = inner()
 
         if sheet_id is None:
-            raise ValueError(f"Sheet {name} not found in spreadsheet.")
+            raise ValueError(f"Sheet {sheet_name} not found in spreadsheet.")
 
         self._cache[key] = sheet_id
 
         return sheet_id
 
     def has(
-        self, spreadsheet_id: str, name: str | None = None, sheet_id: int | None = None
+        self,
+        spreadsheet_id: str,
+        sheet_name: str | None = None,
+        sheet_id: int | None = None,
     ):
         """Check if a sheet exists in a spreadsheet.
         Either the name or the ID of the sheet must be provided.
@@ -333,7 +345,7 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         try:
-            self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+            self._get_sheet_id(spreadsheet_id, sheet_name=sheet_name, sheet_id=sheet_id)
             return True
         except ValueError:
             return False
@@ -341,10 +353,10 @@ class Sheets(DriveBase):
     def get(
         self,
         spreadsheet_id: str,
-        name: str | None = None,
+        sheet_name: str | None = None,
         sheet_id: int | None = None,
         include_grid_data: bool = False,
-        ranges: SheetsRange | list[SheetsRange] | None = None,
+        range_names: SheetsRange | list[SheetsRange] | None = None,
     ) -> Sheet:
         """Get a sheet from a spreadsheet. Either the name or the ID of the sheet must be provided.
 
@@ -357,39 +369,43 @@ class Sheets(DriveBase):
         spreadsheet = self.get_spreadsheet(
             spreadsheet_id=spreadsheet_id,
             include_grid_data=include_grid_data,
-            ranges=ranges,
+            range_names=range_names,
         )
-        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+        sheet_id = self._get_sheet_id(
+            spreadsheet_id, sheet_name=sheet_name, sheet_id=sheet_id
+        )
 
         for sheet in spreadsheet["sheets"]:
             if sheet["properties"]["sheetId"] == sheet_id:
                 return sheet
 
-        raise ValueError(f"Sheet {name or sheet_id} not found in spreadsheet.")
+        raise ValueError(f"Sheet {sheet_name or sheet_id} not found in spreadsheet.")
 
     def rename(
         self,
         spreadsheet_id: str,
-        new_name: str,
-        name: str | None = None,
+        new_sheet_name: str,
+        old_sheet_name: str | None = None,
         sheet_id: int | None = None,
     ):
         """Rename a sheet in a spreadsheet.
 
         Args:
             spreadsheet_id (str): The ID of the spreadsheet containing the sheet to rename.
-            new_name (str): The new name of the sheet.
-            name (str, optional): The name of the sheet to rename. Defaults to None.
+            new_sheet_name (str): The new name for the sheet.
+            old_sheet_name (str, optional): The current name of the sheet to rename. Defaults to None.
             sheet_id (int, optional): The ID of the sheet to rename. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_id = self._get_sheet_id(spreadsheet_id, name=name, sheet_id=sheet_id)
+        sheet_id = self._get_sheet_id(
+            spreadsheet_id, sheet_name=old_sheet_name, sheet_id=sheet_id
+        )
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
                     "updateSheetProperties": {
-                        "properties": {"sheetId": sheet_id, "title": new_name},  # type: ignore
+                        "properties": {"sheetId": sheet_id, "title": new_sheet_name},  # type: ignore
                         "fields": "title",
                     }
                 }
@@ -400,9 +416,9 @@ class Sheets(DriveBase):
     def add(
         self,
         spreadsheet_id: str,
-        names: str | list[str],
-        rows: int = DEFAULT_SHEET_SHAPE[0],
-        cols: int = DEFAULT_SHEET_SHAPE[1],
+        sheet_names: str | list[str],
+        row_count: int = DEFAULT_SHEET_SHAPE[0],
+        col_count: int = DEFAULT_SHEET_SHAPE[1],
         index: int | None = None,
         ignore_existing: bool = True,
     ):
@@ -411,30 +427,30 @@ class Sheets(DriveBase):
         Args:
             spreadsheet_id (str): The ID of the spreadsheet to add sheets to.
             names (str | list[str]): The name(s) of the sheet(s) to add.
-            rows (int, optional): The number of rows to add to each sheet. Defaults to DEFAULT_SHEET_SHAPE[0].
-            cols (int, optional): The number of columns to add to each sheet. Defaults to DEFAULT_SHEET_SHAPE[1].
+            row_count (int, optional): The number of rows in the new sheet(s). Defaults to DEFAULT_SHEET_SHAPE[0].
+            col_count (int, optional): The number of columns in the new sheet(s). Defaults to DEFAULT_SHEET_SHAPE[1].
             index (int, optional): The index at which to insert the sheet(s). Defaults to None.
             ignore_existing (bool, optional): Whether to ignore sheets that already exist. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        if isinstance(names, str):
-            names = [names]
-        names = [
+        if isinstance(sheet_names, str):
+            sheet_names = [sheet_names]
+        sheet_names = [
             name
-            for name in names
-            if not ignore_existing or not self.has(spreadsheet_id, name=name)
+            for name in sheet_names
+            if not ignore_existing or not self.has(spreadsheet_id, sheet_name=name)
         ]
 
-        if len(names) == 0:
+        if len(sheet_names) == 0:
             return
 
         def make_body(name: str):
             body: SheetProperties = {
                 "title": name,
                 "gridProperties": {
-                    "rowCount": rows,
-                    "columnCount": cols,
+                    "rowCount": row_count,
+                    "columnCount": col_count,
                 },
             }
             if index is not None:
@@ -450,7 +466,7 @@ class Sheets(DriveBase):
                 {
                     "addSheet": make_body(name),
                 }
-                for name in names
+                for name in sheet_names
             ],
         }
 
@@ -462,7 +478,7 @@ class Sheets(DriveBase):
     def delete(
         self,
         spreadsheet_id: str,
-        names: str | list[str],
+        sheet_names: str | list[str],
         ignore_not_existing: bool = True,
     ):
         """Deletes a sheet from a spreadsheet.
@@ -474,19 +490,19 @@ class Sheets(DriveBase):
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        if isinstance(names, str):
-            names = [names]
-        names = [
+        if isinstance(sheet_names, str):
+            sheet_names = [sheet_names]
+        sheet_names = [
             name
-            for name in names
-            if not ignore_not_existing or self.has(spreadsheet_id, name=name)
+            for name in sheet_names
+            if not ignore_not_existing or self.has(spreadsheet_id, sheet_name=name)
         ]
 
-        if len(names) == 0:
+        if len(sheet_names) == 0:
             return
 
         def make_body(name: str):
-            sheet_id = self._get_sheet_id(spreadsheet_id, name=name)
+            sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=name)
 
             key = ("sheet_id", spreadsheet_id, name)
 
@@ -505,7 +521,7 @@ class Sheets(DriveBase):
                 {
                     "deleteSheet": make_body(name),
                 }
-                for name in names
+                for name in sheet_names
             ],
         }
 
@@ -786,21 +802,21 @@ class Sheets(DriveBase):
 
         return fits, needed_shape
 
-    def _ensure_sheet_shape(self, spreadsheet_id: str, ranges: List[SheetsRange]):
+    def _ensure_sheet_shape(self, spreadsheet_id: str, range_names: List[SheetsRange]):
         """For a given sheet, ensure that every range is within the sheet's size.
         If it's not, resize the sheet to fit the ranges.
 
         Args:
             spreadsheet_id (str): The spreadsheet ID.
-            ranges (List[SheetsRange]): The ranges to check.
+            range_names (List[SheetsRange]): The ranges to check.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
-        sheet_slices = [to_sheet_slice(range_name) for range_name in ranges]
+        sheet_slices = [to_sheet_slice(range_name) for range_name in range_names]
         sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
 
         # Ensure each sheet exists:
-        self.add(spreadsheet_id, names=sheet_names)  # type: ignore
+        self.add(spreadsheet_id, sheet_names=sheet_names)  # type: ignore
 
         shapes = {
             sheet_name: self.shape(spreadsheet_id, sheet_name)
@@ -1000,7 +1016,7 @@ class Sheets(DriveBase):
         if chunk_size_bytes is None or total_size <= chunk_size_bytes:
             self._ensure_sheet_shape(
                 spreadsheet_id=spreadsheet_id,
-                ranges=[sheet_slice],
+                range_names=[sheet_slice],
             )
             request = self.spreadsheets.values().update(
                 spreadsheetId=spreadsheet_id,
@@ -1079,7 +1095,9 @@ class Sheets(DriveBase):
         values = values if values is not None else [[]]
 
         if ensure_shape:
-            self._ensure_sheet_shape(spreadsheet_id=spreadsheet_id, ranges=[range_name])
+            self._ensure_sheet_shape(
+                spreadsheet_id=spreadsheet_id, range_names=[range_name]
+            )
 
         return self._update_chunked(
             spreadsheet_id=spreadsheet_id,
@@ -1148,7 +1166,7 @@ class Sheets(DriveBase):
         if ensure_shape:
             self._ensure_sheet_shape(
                 spreadsheet_id=spreadsheet_id,
-                ranges=[value_range["range"] for value_range in new_data],
+                range_names=[value_range["range"] for value_range in new_data],
             )
 
         if chunk_size_bytes is not None:
@@ -1394,7 +1412,9 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
-        sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
+        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"][
+            "sheetId"
+        ]
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
@@ -1431,7 +1451,9 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
-        sheet_id = self.get(spreadsheet_id, name=sheet_name)["properties"]["sheetId"]
+        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"][
+            "sheetId"
+        ]
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
@@ -1905,9 +1927,9 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(range_name)
         response = self.get(
             spreadsheet_id=spreadsheet_id,
-            name=sheet_slice.sheet_name,
+            sheet_name=sheet_slice.sheet_name,
             include_grid_data=True,
-            ranges=range_name,
+            range_names=range_name,
         )
 
         sheets_formats = []
@@ -2147,7 +2169,7 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
-        sheet = self.get(spreadsheet_id, name=sheet_name)
+        sheet = self.get(spreadsheet_id, sheet_name=sheet_name)
 
         # Create and execute resize request
         body: BatchUpdateSpreadsheetRequest = {

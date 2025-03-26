@@ -10,11 +10,13 @@ Demonstrates a few of the features of the Sheets, SheetsValueRange, and SheetSli
     - Formatting the sheet, including bolding text and resizing columns.
     - Converting data to a DataFrame and updating the sheet from that DataFrame.
     - Appending values to the sheet.
-    
-The examples encompass common CRUD operations (Create, Read, Update, Delete) 
+
+The examples encompass common CRUD operations (Create, Read, Update, Delete)
 and illustrate advanced techniques such as slicing, batched updates, alignment, and formatting.
 """
-from typing import *
+
+from __future__ import annotations
+
 import json
 
 from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange

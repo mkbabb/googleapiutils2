@@ -97,6 +97,7 @@ class GoogleMimeTypes(Enum):
     txt = "text/plain"
     html = "text/html"
     xml = "text/xml"
+    md = "text/markdown"
 
     doc = "application/msword"
     docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -145,6 +146,7 @@ MIME_EXTENSIONS: dict[GoogleMimeTypes, list[str]] = {
     GoogleMimeTypes.bmp: ["bmp"],
     GoogleMimeTypes.txt: ["txt", "md"],
     GoogleMimeTypes.html: ["html", "htm"],
+    GoogleMimeTypes.md: ["md"],
     GoogleMimeTypes.xml: ["xml"],
     GoogleMimeTypes.doc: ["doc", "docx", "rtf", "txt", "html"],
     GoogleMimeTypes.docx: ["docx"],
@@ -167,6 +169,7 @@ DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.sheets: GoogleMimeTypes.xlsx,
     GoogleMimeTypes.docs: GoogleMimeTypes.docx,
     GoogleMimeTypes.slides: GoogleMimeTypes.pdf,
+    GoogleMimeTypes.md: GoogleMimeTypes.html,
 }
 
 GOOGLE_MIME_TYPES = [

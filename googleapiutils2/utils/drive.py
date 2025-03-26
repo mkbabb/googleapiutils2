@@ -20,6 +20,7 @@ from typing import (
     TypeVar,
 )
 
+from bs4 import BeautifulSoup
 import googleapiclient.http
 from cachetools import TTLCache
 from google.auth.transport.requests import Request
@@ -27,6 +28,7 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+import html2text
 from loguru import logger
 
 from googleapiutils2.utils.misc import (
@@ -50,6 +52,28 @@ P = ParamSpec("P")
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
 
+def html_to_markdown(html_content: str) -> str:
+    """Convert HTML content to Markdown format.
+
+    Args:
+        html_content: Raw HTML string
+
+    Returns:
+        Markdown formatted string
+    """
+    # Parse HTML with BeautifulSoup to clean it up
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Configure html2text
+    converter = html2text.HTML2Text()
+    converter.body_width = 0  # Disable text wrapping
+    converter.ignore_images = True
+    converter.ignore_emphasis = False
+
+    # Convert to markdown
+    return converter.handle(str(soup))
+
+
 def export_mime_type(
     mime_type: GoogleMimeTypes,
     conversion_map: dict[
@@ -62,7 +86,7 @@ def export_mime_type(
     if t_mime_type is None:
         return mime_type, ""
 
-    return t_mime_type, t_mime_type.name
+    return t_mime_type, "." + t_mime_type.name
 
 
 @cache
@@ -176,20 +200,20 @@ class DriveThread:
                 try:
                     t = time.perf_counter()
 
-                    logger.debug(f"Executing request: {request}")
+                    # logger.debug(f"Executing request: {request}")
 
                     self._worker_func(request)
 
                     dt = time.perf_counter() - t
 
-                    logger.debug(f"Request completed in {dt:.2f} seconds")
+                    # logger.debug(f"Request completed in {dt:.2f} seconds")
 
                 except Exception as e:
                     logger.error(f"Error executing request: {e}")
                 finally:
                     self._request_queue.task_done()
 
-            logger.debug("Worker thread stopped")
+            # logger.debug("Worker thread stopped")
 
         self._request_thread = Thread(
             target=_worker,
@@ -210,7 +234,7 @@ class DriveThread:
 
     def enqueue(self, request: googleapiclient.http.HttpRequest | None) -> None:
         """Add a request to the execution queue."""
-        logger.debug(f"Enqueuing request {id(self._request_queue)}: {request}")
+        # logger.debug(f"Enqueuing request {id(self._request_queue)}: {request}")
         self._request_queue.put(request)
 
     def _cleanup(self) -> None:

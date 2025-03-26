@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.16.2"
+version = "0.17.0"
 description = "Wrapper for Google's Python API"
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
@@ -31,6 +31,8 @@ openpyxl = "^3.1.5"
 pandas = "^2.2.3"
 loguru = "^0.7.3"
 pydantic = "^2.10.6"
+bs4 = "^0.0.2"
+html2text = "^2024.2.26"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -42,6 +42,7 @@ from googleapiutils2.utils import (
     mime_type_to_google_mime_type,
     parse_file_id,
     q_escape,
+    html_to_markdown,
 )
 
 if TYPE_CHECKING:
@@ -290,6 +291,7 @@ class Drive(DriveBase):
         if float(file["size"]) >= DOWNLOAD_LIMIT:
             if "exportLinks" in file:
                 link = file["exportLinks"].get(mime_type.value, "")  # type: ignore
+
                 return download_large_file(url=link, filepath=filepath)
             else:
                 raise ValueError(
@@ -343,29 +345,48 @@ class Drive(DriveBase):
             recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
             conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
         """
-        if isinstance(filepath, (str, Path)):
-            return self._download_file(
-                file_id=file_id,
-                filepath=filepath,
-                mime_type=mime_type,
-                recursive=recursive,
-                overwrite=overwrite,
-                conversion_map=conversion_map,
-            )
-        elif isinstance(filepath, BytesIO):
-            return self._download_data(
-                file_id=file_id,
-                buf=filepath,
-                mime_type=mime_type,
-                recursive=recursive,
-                overwrite=overwrite,
-                conversion_map=conversion_map,
+
+        def download_file_or_data():
+            if isinstance(filepath, (str, Path)):
+                return self._download_file(
+                    file_id=file_id,
+                    filepath=filepath,
+                    mime_type=mime_type,
+                    recursive=recursive,
+                    overwrite=overwrite,
+                    conversion_map=conversion_map,
+                )
+            elif isinstance(filepath, BytesIO):
+                return self._download_data(
+                    file_id=file_id,
+                    buf=filepath,
+                    mime_type=mime_type,
+                    recursive=recursive,
+                    overwrite=overwrite,
+                    conversion_map=conversion_map,
+                )
+            else:
+                raise TypeError(
+                    f"Expected a filepath or BytesIO, got {type(filepath)} instead."
+                )
+
+        downloaded_filepath = download_file_or_data()
+
+        if mime_type == GoogleMimeTypes.md:
+            # If the mimetype is, we've downloaded it as HTML and need to convert it to markdown:
+            md_filepath = downloaded_filepath.with_suffix(".md")
+
+            md = html_to_markdown(
+                downloaded_filepath.read_text(encoding="utf-8"),
             )
 
+            md_filepath.write_text(md, encoding="utf-8")
+
+            downloaded_filepath.unlink()
+
+            return md_filepath
         else:
-            raise TypeError(
-                f"Expected a filepath or BytesIO, got {type(filepath)} instead."
-            )
+            return downloaded_filepath
 
     def copy(
         self,

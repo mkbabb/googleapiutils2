@@ -254,7 +254,7 @@ class SheetsMonitor(ResourceMonitor):
         if self.range_name:
             try:
                 metadata = self.sheets.get_spreadsheet(
-                    spreadsheet_id=self.resource_id, ranges=[self.range_name]
+                    spreadsheet_id=self.resource_id, range_names=[self.range_name]
                 )
             except Exception as e:
                 logger.warning(f"Failed to get sheets metadata: {e}")
