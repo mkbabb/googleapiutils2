@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "googleapiutils2"
-version = "0.17.0"
+version = "0.17.1"
 description = "Wrapper for Google's Python API"
 authors = ["Mike Babb <mike7400@gmail.com>"]
 
@@ -50,9 +50,6 @@ pyarrow = "^19.0.1"
 markdown2 = "^2.5.3"
 jinja2 = "^3.1.6"
 jinja-markdown2 = "^0.4.0"
-pypdf2 = "^3.0.1"
-html2text = "^2024.2.26"
-bs4 = "^0.0.2"
 types-beautifulsoup4 = "^4.12.0.20250204"
 pymupdf = "^1.25.4"
 pillow = "^11.1.0"
