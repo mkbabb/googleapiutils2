@@ -20,6 +20,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     # Gmail
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.compose",
     # Google Cloud platform:
     "https://www.googleapis.com/auth/cloud-platform",
     # Google Admin SDK API
