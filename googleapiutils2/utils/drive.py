@@ -20,17 +20,18 @@ from typing import (
     TypeVar,
 )
 
-from bs4 import BeautifulSoup
 import googleapiclient.http
+import html2text
+from bs4 import BeautifulSoup
 from cachetools import TTLCache
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-import html2text
 from loguru import logger
 
+from googleapiutils2.utils.decorators import retry
 from googleapiutils2.utils.misc import (
     CONFIG_ENV_VAR,
     CONFIG_PATH,
@@ -43,7 +44,6 @@ from googleapiutils2.utils.misc import (
     FilePath,
     GoogleMimeTypes,
 )
-from googleapiutils2.utils.decorators import retry
 from googleapiutils2.utils.utils import Throttler, get_url_params, path_or_str_to_json
 
 T = TypeVar("T")

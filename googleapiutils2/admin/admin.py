@@ -48,7 +48,7 @@ class Admin(DriveBase):
 
         self.service: DirectoryResource = discovery.build(
             "admin", "directory_v1", credentials=self.creds
-        )
+        )  # type: ignore
         self.users = self.service.users()
         self.customer_id = customer_id
 
