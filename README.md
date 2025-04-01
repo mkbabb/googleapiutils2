@@ -22,7 +22,7 @@ monolithic `google-api-stubs`, which greatly improves the usage experience.
 
 Install poetry, then run
 
-> poetry install
+> poetry add googleapiutils2
 
 And you're done.
 
@@ -30,10 +30,10 @@ And you're done.
 
 The library was written to be consistent with Google's own Python API - just a little
 easier to use. Most `Drive` and `Sheets` operations are supported using explicit
-parameters. But most functions thereof take a `**kwargs` parameter (used for parameter
+parameters. But many functions thereof take a `**kwargs` parameter (used for parameter
 forwarding) to allow for the more granular usage of the underlying API.
 
-A note on IDs: anytime a resource ID is needed, one can be provide the actual resource
+**A note on IDs:** anytime a resource ID is needed, one can be provide the actual resource
 ID, or the URL to the resource. If a URL is provided, this mapping is cached for future
 use.
 
@@ -67,7 +67,7 @@ account by way of the following discovery scheme:
 
 -   If `./auth/credentials.json` exists, use that credentials file.
 -   If the `GOOGLE_API_CREDENTIALS` environment variable is set, use the credentials
-    file pointed to by the variable.
+    file pointed to by the variable. - This can either be a path to a file, or a JSON object.
 
 ## Drive 📁
 
@@ -81,6 +81,13 @@ We attempt to infer both MIME types from the file extension, but this is not alw
 -   If the file's already been uploaded, the MIME type is inferred from the file's metadata.
 -   If the file's not been uploaded, the MIME type is inferred from the file's extension.
 -   If the file's extension is not recognized, the MIME type is set to `GoogleMimeTypes.file`.
+-
+
+#### Markdown Support
+
+The library supports uploading Markdown files to Google Drive. The MIME type is set to `GoogleMimeTypes.markdown`, and the file is converted to Google Docs format upon upload.
+
+Conversely when downloading a markdown file, set MIME type `GoogleMimeTypes.markdown`, and the file will be downloaded first as an HTML file, and then converted to markdown format, thereupon renamed to `.md`.
 
 ### Example: upload a file to a folder.
 
