@@ -285,6 +285,12 @@ class DriveBase:
 
         return request.execute(num_retries=1)
 
+    def execute_no_retry(self, request: googleapiclient.http.HttpRequest) -> Any:
+        """Execute a request without retry."""
+        self._execute_throttler.throttle()
+
+        return request.execute(num_retries=0)
+
     def execute_queue(self, request: googleapiclient.http.HttpRequest) -> None:
         """Add a request to the execution queue."""
         self._drive_thread.enqueue(request)

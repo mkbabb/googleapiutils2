@@ -219,9 +219,9 @@ class Admin(DriveBase):
             **kwargs: Additional parameters to pass to the API
         """
         try:
-            self.execute(self.users.delete(userKey=user_key, **kwargs))  # type: ignore
+            self.execute_no_retry(self.users.delete(userKey=user_key, **kwargs))  # type: ignore
         except Exception as e:
-            if ignore_if_not_found:
+            if ignore_if_not_found and "notFound" in str(e):
                 return None
             else:
                 raise e
