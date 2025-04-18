@@ -46,7 +46,7 @@ class Throttler:
         dt = self.dt()
 
         if dt > 0:
-            logger.debug(f"Throttling for {dt:.2f} seconds")
+            # logger.debug(f"Throttling for {dt:.2f} seconds")
             time.sleep(dt)
 
         self.reset()

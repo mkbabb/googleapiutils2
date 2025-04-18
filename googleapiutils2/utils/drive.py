@@ -153,6 +153,7 @@ def on_http_exception(e: Exception) -> bool:
     if isinstance(e, googleapiclient.errors.HttpError):  # type: ignore
         status = e.resp.status  # type: ignore
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
+
     return False
 
 
