@@ -221,7 +221,7 @@ class Admin(DriveBase):
         try:
             self.execute(self.users.delete(userKey=user_key, **kwargs))  # type: ignore
         except Exception as e:
-            if ignore_if_not_found and "notFound" in str(e):
+            if ignore_if_not_found:
                 return None
             else:
                 raise e
