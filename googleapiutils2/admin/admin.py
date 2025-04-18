@@ -79,6 +79,7 @@ class Admin(DriveBase):
                 "viewType": view_type,
             }
         )
+
         if customer_id:
             kwargs["customer"] = customer_id
 
@@ -208,6 +209,7 @@ class Admin(DriveBase):
     def delete_user(
         self,
         user_key: str,
+        ignore_if_not_found: bool = True,
         **kwargs: Any,
     ) -> None:
         """Delete a user.
@@ -216,7 +218,13 @@ class Admin(DriveBase):
             user_key (str): The user's email address or unique ID
             **kwargs: Additional parameters to pass to the API
         """
-        self.execute(self.users.delete(userKey=user_key, **kwargs))  # type: ignore
+        try:
+            self.execute(self.users.delete(userKey=user_key, **kwargs))  # type: ignore
+        except Exception as e:
+            if ignore_if_not_found and "notFound" in str(e):
+                return None
+            else:
+                raise e
 
     def list_users(
         self,
