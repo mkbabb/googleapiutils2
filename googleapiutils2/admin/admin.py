@@ -59,7 +59,7 @@ class Admin(DriveBase):
         view_type: str = "admin_view",
         customer_id: str | None = None,
         **kwargs: Any,
-    ) -> User:
+    ) -> User | None:
         """Get a user by their email address or unique ID.
 
         Args:
@@ -83,37 +83,9 @@ class Admin(DriveBase):
         if customer_id:
             kwargs["customer"] = customer_id
 
-        return self.execute(self.users.get(**kwargs))  # type: ignore
-
-    def _get_user_if_exists(
-        self,
-        user_key: str,
-        projection: str = "full",
-        view_type: str = "admin_view",
-        customer_id: str | None = None,
-        **kwargs: Any,
-    ) -> User | None:
-        """Get a user if they exist, otherwise return None.
-
-        Args:
-            user_key (str): The user's email address or unique ID
-            projection (str, optional): Amount of detail to include
-            view_type (str, optional): Whether to fetch admin or domain-wide view
-            customer_id (str, optional): Customer ID to use instead of default
-            **kwargs: Additional parameters to pass to the API
-
-        Returns:
-            User | None: The user object if found, None otherwise
-        """
         try:
-            return self.get_user(
-                user_key=user_key,
-                projection=projection,
-                view_type=view_type,
-                customer_id=customer_id,
-                **kwargs,
-            )
-        except Exception:  # The API throws various exceptions for not found
+            return self.execute_no_retry(self.users.get(**kwargs))  # type: ignore
+        except Exception as e:
             return None
 
     def find_users_by_name(
@@ -170,7 +142,7 @@ class Admin(DriveBase):
         Returns:
             User: The created or existing user object
         """
-        if get_extant and (existing_user := self._get_user_if_exists(primary_email)):
+        if get_extant and (existing_user := self.get_user(primary_email)):
             return existing_user
 
         user_data = {
