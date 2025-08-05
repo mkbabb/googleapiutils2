@@ -1,16 +1,14 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import tempfile
+from collections.abc import Callable, Generator, Iterable
 from io import BytesIO
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Generator,
-    Iterable,
-    List,
     Literal,
 )
 
@@ -39,20 +37,17 @@ from googleapiutils2.utils import (
     download_large_file,
     export_mime_type,
     guess_mime_type,
+    html_to_markdown,
     mime_type_to_google_mime_type,
     parse_file_id,
     q_escape,
-    html_to_markdown,
 )
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
-        DriveList,
         DriveResource,
         File,
-        FileList,
         Permission,
-        PermissionList,
     )
 
 
@@ -75,13 +70,9 @@ class Drive(DriveBase):
         throttle_time: float = THROTTLE_TIME,
         team_drives: bool = True,
     ):
-        super().__init__(
-            creds=creds, execute_time=execute_time, throttle_time=throttle_time
-        )
+        super().__init__(creds=creds, execute_time=execute_time, throttle_time=throttle_time)
 
-        self.service: DriveResource = discovery.build(
-            "drive", VERSION, credentials=self.creds
-        )  # type: ignore
+        self.service: DriveResource = discovery.build("drive", VERSION, credentials=self.creds)  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
         self.about: DriveResource.AboutResource = self.service.about()
 
@@ -91,7 +82,7 @@ class Drive(DriveBase):
         self,
         file_id: str | None = None,
         name: FilePath | None = None,
-        parents: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
         **kwargs: Any,
@@ -154,9 +145,7 @@ class Drive(DriveBase):
             None,
         )
         if file is None:
-            raise FileNotFoundError(
-                f"File with name {name} and parents {parents} not found."
-            )
+            raise FileNotFoundError(f"File with name {name} and parents {parents} not found.")
 
         return file
 
@@ -164,7 +153,7 @@ class Drive(DriveBase):
         self,
         file_id: str | None = None,
         name: str | None = None,
-        parents: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
         **kwargs: Any,
@@ -246,9 +235,7 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[
-            GoogleMimeTypes, GoogleMimeTypes
-        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ) -> Path:
         """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
 
@@ -273,13 +260,9 @@ class Drive(DriveBase):
             if file.get("md5Checksum") == md5:
                 return filepath
 
-        mime_type = (
-            mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
-        )
+        mime_type = mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
         if recursive and mime_type == GoogleMimeTypes.folder:
-            return self._download_nested_filepath(
-                filepath=filepath, file_id=file_id, overwrite=overwrite
-            )
+            return self._download_nested_filepath(filepath=filepath, file_id=file_id, overwrite=overwrite)
 
         mime_type, ext = export_mime_type(mime_type, conversion_map)
 
@@ -299,7 +282,9 @@ class Drive(DriveBase):
                 )
         else:
             return self._download(
-                file=file, filepath=filepath, mime_type=mime_type  # type: ignore
+                file=file,
+                filepath=filepath,
+                mime_type=mime_type,  # type: ignore
             )
 
     def _download_data(
@@ -309,9 +294,7 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[
-            GoogleMimeTypes, GoogleMimeTypes
-        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ):
         with tempfile.NamedTemporaryFile() as temp:
             out = self._download_file(
@@ -332,9 +315,7 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[
-            GoogleMimeTypes, GoogleMimeTypes
-        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ):
         """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
 
@@ -366,9 +347,7 @@ class Drive(DriveBase):
                     conversion_map=conversion_map,
                 )
             else:
-                raise TypeError(
-                    f"Expected a filepath or BytesIO, got {type(filepath)} instead."
-                )
+                raise TypeError(f"Expected a filepath or BytesIO, got {type(filepath)} instead.")
 
         downloaded_filepath = download_file_or_data()
 
@@ -391,7 +370,7 @@ class Drive(DriveBase):
     def copy(
         self,
         from_file_id: str,
-        parents: List[str] | str,
+        parents: builtins.list[str] | str,
         name: str | None = None,
         body: File | None = None,
         **kwargs: Any,
@@ -420,9 +399,7 @@ class Drive(DriveBase):
         return self.execute(self.files.copy(**kwargs))  # type: ignore
 
     @staticmethod
-    def _team_drives_payload(
-        team_drives: bool, kind: Literal["list", "update"] = "list"
-    ) -> dict[str, Any]:
+    def _team_drives_payload(team_drives: bool, kind: Literal["list", "update"] = "list") -> dict[str, Any]:
         if not team_drives:
             return {}
 
@@ -439,7 +416,7 @@ class Drive(DriveBase):
 
     def list(
         self,
-        parents: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
         query: str | None = None,
         fields: str = DEFAULT_FIELDS,
         order_by: str = "modifiedTime desc",
@@ -485,7 +462,7 @@ class Drive(DriveBase):
 
     def _query_children(
         self,
-        parents: List[str],
+        parents: builtins.list[str],
         name: str | None = None,
         fields: str = DEFAULT_FIELDS,
         q: str | None = None,
@@ -493,12 +470,10 @@ class Drive(DriveBase):
         """Internal usage function. Query children of a parent folder.
         If `name` is specified, only files with the given name will be returned.
         Only non-trashed files will be returned."""
-        queries: List[str] = []
+        queries: list[str] = []
 
         if len(parents):
-            parents_list = " or ".join(
-                (f"{q_escape(parent)} in parents" for parent in parents)
-            )
+            parents_list = " or ".join(f"{q_escape(parent)} in parents" for parent in parents)
             queries.append(parents_list)
 
         if name is not None:
@@ -515,17 +490,17 @@ class Drive(DriveBase):
 
         queries.append("trashed = false")
 
-        query = " and ".join((f"({i})" for i in queries))
+        query = " and ".join(f"({i})" for i in queries)
 
         return self.list(query=query, fields=fields)
 
     def _create_nested_folders(
         self,
         filepath: Path,
-        parents: List[str],
-        owners: List[str],
+        parents: builtins.list[str],
+        owners: builtins.list[str],
         get_extant: bool = True,
-    ) -> List[str]:
+    ) -> builtins.list[str]:
         """Create nested folders in Google Drive. Walks up the filepath creating folders as it goes.
 
         Args:
@@ -535,7 +510,7 @@ class Drive(DriveBase):
             get_extant (bool, optional): Whether to get the folder if it already exists. Defaults to True.
         """
 
-        def create_or_get_if_exists(name: str, parents: List[str]) -> File:
+        def create_or_get_if_exists(name: str, parents: list[str]) -> File:
             folders = self._query_children(
                 parents=parents,
                 name=name,
@@ -569,8 +544,8 @@ class Drive(DriveBase):
         self,
         name: FilePath,
         mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         recursive: bool = False,
         get_extant: bool = False,
         fields: str = DEFAULT_FIELDS,
@@ -601,11 +576,7 @@ class Drive(DriveBase):
                 filepath=filepath, parents=parents, owners=owners, get_extant=get_extant
             )
 
-        if (
-            get_extant
-            and (file := self.get_if_exists(name=filepath.name, parents=parents))
-            is not None
-        ):
+        if get_extant and (file := self.get_if_exists(name=filepath.name, parents=parents)) is not None:
             return file
 
         kwargs |= {
@@ -689,8 +660,8 @@ class Drive(DriveBase):
         name: str,
         filepath: FilePath,
         to_mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -717,9 +688,7 @@ class Drive(DriveBase):
             else:
                 from_mime_type = guess_mime_type(filepath=filepath)
 
-        from_mime_type = (
-            from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
-        )
+        from_mime_type = from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
 
         to_mime_type = to_mime_type if to_mime_type is not None else from_mime_type
 
@@ -749,8 +718,8 @@ class Drive(DriveBase):
         filepath: FilePath,
         name: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
@@ -775,9 +744,7 @@ class Drive(DriveBase):
         filepath = Path(filepath)
 
         def uploader(mime_type: GoogleMimeTypes):
-            return googleapiclient.http.MediaFileUpload(
-                str(filepath), resumable=True, mimetype=mime_type.value
-            )
+            return googleapiclient.http.MediaFileUpload(str(filepath), resumable=True, mimetype=mime_type.value)
 
         if recursive and filepath.is_dir():
             for file in filepath.glob("*"):
@@ -836,8 +803,8 @@ class Drive(DriveBase):
         data: bytes,
         name: str,
         to_mime_type: GoogleMimeTypes,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -856,9 +823,7 @@ class Drive(DriveBase):
         with BytesIO(data) as tio:
 
             def uploader(mime_type: GoogleMimeTypes):
-                return googleapiclient.http.MediaIoBaseUpload(
-                    tio, resumable=True, mimetype=mime_type.value
-                )
+                return googleapiclient.http.MediaIoBaseUpload(tio, resumable=True, mimetype=mime_type.value)
 
             return self._upload(
                 uploader=uploader,
@@ -878,8 +843,8 @@ class Drive(DriveBase):
         df: pd.DataFrame,
         name: str,
         to_mime_type: GoogleMimeTypes,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         body: File | None = None,
         update: bool = True,
         from_mime_type: GoogleMimeTypes | None = None,
@@ -906,9 +871,7 @@ class Drive(DriveBase):
         export_file_type = DataFrameExportFileTypes[to_mime_type.name]
         use_index = df.index.name is not None
 
-        with tempfile.NamedTemporaryFile(
-            suffix=f".{export_file_type.value}"
-        ) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=f".{export_file_type.value}") as tmp_file:
             match export_file_type:
                 case DataFrameExportFileTypes.csv:
                     df.to_csv(tmp_file.name, index=use_index)
@@ -938,8 +901,8 @@ class Drive(DriveBase):
         filepath: FilePath | pd.DataFrame | BytesIO,
         name: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
-        parents: List[str] | str | None = None,
-        owners: List[str] | str | None = None,
+        parents: builtins.list[str] | str | None = None,
+        owners: builtins.list[str] | str | None = None,
         recursive: bool = False,
         body: File | None = None,
         update: bool = True,
@@ -974,9 +937,7 @@ class Drive(DriveBase):
             )
         elif isinstance(filepath, pd.DataFrame):
             if name is None or to_mime_type is None:
-                raise ValueError(
-                    "If uploading a dataframe, both name and mime_type must be specified."
-                )
+                raise ValueError("If uploading a dataframe, both name and mime_type must be specified.")
             return self._upload_frame(
                 df=filepath,
                 name=name,
@@ -990,9 +951,7 @@ class Drive(DriveBase):
             )
         elif isinstance(filepath, bytes):
             if name is None or to_mime_type is None:
-                raise ValueError(
-                    "If uploading bytes, both name and mime_type must be specified."
-                )
+                raise ValueError("If uploading bytes, both name and mime_type must be specified.")
             return self._upload_data(
                 data=filepath,
                 name=name,
@@ -1042,9 +1001,7 @@ class Drive(DriveBase):
         """
         filepath = Path(filepath)
         folder_id = parse_file_id(folder_id)
-        self.upload(
-            filepath=filepath, parents=folder_id, recursive=recursive, update=True
-        )
+        self.upload(filepath=filepath, parents=folder_id, recursive=recursive, update=True)
         self.download(
             filepath=filepath,
             file_id=folder_id,
@@ -1078,13 +1035,9 @@ class Permissions:
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return self.drive.execute(
-            self.permissions.get(fileId=file_id, permissionId=permission_id, **kwargs)
-        )  # type: ignore
+        return self.drive.execute(self.permissions.get(fileId=file_id, permissionId=permission_id, **kwargs))  # type: ignore
 
-    def list(
-        self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
-    ) -> Iterable[Permission]:
+    def list(self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any) -> Iterable[Permission]:
         """Lists permissions for a file.
 
         Args:
@@ -1103,9 +1056,7 @@ class Permissions:
         for response in list_drive_items(list_func):
             yield from response.get("permissions", [])  # type: ignore
 
-    def _permission_get_if_exists(
-        self, file_id: str, user_permission: Permission
-    ) -> Permission | None:
+    def _permission_get_if_exists(self, file_id: str, user_permission: Permission) -> Permission | None:
         for p in self.list(file_id):
             if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
                 return p
@@ -1115,13 +1066,13 @@ class Permissions:
     def create(
         self,
         file_id: str,
-        email_address: str | List[str],
+        email_address: str | builtins.list[str],
         permission: Permission | None = None,
         send_notification_email: bool = True,
         get_extant: bool = False,
         update: bool = False,
         **kwargs: Any,
-    ) -> Permission | List[Permission]:
+    ) -> Permission | builtins.list[Permission]:
         """Creates a permission for a file. Defaults to a reader permission of type user.
 
         Args:
@@ -1144,9 +1095,7 @@ class Permissions:
             if permission is not None:
                 user_permission.update(permission)
 
-            if (get_extant or update) and (
-                p := self._permission_get_if_exists(file_id, user_permission)
-            ) is not None:
+            if (get_extant or update) and (p := self._permission_get_if_exists(file_id, user_permission)) is not None:
                 if update:
                     return self.update(
                         file_id=file_id,
@@ -1166,9 +1115,7 @@ class Permissions:
                 )
             )  # type: ignore
 
-        email_addresses = (
-            [email_address] if isinstance(email_address, str) else email_address
-        )
+        email_addresses = [email_address] if isinstance(email_address, str) else email_address
 
         return (
             [_create(email_address) for email_address in email_addresses]
@@ -1187,9 +1134,7 @@ class Permissions:
         """
         ALLOWED_KEYS = ["role", "allowFileDiscovery", "expirationTime"]
 
-        permission = {
-            k: v for k, v in permission.items() if k in ALLOWED_KEYS
-        }  # type: ignore
+        permission = {k: v for k, v in permission.items() if k in ALLOWED_KEYS}  # type: ignore
 
         return permission
 
@@ -1212,9 +1157,7 @@ class Permissions:
         permission = self._sanitize_update_permission(permission)
 
         return self.drive.execute(
-            self.permissions.update(
-                fileId=file_id, permissionId=permission_id, body=permission, **kwargs
-            )
+            self.permissions.update(fileId=file_id, permissionId=permission_id, body=permission, **kwargs)
         )  # type: ignore
 
     def delete(self, file_id: str, permission_id: str, **kwargs: Any) -> Permission:
@@ -1225,8 +1168,4 @@ class Permissions:
             permission_id (str): The ID of the permission.
         """
         file_id = parse_file_id(file_id)
-        return self.drive.execute(
-            self.permissions.delete(
-                fileId=file_id, permissionId=permission_id, **kwargs
-            )
-        )  # type: ignore
+        return self.drive.execute(self.permissions.delete(fileId=file_id, permissionId=permission_id, **kwargs))  # type: ignore

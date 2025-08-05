@@ -4,16 +4,15 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import Resource
 from loguru import logger
 
 from googleapiutils2.drive import Drive
-from googleapiutils2.sheets import Sheets, SheetsRange, SheetsValueRange, to_sheet_slice
+from googleapiutils2.sheets import Sheets, SheetsRange
 from googleapiutils2.utils import parse_file_id
 
 if TYPE_CHECKING:
@@ -54,9 +53,7 @@ class ResourceMonitor(ABC):
         resource: Drive | Sheets,
         drive: Drive,
         resource_id: str,
-        callback: Callable[
-            [Any, "ResourceMonitor" | "SheetsMonitor" | "DriveMonitor"], None
-        ],
+        callback: Callable[[Any, ResourceMonitor | SheetsMonitor | DriveMonitor], None],
         interval: int = 30,
     ):
         self.resource = resource
@@ -91,9 +88,7 @@ class ResourceMonitor(ABC):
         """
         ...
 
-    def _has_changed(
-        self, current_state: MonitoredResource, prev_state: MonitoredResource
-    ) -> bool:
+    def _has_changed(self, current_state: MonitoredResource, prev_state: MonitoredResource) -> bool:
         """Check if the resource has changed since the last check."""
         return current_state.last_modified != prev_state.last_modified
 
@@ -106,9 +101,7 @@ class ResourceMonitor(ABC):
                 current_state = self._get_current_state()
 
                 # Check if the resource has been modified
-                if self._has_changed(
-                    current_state=current_state, prev_state=prev_state
-                ):
+                if self._has_changed(current_state=current_state, prev_state=prev_state):
                     # Get the current data and call the callback
                     current_data = self._get_current_data()
 
@@ -173,7 +166,7 @@ class DriveMonitor(ResourceMonitor):
         self,
         drive: Drive,
         resource_id: str,
-        callback: Callable[[Any, "ResourceMonitor"], None],
+        callback: Callable[[Any, ResourceMonitor], None],
         interval: int = 30,
     ):
         super().__init__(
@@ -203,7 +196,7 @@ class DriveMonitor(ResourceMonitor):
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             self.drive.download(filepath=temp_file.name, file_id=self.resource_id)
             # read the file and return the contents
-            with open(temp_file.name, "r") as f:
+            with open(temp_file.name) as f:
                 return f.read()
 
 
@@ -226,7 +219,7 @@ class SheetsMonitor(ResourceMonitor):
         sheets: Sheets,
         drive: Drive,
         spreadsheet_id: str,
-        callback: Callable[[Any, "ResourceMonitor"], None],
+        callback: Callable[[Any, ResourceMonitor], None],
         range_name: SheetsRange | None = None,
         interval: int = 30,
     ):
@@ -253,9 +246,7 @@ class SheetsMonitor(ResourceMonitor):
         metadata = None
         if self.range_name:
             try:
-                metadata = self.sheets.get_spreadsheet(
-                    spreadsheet_id=self.resource_id, range_names=[self.range_name]
-                )
+                metadata = self.sheets.get_spreadsheet(spreadsheet_id=self.resource_id, range_names=[self.range_name])
             except Exception as e:
                 logger.warning(f"Failed to get sheets metadata: {e}")
 
@@ -270,9 +261,7 @@ class SheetsMonitor(ResourceMonitor):
         """Get the current data of the Sheets resource."""
         if self.range_name:
             # If range is specified, get just that range
-            return self.sheets.values(
-                spreadsheet_id=self.resource_id, range_name=self.range_name
-            )
+            return self.sheets.values(spreadsheet_id=self.resource_id, range_name=self.range_name)
         else:
             # Otherwise get the entire spreadsheet
             return self.sheets.get_spreadsheet(
@@ -280,9 +269,7 @@ class SheetsMonitor(ResourceMonitor):
                 include_grid_data=True,
             )
 
-    def _has_changed(
-        self, current_state: MonitoredResource, prev_state: MonitoredResource
-    ) -> bool:
+    def _has_changed(self, current_state: MonitoredResource, prev_state: MonitoredResource) -> bool:
         """Enhanced change detection for sheets that includes range-specific checks."""
         # First check basic file changes
         basic_changed = super()._has_changed(current_state, prev_state)

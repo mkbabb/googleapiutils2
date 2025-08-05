@@ -10,9 +10,7 @@ if TYPE_CHECKING:
 
 
 def test_lists(drive: Drive):
-    test_folder_url = (
-        "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
-    )
+    test_folder_url = "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
 
     permissions = Permissions(drive=drive)
 
@@ -26,20 +24,16 @@ def test_lists(drive: Drive):
 
 
 def test_upload(drive: Drive):
-    ECF_FOLDER = (
-        "https://drive.google.com/drive/u/0/folders/1fB2mj-hl7KIduiNidbWLlMAFXZ76GmN8"
-    )
+    ECF_FOLDER = "https://drive.google.com/drive/u/0/folders/1fB2mj-hl7KIduiNidbWLlMAFXZ76GmN8"
     filepath = "/Users/mkbabb/Programming/ecf-dedup/data/ECF Deduped.csv"
-   
+
     t_file = drive.upload(filepath=filepath, parents=[ECF_FOLDER], update=True)
 
     print(t_file)
 
 
 def test_recursive_download():
-    shodan_folder = (
-        "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
-    )
+    shodan_folder = "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
     # drive.download(
     #     out_filepath="./data/shodan_data",
     #     file_id=shodan_folder,

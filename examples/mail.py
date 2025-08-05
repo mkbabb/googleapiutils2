@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from googleapiutils2 import Mail, ServiceAccountCredentials, get_oauth2_creds
 
-creds: ServiceAccountCredentials = get_oauth2_creds(
-    client_config="auth/credentials.fortinbras.json"
-)  # type: ignore
+creds: ServiceAccountCredentials = get_oauth2_creds(client_config="auth/credentials.fortinbras.json")  # type: ignore
 
 creds = creds.with_subject("mbabb@ridgemontcharter.org")
 

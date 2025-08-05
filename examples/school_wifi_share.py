@@ -7,11 +7,11 @@ Used to share folders with school districts for the WiFi project.
 - Retrieve all folders from specified locations.
 - Iterate through the responses and grant permission for emails that match the PSU IDs in the folder names.
 """
+
 from __future__ import annotations
 
 import re
 from itertools import chain
-
 
 from googleapiutils2 import Drive, Permissions, Sheets
 
@@ -27,26 +27,22 @@ psu_col, email_col = (
 )
 
 # URL to the responses sheet
-responses_sheet_url = "https://docs.google.com/spreadsheets/d/1hjeVzc_WsEVyth8lje9uZNBvSPldawFpj96lrclOahU/edit#gid=506522074"
+responses_sheet_url = (
+    "https://docs.google.com/spreadsheets/d/1hjeVzc_WsEVyth8lje9uZNBvSPldawFpj96lrclOahU/edit#gid=506522074"
+)
 
 # Retrieve responses as a DataFrame
-responses_df = sheets.to_frame(
-    sheets.values(responses_sheet_url, "Validated Responses")
-)
+responses_df = sheets.to_frame(sheets.values(responses_sheet_url, "Validated Responses"))
 if responses_df is None:
     raise ValueError("No responses found")
 
 # Regular expression to match PSU IDs
 PSU_ID_RE = re.compile(r"\[(.*)\]")
-responses_df["psu_id"] = responses_df[psu_col].map(
-    lambda x: re.findall(PSU_ID_RE, x)[0]
-)
+responses_df["psu_id"] = responses_df[psu_col].map(lambda x: re.findall(PSU_ID_RE, x)[0])
 
 # Splitting emails and converting to lowercase
 responses_df["emails"] = responses_df[email_col].str.split(",")
-responses_df["emails"] = responses_df["emails"].map(
-    lambda emails: [i.strip().lower() for i in emails]
-)
+responses_df["emails"] = responses_df["emails"].map(lambda emails: [i.strip().lower() for i in emails])
 
 # Folder IDs
 wifi_folders = ["1OCweN3_HDyXL4Gpowz4MaHb01LukSbpv"]
@@ -59,9 +55,7 @@ shodan_folders = [
 list_func = lambda x: list(drive.list(x, fields="files(name,id)"))
 
 # Gather all folders
-all_folders = list(
-    chain.from_iterable(list_func(x) for x in chain(shodan_folders, wifi_folders))
-)
+all_folders = list(chain.from_iterable(list_func(x) for x in chain(shodan_folders, wifi_folders)))
 
 # Iterate through responses and grant permissions
 for n, row in responses_df.iterrows():

@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3.resources import (
-        DriveList,
-        DriveResource,
-        File,
         FileList,
-        Permission,
         PermissionList,
     )
 
@@ -43,7 +40,7 @@ def create_listing_fields(fields: str) -> str:
 
 
 def list_drive_items(
-    list_func: Callable[[str | None], FileList | PermissionList | Any]
+    list_func: Callable[[str | None], FileList | PermissionList | Any],
 ) -> Iterable[FileList | PermissionList | list]:
     page_token = None
     while True:

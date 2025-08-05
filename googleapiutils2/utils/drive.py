@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 import urllib.parse
+from collections.abc import Callable
 from functools import cache
 from mimetypes import guess_type
 from pathlib import Path
@@ -14,14 +15,11 @@ from queue import Empty, Queue
 from threading import Thread
 from typing import (
     Any,
-    Callable,
-    Optional,
     ParamSpec,
     TypeVar,
 )
 
 import googleapiclient.http
-from markdownify import markdownify  # type: ignore
 from cachetools import TTLCache
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -29,6 +27,7 @@ from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from loguru import logger
+from markdownify import markdownify  # type: ignore
 
 from googleapiutils2.utils.decorators import retry
 from googleapiutils2.utils.misc import (
@@ -62,20 +61,14 @@ def html_to_markdown(html_content: str) -> str:
     """
     # Use markdownify with sensible defaults for Google Docs
     markdown_content = markdownify(
-        html_content,
-        heading_style="ATX",
-        bullets="*",
-        strip=['img', 'script', 'style'],
-        default_title=True
+        html_content, heading_style="ATX", bullets="*", strip=["img", "script", "style"], default_title=True
     )
     return markdown_content.strip()
 
 
 def export_mime_type(
     mime_type: GoogleMimeTypes,
-    conversion_map: dict[
-        GoogleMimeTypes, GoogleMimeTypes
-    ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
 ) -> tuple[GoogleMimeTypes, str]:
     """Get the MIME type to export a file to and the corresponding file extension."""
     t_mime_type = conversion_map.get(mime_type)
@@ -171,11 +164,11 @@ class DriveThread:
 
         self._worker_func = worker_func
 
-        self._request_queue: Queue[Optional[googleapiclient.http.HttpRequest]] = Queue()
+        self._request_queue: Queue[googleapiclient.http.HttpRequest | None] = Queue()
 
-        self._request_thread: Optional[Thread] = None
+        self._request_thread: Thread | None = None
 
-        self._monitor_thread: Optional[Thread] = None
+        self._monitor_thread: Thread | None = None
 
         self._init_worker()
 
@@ -350,9 +343,7 @@ def get_oauth2_creds(
     is_service_account = client_config is not None and client_config.get("type", "") == "service_account"  # type: ignore
 
     if is_service_account:
-        return service_account.Credentials.from_service_account_info(
-            client_config, scopes=scopes, *args, **kwargs
-        )  # type: ignore
+        return service_account.Credentials.from_service_account_info(client_config, scopes=scopes, *args, **kwargs)  # type: ignore
     elif token_path is not None:
         token_path = Path(token_path)  # type: ignore
         creds: Credentials | None = None
@@ -365,9 +356,7 @@ def get_oauth2_creds(
                 creds.refresh(Request())
 
         elif creds is None:
-            flow = InstalledAppFlow.from_client_config(
-                client_config, scopes=scopes, *args, **kwargs
-            )
+            flow = InstalledAppFlow.from_client_config(client_config, scopes=scopes, *args, **kwargs)
             creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))
@@ -407,11 +396,7 @@ def get_id_from_url(url: str) -> str:
     path = url_obj.path
     paths = path.split("/")
 
-    get_adjacent = lambda x: (
-        paths[t_ix]
-        if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
-        else None
-    )
+    get_adjacent = lambda x: (paths[t_ix] if x in paths and (t_ix := paths.index(x) + 1) < len(paths) else None)
 
     id = get_adjacent("folders") or get_adjacent("d")
 

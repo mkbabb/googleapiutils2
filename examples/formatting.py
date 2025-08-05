@@ -17,9 +17,7 @@ and illustrate advanced techniques such as slicing, batched updates, alignment, 
 
 from __future__ import annotations
 
-import json
-
-from googleapiutils2 import Sheets, SheetSlice, SheetsValueRange
+from googleapiutils2 import Sheets, SheetsValueRange
 
 sheets = Sheets()
 
@@ -44,9 +42,7 @@ sheets.format(
     },
 )
 
-sheets_format_list = sheets.get_format(
-    spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...]
-)
+sheets_format_list = sheets.get_format(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
 sheets_format = sheets_format_list[0]
 
 

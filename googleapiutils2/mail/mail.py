@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Generator
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import TYPE_CHECKING, Generator, List, Literal
+from typing import TYPE_CHECKING, Literal
 
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
         GmailResource,
         Label,
         Message,
-        MessagePartHeader,
     )
 
 VERSION = "v1"
@@ -44,13 +44,9 @@ class Mail(DriveBase):
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
-        super().__init__(
-            creds=creds, execute_time=execute_time, throttle_time=throttle_time
-        )
+        super().__init__(creds=creds, execute_time=execute_time, throttle_time=throttle_time)
 
-        self.service: GmailResource = discovery.build(
-            "gmail", VERSION, credentials=self.creds
-        )  # type: ignore
+        self.service: GmailResource = discovery.build("gmail", VERSION, credentials=self.creds)  # type: ignore
         self.messages = self.service.users().messages()
         self.drafts = self.service.users().drafts()
         self.labels = self.service.users().labels()
@@ -58,7 +54,7 @@ class Mail(DriveBase):
     def _create_message(
         self,
         sender: str,
-        to: str | List[str],
+        to: str | list[str],
         subject: str,
         body: str,
         html: bool = False,
@@ -91,7 +87,7 @@ class Mail(DriveBase):
     def send(
         self,
         sender: str,
-        to: str | List[str],
+        to: str | list[str],
         subject: str,
         body: str,
         html: bool = False,
@@ -118,14 +114,12 @@ class Mail(DriveBase):
             html=html,
         )
 
-        return self.execute(
-            self.messages.send(userId=user_id, body=message)
-        )  # type: ignore
+        return self.execute(self.messages.send(userId=user_id, body=message))  # type: ignore
 
     def create_draft(
         self,
         sender: str,
-        to: str | List[str],
+        to: str | list[str],
         subject: str,
         body: str,
         html: bool = False,
@@ -152,14 +146,12 @@ class Mail(DriveBase):
             html=html,
         )
 
-        return self.execute(
-            self.drafts.create(userId=user_id, body={"message": message})
-        )  # type: ignore
+        return self.execute(self.drafts.create(userId=user_id, body={"message": message}))  # type: ignore
 
     def list_messages(
         self,
         query: str | None = None,
-        label_ids: List[str] | None = None,
+        label_ids: list[str] | None = None,
         max_results: int | None = None,
         user_id: str = "me",
     ) -> Generator[Message, None, None]:
@@ -210,15 +202,13 @@ class Mail(DriveBase):
         Returns:
             A Message.
         """
-        return self.execute(
-            self.messages.get(userId=user_id, id=message_id, format=format)
-        )  # type: ignore
+        return self.execute(self.messages.get(userId=user_id, id=message_id, format=format))  # type: ignore
 
     def modify_message(
         self,
         message_id: str,
-        add_label_ids: List[str] | None = None,
-        remove_label_ids: List[str] | None = None,
+        add_label_ids: list[str] | None = None,
+        remove_label_ids: list[str] | None = None,
         user_id: str = "me",
     ) -> Message:
         """Modify the labels on the specified message.
@@ -251,9 +241,7 @@ class Mail(DriveBase):
         Returns:
             The trashed Message.
         """
-        return self.execute(
-            self.messages.trash(userId=user_id, id=message_id)
-        )  # type: ignore
+        return self.execute(self.messages.trash(userId=user_id, id=message_id))  # type: ignore
 
     def untrash_message(self, message_id: str, user_id: str = "me") -> Message:
         """Remove a message from trash.
@@ -265,9 +253,7 @@ class Mail(DriveBase):
         Returns:
             The untrashed Message.
         """
-        return self.execute(
-            self.messages.untrash(userId=user_id, id=message_id)
-        )  # type: ignore
+        return self.execute(self.messages.untrash(userId=user_id, id=message_id))  # type: ignore
 
     def delete_message(self, message_id: str, user_id: str = "me") -> None:
         """Permanently delete a message. This operation cannot be undone.
@@ -276,9 +262,7 @@ class Mail(DriveBase):
             message_id: The ID of the message to delete.
             user_id: The user's email address. 'me' refers to authenticated user.
         """
-        self.execute(
-            self.messages.delete(userId=user_id, id=message_id)
-        )  # type: ignore
+        self.execute(self.messages.delete(userId=user_id, id=message_id))  # type: ignore
 
     def list_labels(self, user_id: str = "me") -> Generator[Label, None, None]:
         """Lists all labels in the user's mailbox.
@@ -302,16 +286,12 @@ class Mail(DriveBase):
         Returns:
             A Label object.
         """
-        return self.execute(
-            self.labels.get(userId=user_id, id=label_id)
-        )  # type: ignore
+        return self.execute(self.labels.get(userId=user_id, id=label_id))  # type: ignore
 
     def create_label(
         self,
         name: str,
-        label_list_visibility: Literal[
-            "labelShow", "labelHide", "labelShowIfUnread"
-        ] = "labelShow",
+        label_list_visibility: Literal["labelShow", "labelHide", "labelShowIfUnread"] = "labelShow",
         message_list_visibility: Literal["show", "hide"] = "show",
         user_id: str = "me",
     ) -> Label:
@@ -349,9 +329,7 @@ class Mail(DriveBase):
         self,
         label_id: str,
         name: str | None = None,
-        label_list_visibility: (
-            Literal["labelShow", "labelHide", "labelShowIfUnread"] | None
-        ) = None,
+        label_list_visibility: (Literal["labelShow", "labelHide", "labelShowIfUnread"] | None) = None,
         message_list_visibility: Literal["show", "hide"] | None = None,
         user_id: str = "me",
     ) -> Label:

@@ -62,9 +62,7 @@ populate_folder(
 
 drive = Drive()
 
-folder_id = (
-    "https://drive.google.com/drive/u/0/folders/14PokFTuIIUQoqurb3EYwWN7hkb6hpyuS"
-)
+folder_id = "https://drive.google.com/drive/u/0/folders/14PokFTuIIUQoqurb3EYwWN7hkb6hpyuS"
 
 for file in drive.list(folder_id):
     drive.delete(file["id"])

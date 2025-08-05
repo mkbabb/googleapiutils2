@@ -7,7 +7,6 @@ import pandas as pd
 
 from googleapiutils2.sheets.misc import (
     DEFAULT_SHEET_NAME,
-    DEFAULT_SHEET_SHAPE,
     InsertDataOption,
     SheetSliceT,
     ValueInputOption,
@@ -19,10 +18,7 @@ from googleapiutils2.utils import parse_file_id
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import (
-        BatchUpdateValuesRequest,
-        SheetsResource,
         Spreadsheet,
-        ValueRange,
     )
 
 
@@ -56,25 +52,17 @@ class SheetsValueRange:
         self.spreadsheet_id = parse_file_id(self.spreadsheet_id)
 
     def __repr__(self) -> str:
-        sheet_name = (
-            self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
-        )
+        sheet_name = self.sheet_name if self.sheet_name is not None else DEFAULT_SHEET_NAME
         return format_range_name(sheet_name, self.range_name)
 
     def header(self) -> list[str]:
-        return self.sheets.header(
-            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
-        )
+        return self.sheets.header(spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name)
 
     def shape(self) -> tuple[int, int]:
-        return self.sheets.shape(
-            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
-        )
+        return self.sheets.shape(spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name)
 
     def sheet_id(self) -> int:
-        return self.sheets.id(
-            spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name
-        )
+        return self.sheets.id(spreadsheet_id=self.spreadsheet_id, sheet_name=self.sheet_name)
 
     def values(
         self,
@@ -126,22 +114,16 @@ class SheetsValueRange:
         )
 
     def clear(self):
-        return self.sheets.clear(
-            spreadsheet_id=self.spreadsheet_id, range_name=str(self)
-        )
+        return self.sheets.clear(spreadsheet_id=self.spreadsheet_id, range_name=str(self))
 
     def to_frame(self, **kwargs) -> pd.DataFrame | None:
         return self.sheets.to_frame(self.values(), **kwargs)
 
-    def __getitem__(
-        self, ixs: str | tuple[Any, ...] | SheetSliceT | SheetsValueRange | Any
-    ) -> SheetsValueRange:
+    def __getitem__(self, ixs: str | tuple[Any, ...] | SheetSliceT | SheetsValueRange | Any) -> SheetsValueRange:
         if isinstance(ixs, SheetsValueRange):
             ixs = str(ixs)
 
-        slc = SheetSliceT(
-            sheet_name=self.sheet_name, range_name=self.range_name, shape=self.shape()
-        )[ixs]
+        slc = SheetSliceT(sheet_name=self.sheet_name, range_name=self.range_name, shape=self.shape())[ixs]
         return self.__class__(
             self.sheets,
             self.spreadsheet_id,

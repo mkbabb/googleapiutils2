@@ -1,9 +1,3 @@
-from .misc import (
-    DEFAULT_DOWNLOAD_CONVERSION_MAP,
-    EXECUTE_TIME,
-    THROTTLE_TIME,
-    FilePath,
-)
 from .decorators import cache_with_stale_interval, retry
 from .drive import (
     DriveBase,
@@ -13,12 +7,18 @@ from .drive import (
     export_mime_type,
     get_oauth2_creds,
     guess_mime_type,
+    html_to_markdown,
     mime_type_to_google_mime_type,
     on_http_exception,
     parse_file_id,
     q_escape,
     raise_for_status,
-    html_to_markdown
+)
+from .misc import (
+    DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    EXECUTE_TIME,
+    THROTTLE_TIME,
+    FilePath,
 )
 from .utils import (
     Throttler,
@@ -27,8 +27,6 @@ from .utils import (
     hex_to_rgb,
     named_methodkey,
     nested_defaultdict,
-    update_url_params,
     to_base,
-    
-    
+    update_url_params,
 )

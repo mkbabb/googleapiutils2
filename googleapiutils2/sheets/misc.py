@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import string
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Hashable
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -27,18 +28,16 @@ SheetShape = tuple[int | EllipsisType, int | EllipsisType]
 BASE = 26
 OFFSET = 1
 
-DUPE_SUFFIX = '__dupe__'
+DUPE_SUFFIX = "__dupe__"
 
 DEFAULT_CHUNK_SIZE_BYTES = 1 * 1024 * 1024  # 1MB default chunk size
 
 
-SheetsValues = (
-    list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[dict] | list[object]
-)
+SheetsValues = list[list[Any]] | list[dict[str | Hashable | Any, Any]] | list[dict] | list[object]
 
 SHEET_SLICE_CACHE: dict[str, tuple[slice, slice]] = {}
 
-pd.set_option('future.no_silent_downcasting', True)
+pd.set_option("future.no_silent_downcasting", True)
 
 
 @dataclass
@@ -177,9 +176,7 @@ def split_sheet_range(range_name: Any) -> tuple[str, str | None]:
         return range_name, None
 
 
-def format_range_name(
-    sheet_name: str | None = None, range_name: str | None = None
-) -> str:
+def format_range_name(sheet_name: str | None = None, range_name: str | None = None) -> str:
     """Format a range name for use in a Google Sheets API request.
     Quotes sheet names if they're not already quoted.
 
@@ -210,9 +207,7 @@ def rc_to_A1(row: int, col: int) -> str:
 
 
 def A1_to_int(a1: str) -> int:
-    base = len(
-        string.ascii_uppercase
-    )  # The base for this operation is 26 (letters in the alphabet)
+    base = len(string.ascii_uppercase)  # The base for this operation is 26 (letters in the alphabet)
     a1 = a1.upper()
     result = 0
     for i, c in enumerate(a1[::-1]):
@@ -231,9 +226,7 @@ def A1_to_rc(a1: str) -> tuple[int | None, int | None]:
 
 
 @cache
-def A1_to_slices(
-    a1: str, shape: SheetShape = INIT_SHEET_SHAPE, default_to_sheet: bool = True
-) -> tuple[slice, slice]:
+def A1_to_slices(a1: str, shape: SheetShape = INIT_SHEET_SHAPE, default_to_sheet: bool = True) -> tuple[slice, slice]:
     # Parse sheet and range
     _, range_name = split_sheet_range(a1)
 
@@ -304,16 +297,10 @@ def normalize_slice(slc: slice, max_dim: int | EllipsisType) -> slice:
     stop = max_dim if stop is ... else stop
 
     # handle negative indices
-    start = (
-        max_dim + start + 1
-        if (start is not ... and start < 0 and not max_dim_is_ellipsis)
-        else start
-    )
-    stop = (
-        max_dim + stop + 1
-        if (stop is not ... and stop < 0 and not max_dim_is_ellipsis)
-        else stop
-    )
+    if isinstance(start, int) and start < 0 and not max_dim_is_ellipsis:
+        start = max_dim + start + 1
+    if isinstance(stop, int) and stop < 0 and not max_dim_is_ellipsis:
+        stop = max_dim + stop + 1
 
     return slice(start, stop, step)
 
@@ -322,7 +309,6 @@ def ix_to_norm_slice(
     ix: slice | int | str | EllipsisType,
     max_dim: int | EllipsisType,
 ) -> tuple[slice, bool]:
-
     slc = ix_to_slice(ix)
 
     is_ellipsis = slc.start == 1 and (slc.stop == max_dim or slc.stop is ...)
@@ -338,7 +324,6 @@ def expand_slices(
     col_ix: slice | int | EllipsisType,
     shape: SheetShape = INIT_SHEET_SHAPE,
 ) -> str | None:
-
     row_ix, row_is_ellipsis = ix_to_norm_slice(row_ix, shape[0])
     col_ix, col_is_ellipsis = ix_to_norm_slice(col_ix, shape[1])
 
@@ -445,16 +430,12 @@ class SheetSliceT:
         return self.slices[1]
 
     def with_shape(self, shape: tuple[int, int]) -> SheetSliceT:
-        return SheetSliceT(
-            sheet_name=self.sheet_name, range_name=self.range_name, shape=shape
-        )
+        return SheetSliceT(sheet_name=self.sheet_name, range_name=self.range_name, shape=shape)
 
     def __repr__(self) -> str:
         return format_range_name(self.sheet_name, self.range_name)
 
-    def __getitem__(
-        self, ixs: str | tuple[Any, ...] | SheetSliceT | Any
-    ) -> SheetSliceT:
+    def __getitem__(self, ixs: str | tuple[Any, ...] | SheetSliceT | Any) -> SheetSliceT:
         if isinstance(ixs, SheetSliceT):
             return ixs
 

@@ -8,9 +8,10 @@ import json
 import pickle
 import random
 import time
+from collections.abc import Awaitable, Callable
 from functools import cache
 from pathlib import Path
-from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, cast
+from typing import Any, ParamSpec, TypeVar, cast
 
 from loguru import logger
 from pydantic import BaseModel
@@ -47,9 +48,7 @@ def retry(
         sleep += delay if not exponential_backoff else delay * 2**i
         return sleep
 
-    def inner(
-        func: Callable[P, T] | Callable[P, Awaitable[T]]
-    ) -> Callable[P, T] | Callable[P, Awaitable[T]]:
+    def inner(func: Callable[P, T] | Callable[P, Awaitable[T]]) -> Callable[P, T] | Callable[P, Awaitable[T]]:
         @functools.wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             e = Exception()
@@ -102,10 +101,7 @@ def normalize_for_hash(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [normalize_for_hash(item) for item in obj]
     elif isinstance(obj, dict):
-        return {
-            str(key): normalize_for_hash(value)
-            for key, value in sorted(obj.items(), key=lambda x: str(x[0]))
-        }
+        return {str(key): normalize_for_hash(value) for key, value in sorted(obj.items(), key=lambda x: str(x[0]))}
     elif isinstance(obj, (set, frozenset)):
         return sorted(normalize_for_hash(item) for item in obj)
     elif isinstance(obj, datetime.datetime):
@@ -116,7 +112,7 @@ def normalize_for_hash(obj: Any) -> Any:
         return str(obj.absolute())
     elif isinstance(obj, BaseModel):
         return obj.model_dump_json()
-    elif hasattr(obj, '__dict__'):
+    elif hasattr(obj, "__dict__"):
         # Handle custom objects by converting their __dict__ to a sorted dict
         return normalize_for_hash(obj.__dict__)
     return obj
@@ -168,9 +164,7 @@ def get_cached_result(
 
             cached_timestamp = datetime.datetime.fromisoformat(cached_data["timestamp"])
 
-            if stale_interval is None or (
-                datetime.datetime.now() - cached_timestamp <= stale_interval
-            ):
+            if stale_interval is None or (datetime.datetime.now() - cached_timestamp <= stale_interval):
                 with open(cached_data["pickled_output_path"], "rb") as pkl_file:
                     return True, pickle.load(pkl_file)
         except (json.JSONDecodeError, OSError, pickle.PickleError) as e:
@@ -230,9 +224,7 @@ def cache_with_stale_interval(
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # Try to get cached result
-            cache_hit, cached_result = get_cached_result(
-                func.__name__, args, kwargs, stale_interval
-            )
+            cache_hit, cached_result = get_cached_result(func.__name__, args, kwargs, stale_interval)
 
             if cache_hit:
                 return cast(R, cached_result)

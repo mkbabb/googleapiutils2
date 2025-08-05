@@ -8,12 +8,10 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    List,
 )
 
 import googleapiclient.http
 import requests
-from loguru import logger
 
 from googleapiutils2.utils.misc import THROTTLE_TIME, FilePath
 
@@ -88,7 +86,7 @@ def hex_to_rgb(hex_code: str) -> Color:
     return {k: v / 255.0 for k, v in rgb.items()}  # type: ignore
 
 
-def get_url_params(url: str) -> dict[str, List[str]]:
+def get_url_params(url: str) -> dict[str, list[str]]:
     """Get the components of the given URL."""
     return urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
@@ -161,9 +159,7 @@ def to_base(x: str | int, base: int, from_base: int = 10) -> list[int]:
     return y[::-1]
 
 
-def nested_defaultdict(
-    existing: dict | Any | None = None, **kwargs: Any
-) -> dict[Any, Any]:
+def nested_defaultdict(existing: dict | Any | None = None, **kwargs: Any) -> dict[Any, Any]:
     if existing is None:
         existing = {}
     elif not isinstance(existing, dict):

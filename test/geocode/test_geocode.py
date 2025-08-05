@@ -16,8 +16,5 @@ def test_geocode(geocoder: Geocode):
 
     result = result[0]
 
-    assert (
-        result["formatted_address"]
-        == "Google Building 40, 1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA"
-    )
+    assert result["formatted_address"] == "Google Building 40, 1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA"
     assert result["geometry"]["location_type"] == "ROOFTOP"

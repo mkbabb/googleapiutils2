@@ -13,9 +13,7 @@ from googleapiutils2.utils.utils import Credentials, GoogleMimeTypes, get_oauth2
 
 @pytest.fixture(scope="session", autouse=True)
 def creds():
-    config_path = Path(
-        os.environ.get("GOOGLE_API_CREDENTIALS", "auth/credentials.json")
-    )
+    config_path = Path(os.environ.get("GOOGLE_API_CREDENTIALS", "auth/credentials.json"))
     return get_oauth2_creds(client_config=config_path)
 
 

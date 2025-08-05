@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
 from loguru import logger
 
 from googleapiutils2 import Drive, Sheets, SheetsMonitor, get_oauth2_creds
@@ -34,7 +33,6 @@ def handle_sheet_changes(data: Any, monitor: SheetsMonitor) -> None:
 
 
 def main():
-
     # Initialize API clients
 
     creds = get_oauth2_creds()

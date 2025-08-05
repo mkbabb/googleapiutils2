@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generator
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any
 
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -10,8 +11,6 @@ from googleapiutils2.utils import (
     EXECUTE_TIME,
     THROTTLE_TIME,
     DriveBase,
-    on_http_exception,
-    retry,
 )
 
 if TYPE_CHECKING:
@@ -46,9 +45,7 @@ class Admin(DriveBase):
             throttle_time=throttle_time,
         )
 
-        self.service: DirectoryResource = discovery.build(
-            "admin", "directory_v1", credentials=self.creds
-        )  # type: ignore
+        self.service: DirectoryResource = discovery.build("admin", "directory_v1", credentials=self.creds)  # type: ignore
         self.users = self.service.users()
         self.customer_id = customer_id
 
@@ -85,7 +82,7 @@ class Admin(DriveBase):
 
         try:
             return self.execute_no_retry(self.users.get(**kwargs))  # type: ignore
-        except Exception as e:
+        except Exception:
             return None
 
     def find_users_by_name(
@@ -264,11 +261,7 @@ class Admin(DriveBase):
         Returns:
             User: The restored user object
         """
-        return self.execute(
-            self.users.undelete(
-                userKey=user_key, body={"orgUnitPath": org_unit_path}, **kwargs
-            )
-        )  # type: ignore
+        return self.execute(self.users.undelete(userKey=user_key, body={"orgUnitPath": org_unit_path}, **kwargs))  # type: ignore
 
     def suspend_user(
         self,
@@ -284,9 +277,7 @@ class Admin(DriveBase):
         Returns:
             User: The updated user object
         """
-        return self.update_user(
-            user_key=user_key, updates={"suspended": True}, **kwargs
-        )
+        return self.update_user(user_key=user_key, updates={"suspended": True}, **kwargs)
 
     def unsuspend_user(
         self,
@@ -302,9 +293,7 @@ class Admin(DriveBase):
         Returns:
             User: The updated user object
         """
-        return self.update_user(
-            user_key=user_key, updates={"suspended": False}, **kwargs
-        )
+        return self.update_user(user_key=user_key, updates={"suspended": False}, **kwargs)
 
     def update_password(
         self,

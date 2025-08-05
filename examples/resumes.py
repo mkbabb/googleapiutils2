@@ -71,9 +71,7 @@ def parse_name(file) -> str:
 
 
 # Links to the resumes folder and candidates sheet
-resumes_folder = (
-    "https://drive.google.com/drive/u/1/folders/1LlqDKpjpALra1KXuo2IMSm72g3-YhTAZ"
-)
+resumes_folder = "https://drive.google.com/drive/u/1/folders/1LlqDKpjpALra1KXuo2IMSm72g3-YhTAZ"
 candidates_sheet = "https://docs.google.com/spreadsheets/u/1/d/1yCYmezEngDMm6z7pSkXxg7355K0Zl4_ANoUA8ghxKqY/edit?usp=drive_web&ouid=115445544450678250296"
 
 # Get candidate details from Sheets

@@ -22,10 +22,7 @@ Sheet1 = SheetsValueRange(sheets, SHEET_URL, sheet_name="Sheet6")
 
 row_count = 10000
 col_count = 100
-rows = [
-    {f"Column {j}": f"{i}__{random_string(10)}__{i}" for j in range(col_count)}
-    for i in range(row_count)
-]
+rows = [{f"Column {j}": f"{i}__{random_string(10)}__{i}" for j in range(col_count)} for i in range(row_count)]
 
 
 sheets.reset_sheet(SHEET_URL, Sheet1.sheet_name)

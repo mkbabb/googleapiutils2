@@ -4,7 +4,8 @@ import atexit
 import itertools
 import operator
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Callable, DefaultDict, Generator, Hashable, List
+from collections.abc import Callable, Generator, Hashable
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from cachetools import cachedmethod
@@ -60,20 +61,16 @@ if TYPE_CHECKING:
         CellFormat,
         ClearValuesResponse,
         Color,
-        ColorStyle,
         CopySheetToAnotherSpreadsheetRequest,
         DeleteSheetRequest,
         NumberFormat,
         Padding,
         Request,
-        RowData,
         Sheet,
         SheetProperties,
         SheetsResource,
         Spreadsheet,
-        SpreadsheetProperties,
         TextFormat,
-        UpdateDimensionPropertiesRequest,
         UpdateValuesResponse,
         ValueRange,
     )
@@ -96,20 +93,14 @@ class Sheets(DriveBase):
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
-        super().__init__(
-            creds=creds, execute_time=execute_time, throttle_time=throttle_time
-        )
+        super().__init__(creds=creds, execute_time=execute_time, throttle_time=throttle_time)
 
         self.service: SheetsResource = discovery.build(  # type: ignore
             "sheets", VERSION, credentials=self.creds
         )
-        self.spreadsheets: SheetsResource.SpreadsheetsResource = (
-            self.service.spreadsheets()
-        )
+        self.spreadsheets: SheetsResource.SpreadsheetsResource = self.service.spreadsheets()
 
-        self._batched_data: DefaultDict[str, dict[str | Any, SheetsValues]] = (
-            defaultdict(dict)
-        )
+        self._batched_data: defaultdict[str, dict[str | Any, SheetsValues]] = defaultdict(dict)
 
         self._batch_update_throttler = Throttler(throttle_time)
 
@@ -122,9 +113,7 @@ class Sheets(DriveBase):
         name: str | None = None,
         sheet_id: int | None = None,
     ):
-        sheet_id = self._get_sheet_id(
-            spreadsheet_id, sheet_name=name, sheet_id=sheet_id
-        )
+        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=name, sheet_id=sheet_id)
 
         key = (cache_key, spreadsheet_id, name)
 
@@ -141,9 +130,7 @@ class Sheets(DriveBase):
         name: str | None = None,
         sheet_id: int | None = None,
     ):
-        sheet_id = self._get_sheet_id(
-            spreadsheet_id, sheet_name=name, sheet_id=sheet_id
-        )
+        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=name, sheet_id=sheet_id)
 
         key = (cache_key, spreadsheet_id, name)
 
@@ -165,9 +152,7 @@ class Sheets(DriveBase):
             **kwargs: Additional arguments to pass to self.sheets.batchUpdate.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        request = self.spreadsheets.batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body, **kwargs
-        )
+        request = self.spreadsheets.batchUpdate(spreadsheetId=spreadsheet_id, body=body, **kwargs)
         return self.execute(request)  # type: ignore
 
     def create(
@@ -212,9 +197,7 @@ class Sheets(DriveBase):
             sheet_id=from_sheet_id,
         )
 
-        body: CopySheetToAnotherSpreadsheetRequest = {
-            "destinationSpreadsheetId": to_spreadsheet_id
-        }
+        body: CopySheetToAnotherSpreadsheetRequest = {"destinationSpreadsheetId": to_spreadsheet_id}
 
         return self.execute(
             self.spreadsheets.sheets().copyTo(  # type: ignore
@@ -228,16 +211,12 @@ class Sheets(DriveBase):
     def header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
-        return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get(
-            "values", [[]]
-        )[0]
+        return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get("values", [[]])[0]
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("shape"))
     def shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        properties = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)[
-            "properties"
-        ]
+        properties = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)["properties"]
         shape = (
             properties["gridProperties"]["rowCount"],
             properties["gridProperties"]["columnCount"],
@@ -300,11 +279,7 @@ class Sheets(DriveBase):
             raise ValueError("Either the name or the ID of the sheet must be provided.")
 
         def inner():
-            t_name = (
-                sheet_name.strip("'")
-                if sheet_name.startswith("'") and sheet_name.endswith("'")
-                else sheet_name
-            )
+            t_name = sheet_name.strip("'") if sheet_name.startswith("'") and sheet_name.endswith("'") else sheet_name
             spreadsheet = self.get_spreadsheet(spreadsheet_id)
 
             for sheet in spreadsheet["sheets"]:
@@ -371,9 +346,7 @@ class Sheets(DriveBase):
             include_grid_data=include_grid_data,
             range_names=range_names,
         )
-        sheet_id = self._get_sheet_id(
-            spreadsheet_id, sheet_name=sheet_name, sheet_id=sheet_id
-        )
+        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=sheet_name, sheet_id=sheet_id)
 
         for sheet in spreadsheet["sheets"]:
             if sheet["properties"]["sheetId"] == sheet_id:
@@ -397,9 +370,7 @@ class Sheets(DriveBase):
             sheet_id (int, optional): The ID of the sheet to rename. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
-        sheet_id = self._get_sheet_id(
-            spreadsheet_id, sheet_name=old_sheet_name, sheet_id=sheet_id
-        )
+        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=old_sheet_name, sheet_id=sheet_id)
 
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
@@ -437,9 +408,7 @@ class Sheets(DriveBase):
         if isinstance(sheet_names, str):
             sheet_names = [sheet_names]
         sheet_names = [
-            name
-            for name in sheet_names
-            if not ignore_existing or not self.has(spreadsheet_id, sheet_name=name)
+            name for name in sheet_names if not ignore_existing or not self.has(spreadsheet_id, sheet_name=name)
         ]
 
         if len(sheet_names) == 0:
@@ -493,9 +462,7 @@ class Sheets(DriveBase):
         if isinstance(sheet_names, str):
             sheet_names = [sheet_names]
         sheet_names = [
-            name
-            for name in sheet_names
-            if not ignore_not_existing or self.has(spreadsheet_id, sheet_name=name)
+            name for name in sheet_names if not ignore_not_existing or self.has(spreadsheet_id, sheet_name=name)
         ]
 
         if len(sheet_names) == 0:
@@ -570,9 +537,7 @@ class Sheets(DriveBase):
             range_name (SheetsRange, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
             value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
         """
-        return self.values(
-            spreadsheet_id, range_name, value_render_option, **kwargs
-        ).get("values", [[]])[0][0]
+        return self.values(spreadsheet_id, range_name, value_render_option, **kwargs).get("values", [[]])[0][0]
 
     @staticmethod
     def _add_dupe_suffix(df: pd.DataFrame, suffix: str = DUPE_SUFFIX):
@@ -667,9 +632,7 @@ class Sheets(DriveBase):
             else:
                 # ensure the header is padded with empty strings to match the current data
                 if len(header) < current_df.shape[1]:
-                    header = header.append(
-                        pd.Index([''] * (current_df.shape[1] - len(header)))
-                    )
+                    header = header.append(pd.Index([""] * (current_df.shape[1] - len(header))))
                     current_df.columns = header
                 # ensure the current data is padded with nans to match the header
                 elif len(header) > current_df.shape[1]:
@@ -711,7 +674,7 @@ class Sheets(DriveBase):
         for col in header:
             # If col doesn't exist in either df, create blank column
             if col not in current_df.columns and col not in new_df.columns:
-                new_df[col] = ''
+                new_df[col] = ""
                 continue
 
             # Skip if col already exists in new_df
@@ -725,9 +688,7 @@ class Sheets(DriveBase):
         current_df = current_df.reindex(columns=header)
 
         # Strip dupe suffixes at the end
-        new_df.columns = new_df.columns.str.replace(
-            fr'{DUPE_SUFFIX}\d+', '', regex=True
-        )
+        new_df.columns = new_df.columns.str.replace(rf"{DUPE_SUFFIX}\d+", "", regex=True)
         current_df.columns = new_df.columns
 
         # Convert to list format, replacing None/NaN with empty string
@@ -802,7 +763,7 @@ class Sheets(DriveBase):
 
         return fits, needed_shape
 
-    def _ensure_sheet_shape(self, spreadsheet_id: str, range_names: List[SheetsRange]):
+    def _ensure_sheet_shape(self, spreadsheet_id: str, range_names: list[SheetsRange]):
         """For a given sheet, ensure that every range is within the sheet's size.
         If it's not, resize the sheet to fit the ranges.
 
@@ -818,14 +779,8 @@ class Sheets(DriveBase):
         # Ensure each sheet exists:
         self.add(spreadsheet_id, sheet_names=sheet_names)  # type: ignore
 
-        shapes = {
-            sheet_name: self.shape(spreadsheet_id, sheet_name)
-            for sheet_name in sheet_names
-        }
-        sheet_slices = [
-            sheet_slice.with_shape(shapes[sheet_slice.sheet_name])
-            for sheet_slice in sheet_slices
-        ]
+        shapes = {sheet_name: self.shape(spreadsheet_id, sheet_name) for sheet_name in sheet_names}
+        sheet_slices = [sheet_slice.with_shape(shapes[sheet_slice.sheet_name]) for sheet_slice in sheet_slices]
 
         def resize_sheet(
             sheet_slice: SheetSliceT,
@@ -860,7 +815,6 @@ class Sheets(DriveBase):
         rows: int,
         pred: Callable[[int, int | None], bool],
     ) -> Generator[tuple[int, SheetSliceT], None, None]:
-
         sheet_slice = to_sheet_slice(range_name)
 
         start_row = sheet_slice.rows.start
@@ -1006,9 +960,7 @@ class Sheets(DriveBase):
         if not processed_values or processed_values is None:
             return None
 
-        sheet_slice = sheet_slice.with_shape(
-            (len(processed_values), len(processed_values[0]))
-        )
+        sheet_slice = sheet_slice.with_shape((len(processed_values), len(processed_values[0])))
         # Estimate total size
         total_size = sum(self._get_row_size(row) for row in processed_values)
 
@@ -1095,9 +1047,7 @@ class Sheets(DriveBase):
         values = values if values is not None else [[]]
 
         if ensure_shape:
-            self._ensure_sheet_shape(
-                spreadsheet_id=spreadsheet_id, range_names=[range_name]
-            )
+            self._ensure_sheet_shape(spreadsheet_id=spreadsheet_id, range_names=[range_name])
 
         return self._update_chunked(
             spreadsheet_id=spreadsheet_id,
@@ -1243,9 +1193,7 @@ class Sheets(DriveBase):
         if data is not None:
             self._batched_data[spreadsheet_id] |= data
 
-        if len(batched_data) >= batch_size and not (
-            self._batch_update_throttler.dt() > 0
-        ):
+        if len(batched_data) >= batch_size and not (self._batch_update_throttler.dt() > 0):
             self._batch_update(
                 spreadsheet_id=spreadsheet_id,
                 data=self._batched_data[spreadsheet_id],
@@ -1326,9 +1274,7 @@ class Sheets(DriveBase):
         if body["values"] is None:
             return None
 
-        sheet_slice = sheet_slice.with_shape(
-            (len(body["values"]), len(body["values"][0]))
-        )
+        sheet_slice = sheet_slice.with_shape((len(body["values"]), len(body["values"][0])))
 
         request = self.spreadsheets.values().append(
             spreadsheetId=spreadsheet_id,
@@ -1387,9 +1333,7 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
 
-        request = self.spreadsheets.values().clear(
-            spreadsheetId=spreadsheet_id, range=str(sheet_slice)
-        )
+        request = self.spreadsheets.values().clear(spreadsheetId=spreadsheet_id, range=str(sheet_slice))
 
         return self.execute(request)  # type: ignore
 
@@ -1412,9 +1356,7 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
-        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"][
-            "sheetId"
-        ]
+        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"]["sheetId"]
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
@@ -1451,9 +1393,7 @@ class Sheets(DriveBase):
         sheet_slice = to_sheet_slice(sheet_name)
         sheet_name = sheet_slice.sheet_name
 
-        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"][
-            "sheetId"
-        ]
+        sheet_id = self.get(spreadsheet_id, sheet_name=sheet_name)["properties"]["sheetId"]
         body: BatchUpdateSpreadsheetRequest = {
             "requests": [
                 {
@@ -1497,12 +1437,8 @@ class Sheets(DriveBase):
 
         header_slice = SheetSlice[sheet_name, 1, ...]
 
-        header = self.values(
-            spreadsheet_id=spreadsheet_id, range_name=header_slice
-        ).get("values", [])
-        header_fmt = self.get_format(
-            spreadsheet_id=spreadsheet_id, range_name=header_slice
-        )
+        header = self.values(spreadsheet_id=spreadsheet_id, range_name=header_slice).get("values", [])
+        header_fmt = self.get_format(spreadsheet_id=spreadsheet_id, range_name=header_slice)
 
         self.clear(
             spreadsheet_id=spreadsheet_id,
@@ -1512,9 +1448,7 @@ class Sheets(DriveBase):
         # reset the sheet to the default shape
         if resize:
             cols = (
-                max(len(header), DEFAULT_SHEET_SHAPE[1])
-                if len(header) and preserve_header
-                else DEFAULT_SHEET_SHAPE[1]
+                max(len(header), DEFAULT_SHEET_SHAPE[1]) if len(header) and preserve_header else DEFAULT_SHEET_SHAPE[1]
             )
 
             self.resize(
@@ -1549,9 +1483,7 @@ class Sheets(DriveBase):
                 update=True,
             )
         else:
-            self._reset_sheet_cache(
-                cache_key="header", spreadsheet_id=spreadsheet_id, name=sheet_name
-            )
+            self._reset_sheet_cache(cache_key="header", spreadsheet_id=spreadsheet_id, name=sheet_name)
 
     @staticmethod
     def _create_format_body(
@@ -1628,16 +1560,12 @@ class Sheets(DriveBase):
         if font_family is not None:
             text_format["fontFamily"] = font_family
         if text_color is not None:
-            text_format["foregroundColor"] = (
-                hex_to_rgb(text_color) if isinstance(text_color, str) else text_color
-            )
+            text_format["foregroundColor"] = hex_to_rgb(text_color) if isinstance(text_color, str) else text_color
 
         cell_format_dict: CellFormat = {}
         if background_color is not None:
             cell_format_dict["backgroundColor"] = (
-                hex_to_rgb(background_color)
-                if isinstance(background_color, str)
-                else background_color
+                hex_to_rgb(background_color) if isinstance(background_color, str) else background_color
             )
 
         if padding is not None:
@@ -1749,7 +1677,9 @@ class Sheets(DriveBase):
                     and len(sheets_format.cell_formats)
                     and len(sheets_format.cell_formats[0])
                 )
-                else cell_format if cell_format is not None else None
+                else cell_format
+                if cell_format is not None
+                else None
             ),
         )
 
@@ -1831,19 +1761,13 @@ class Sheets(DriveBase):
         for range_name in range_names:
             sheet_slice = to_sheet_slice(range_name)
 
-            sheet_id = self.id(
-                spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name
-            )
+            sheet_id = self.id(spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name)
 
-            shape = self.shape(
-                spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name
-            )
+            shape = self.shape(spreadsheet_id=spreadsheet_id, sheet_name=sheet_slice.sheet_name)
 
             sheet_slice = sheet_slice.with_shape(shape)
 
-            requests.extend(
-                resize_and_create_request(sheet_id=sheet_id, sheet_slice=sheet_slice)
-            )
+            requests.extend(resize_and_create_request(sheet_id=sheet_id, sheet_slice=sheet_slice))
 
         body: BatchUpdateSpreadsheetRequest = {"requests": requests}
 
@@ -1859,9 +1783,7 @@ class Sheets(DriveBase):
         if "effectiveFormat" not in cell_data or "userEnteredFormat" not in cell_data:
             return None
 
-        cell_format: CellFormat = cell_data.get(
-            "effectiveFormat", cell_data.get("userEnteredFormat")
-        )  # type: ignore
+        cell_format: CellFormat = cell_data.get("effectiveFormat", cell_data.get("userEnteredFormat"))  # type: ignore
 
         text_format: TextFormat = cell_format.get("textFormat", {})
         text_color: Color = text_format.get("foregroundColor", {})
@@ -1883,33 +1805,19 @@ class Sheets(DriveBase):
             background_color=cell_format.get("backgroundColor", {}),
             padding=cell_format.get("padding"),
             horizontal_alignment=(
-                HorizontalAlignment(horizontal_alignment)
-                if horizontal_alignment is not None
-                else None
+                HorizontalAlignment(horizontal_alignment) if horizontal_alignment is not None else None
             ),
-            vertical_alignment=(
-                VerticalAlignment(vertical_alignment)
-                if vertical_alignment is not None
-                else None
-            ),
-            wrap_strategy=(
-                WrapStrategy(wrap_strategy) if wrap_strategy is not None else None
-            ),
-            text_direction=(
-                TextDirection(text_direction) if text_direction is not None else None
-            ),
+            vertical_alignment=(VerticalAlignment(vertical_alignment) if vertical_alignment is not None else None),
+            wrap_strategy=(WrapStrategy(wrap_strategy) if wrap_strategy is not None else None),
+            text_direction=(TextDirection(text_direction) if text_direction is not None else None),
             hyperlink_display_type=(
-                HyperlinkDisplayType(hyperlink_display_type)
-                if hyperlink_display_type is not None
-                else None
+                HyperlinkDisplayType(hyperlink_display_type) if hyperlink_display_type is not None else None
             ),
         )
 
         return cell_format
 
-    def get_format(
-        self, spreadsheet_id: str, range_name: SheetsRange
-    ) -> list[SheetsFormat]:
+    def get_format(self, spreadsheet_id: str, range_name: SheetsRange) -> list[SheetsFormat]:
         """Get the formatting of the **first** cell of a range of cells.
 
         A SheetsFormat object contains formatting and dimension information:
@@ -1962,9 +1870,7 @@ class Sheets(DriveBase):
                 row_formats: list[CellFormat] = []
 
                 for value in row["values"]:
-                    if (
-                        t_cell_format := self._destructure_row_format_data(value)
-                    ) is not None:
+                    if (t_cell_format := self._destructure_row_format_data(value)) is not None:
                         row_formats.append(t_cell_format)
 
                 cell_formats.append(row_formats)
@@ -2041,17 +1947,13 @@ class Sheets(DriveBase):
         # Set object columns to pd.StringDtype:
         df = df.astype({col: pd.StringDtype() for col in df.select_dtypes("object")})
         # Replace empty strings with pd.NA; infer the data types
-        df.select_dtypes(include=["object", "string"]).replace(
-            r"^\s*$", pd.NA, regex=True, inplace=True
-        )
+        df.select_dtypes(include=["object", "string"]).replace(r"^\s*$", pd.NA, regex=True, inplace=True)
         df = convert_dtypes(df)
 
         return df
 
     @staticmethod
-    def from_frame(
-        df: pd.DataFrame, as_dict: bool = True
-    ) -> list[list[Any]] | list[dict[Hashable, Any]]:
+    def from_frame(df: pd.DataFrame, as_dict: bool = True) -> list[list[Any]] | list[dict[Hashable, Any]]:
         """Converts a DataFrame to a list of lists to be used with sheets.update() & c.
         If `as_dict` is True, the list of lists will be converted to a list of dicts,
         which is useful for aligning the columns with the header.
@@ -2088,11 +1990,7 @@ class Sheets(DriveBase):
         """
         sheet_id = sheet["properties"]["sheetId"]
         grid_properties = sheet["properties"]["gridProperties"]
-        count = (
-            grid_properties["columnCount"]
-            if dimension == SheetsDimension.columns
-            else grid_properties["rowCount"]
-        )
+        count = grid_properties["columnCount"] if dimension == SheetsDimension.columns else grid_properties["rowCount"]
 
         # Helper to create dimension range
         def make_range(start: int, end: int | None = None) -> dict:
@@ -2130,9 +2028,7 @@ class Sheets(DriveBase):
                 j = i + 1
                 while j < min(len(sizes), count) and sizes[j] is None:
                     j += 1
-                requests.append(
-                    {"autoResizeDimensions": {"dimensions": make_range(i, j)}}
-                )
+                requests.append({"autoResizeDimensions": {"dimensions": make_range(i, j)}})
                 i = j
             else:
                 requests.append(

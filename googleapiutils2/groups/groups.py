@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import operator
-from typing import TYPE_CHECKING, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from cachetools import cachedmethod
 from google.oauth2.credentials import Credentials
@@ -19,7 +20,6 @@ from googleapiutils2.utils import (
 from ..drive.misc import create_listing_fields, list_drive_items
 
 if TYPE_CHECKING:
-    pass
     from googleapiclient._apis.admin.directory_v1 import (
         DirectoryResource,
         Group,
@@ -44,13 +44,9 @@ class Groups(DriveBase):
         execute_time: float = EXECUTE_TIME,
         throttle_time: float = THROTTLE_TIME,
     ):
-        super().__init__(
-            creds=creds, execute_time=execute_time, throttle_time=throttle_time
-        )
+        super().__init__(creds=creds, execute_time=execute_time, throttle_time=throttle_time)
 
-        self.service: DirectoryResource = discovery.build(
-            "admin", VERSION, credentials=self.creds
-        )  # type: ignore
+        self.service: DirectoryResource = discovery.build("admin", VERSION, credentials=self.creds)  # type: ignore
         self.groups = self.service.groups()
 
         self.members = self.service.members()
@@ -61,7 +57,6 @@ class Groups(DriveBase):
         group_id: str,
         fields: str = DEFAULT_FIELDS,
     ) -> Group:
-
         return self.execute(self.groups.get(groupKey=group_id, fields=fields))  # type: ignore
 
     def list(
@@ -183,9 +178,7 @@ class Groups(DriveBase):
         member_key: str | None = None,
         member: Member | None = None,
     ) -> Member:
-        member = self.members_get(
-            group_key=group_key, member_key=member_key, member=member
-        )
+        member = self.members_get(group_key=group_key, member_key=member_key, member=member)
         member_key = member.get("id")
 
         return self.execute(
@@ -201,9 +194,7 @@ class Groups(DriveBase):
         member_key: str | None = None,
         member: Member | None = None,
     ) -> Member:
-        member = self.members_get(
-            group_key=group_key, member_key=member_key, member=member
-        )
+        member = self.members_get(group_key=group_key, member_key=member_key, member=member)
         member_key = member.get("id")
 
         return self.execute(
@@ -220,9 +211,7 @@ class Groups(DriveBase):
         member_key: str | None = None,
         member: Member | None = None,
     ) -> None:
-        member = self.members_get(
-            group_key=group_key, member_key=member_key, member=member
-        )
+        member = self.members_get(group_key=group_key, member_key=member_key, member=member)
         member_key = member.get("id")
 
         self.execute(

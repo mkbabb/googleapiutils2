@@ -88,9 +88,7 @@ sheets.batch_update(
         Sheet1[6, ...]: [["Gay vibes", "wow"]],
         "7:7": [["Gayer vibes", "wower"]],
         Sheet1[-90, 1:3]: [["I'm down here", "wow I'm here"]],
-        Sheet1[8, ...]: [
-            {"Heyy": "99", "These Vibes...": "Ok vibes...", "Heyyyyyy90": "Ok"}
-        ],
+        Sheet1[8, ...]: [{"Heyy": "99", "These Vibes...": "Ok vibes...", "Heyyyyyy90": "Ok"}],
     },
     align_columns=True,
 )
@@ -145,9 +143,7 @@ sheets.format(
     },
 )
 
-sheets_format_list = sheets.get_format(
-    spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...]
-)
+sheets_format_list = sheets.get_format(spreadsheet_id=SHEET_URL, range_name=Sheet1[1, ...])
 sheets_format = sheets_format_list[0]
 
 

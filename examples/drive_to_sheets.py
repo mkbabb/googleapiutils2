@@ -13,17 +13,13 @@ def generate_random_csv(rows: int, cols: int) -> pd.DataFrame:
 
 drive = Drive()
 
-folder_id = (
-    "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
-)
+folder_id = "https://drive.google.com/drive/u/0/folders/1lWgLNquLCwKjW4lenekduwDZ3J7aqCZJ"
 
 
 name = "random.csv"
 
 
-with tempfile.NamedTemporaryFile(
-    delete=False, suffix=".csv", mode="w", newline=""
-) as tmpfile:
+with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", newline="") as tmpfile:
     rows, cols = 100, 100
     df = generate_random_csv(rows, cols)
     df.to_csv(tmpfile.name, index=False)

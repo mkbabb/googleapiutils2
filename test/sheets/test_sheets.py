@@ -41,9 +41,7 @@ def test_create_copy_to(test_sheet: File, sheets: Sheets, drive: Drive):
 
     old_df = sheets.to_frame(sheets.values(sheet_id))
 
-    new_df = sheets.to_frame(
-        sheets.values(new_sheet["spreadsheetId"], copied_sheet["title"])
-    )
+    new_df = sheets.to_frame(sheets.values(new_sheet["spreadsheetId"], copied_sheet["title"]))
 
     assert old_df.equals(new_df)
 
