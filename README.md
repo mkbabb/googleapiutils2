@@ -18,13 +18,17 @@ Several dependencies are needed, namely the aforesaid Google Python API, but als
 Google's oauth library, and `requests`. Pre-bundled for ease of use is the fairly
 monolithic `google-api-stubs`, which greatly improves the usage experience.
 
-### via [`poetry`](https://python-poetry.org/docs/)
+### via [`uv`](https://docs.astral.sh/uv/)
 
-Install poetry, then run
+Install uv, then run
 
-> poetry add googleapiutils2
+> uv add googleapiutils2
 
 And you're done.
+
+### via [`pip`](https://pip.pypa.io/en/stable/)
+
+> pip install googleapiutils2
 
 ## Overview 📖
 
