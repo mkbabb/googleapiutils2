@@ -1,6 +1,6 @@
 [project]
 name = "googleapiutils2"
-version = "0.19.1"
+version = "0.19.2"
 description = "Wrapper for Google's Python API"
 authors = [
     { name = "Mike Babb", email = "mike7400@gmail.com" }
@@ -73,6 +73,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build]
 include = [
     "googleapiutils2/**/*.py",
+    "googleapiutils2/py.typed",
 ]
 
 [tool.ruff]
