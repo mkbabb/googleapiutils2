@@ -59,16 +59,42 @@ def html_to_markdown(html_content: str) -> str:
     Returns:
         Markdown formatted string
     """
-    # Use markdownify with sensible defaults for Google Docs
+    # Clean up CSS styles if present (common in Google Docs exports)
+    if html_content.strip().startswith('.'):
+        # Find the end of CSS styles (usually before the first HTML tag or heading)
+        lines = html_content.split('\n')
+        content_start = 0
+        for i, line in enumerate(lines):
+            if (
+                line.strip()
+                and not line.strip().startswith('.')
+                and not line.strip().startswith('ul.')
+                and not line.strip().startswith('ol.')
+            ):
+                content_start = i
+                break
+        html_content = '\n'.join(lines[content_start:])
+
+    # Use markdownify with better preservation of formatting
     markdown_content = markdownify(
-        html_content, heading_style="ATX", bullets="*", strip=["img", "script", "style"], default_title=True
+        html_content,
+        heading_style="ATX",
+        bullets="*",
+        strip=["img", "script", "style"],
+        convert=["b", "strong", "i", "em", "u"],  # Explicitly convert formatting tags
+        default_title=True,
+        escape_misc=False,  # Don't escape special characters
+        escape_underscores=False,  # Preserve underscores for italics
     )
+
     return markdown_content.strip()
 
 
 def export_mime_type(
     mime_type: GoogleMimeTypes,
-    conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    conversion_map: dict[
+        GoogleMimeTypes, GoogleMimeTypes
+    ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
 ) -> tuple[GoogleMimeTypes, str]:
     """Get the MIME type to export a file to and the corresponding file extension."""
     t_mime_type = conversion_map.get(mime_type)
@@ -356,7 +382,9 @@ def get_oauth2_creds(
                 creds.refresh(Request())
 
         elif creds is None:
-            flow = InstalledAppFlow.from_client_config(client_config, scopes=scopes, *args, **kwargs)
+            flow = InstalledAppFlow.from_client_config(
+                client_config, scopes=scopes, *args, **kwargs
+            )
             creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))
@@ -396,7 +424,11 @@ def get_id_from_url(url: str) -> str:
     path = url_obj.path
     paths = path.split("/")
 
-    get_adjacent = lambda x: (paths[t_ix] if x in paths and (t_ix := paths.index(x) + 1) < len(paths) else None)
+    get_adjacent = lambda x: (
+        paths[t_ix]
+        if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
+        else None
+    )
 
     id = get_adjacent("folders") or get_adjacent("d")
 
