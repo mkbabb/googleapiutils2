@@ -1,0 +1,79 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    
+    - name: Get current version
+      id: current_version
+      run: |
+        echo "version=$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+    
+    - name: Calculate new version
+      id: new_version
+      run: |
+        current="${{ steps.current_version.outputs.version }}"
+        IFS='.' read -r major minor patch <<< "$current"
+        
+        case "${{ github.event.inputs.version_bump }}" in
+          major)
+            new_version="$((major + 1)).0.0"
+            ;;
+          minor)
+            new_version="$major.$((minor + 1)).0"
+            ;;
+          patch)
+            new_version="$major.$minor.$((patch + 1))"
+            ;;
+        esac
+        
+        echo "version=$new_version" >> $GITHUB_OUTPUT
+    
+    - name: Update version in pyproject.toml
+      run: |
+        sed -i 's/^version = .*/version = "${{ steps.new_version.outputs.version }}"/' pyproject.toml
+    
+    - name: Commit version bump
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add pyproject.toml
+        git commit -m "Bump version to ${{ steps.new_version.outputs.version }}"
+        git push
+    
+    - name: Create Release
+      run: |
+        gh release create v${{ steps.new_version.outputs.version }} \
+          --title "v${{ steps.new_version.outputs.version }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,6 +3,9 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'  # Triggers on tags like v0.18.1, v1.0.0, etc.
   workflow_dispatch:
 
 jobs:
