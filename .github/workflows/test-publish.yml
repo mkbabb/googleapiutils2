@@ -1,10 +1,6 @@
 name: Test Publish to TestPyPI
 
 on:
-  push:
-    branches: [master, main]
-  pull_request:
-    branches: [master, main]
   workflow_dispatch:
 
 jobs:
