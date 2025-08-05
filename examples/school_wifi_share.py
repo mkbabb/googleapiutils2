@@ -58,7 +58,7 @@ list_func = lambda x: list(drive.list(x, fields="files(name,id)"))
 all_folders = list(chain.from_iterable(list_func(x) for x in chain(shodan_folders, wifi_folders)))
 
 # Iterate through responses and grant permissions
-for n, row in responses_df.iterrows():
+for _n, row in responses_df.iterrows():
     psu_id = row["psu_id"]
     emails = row["emails"]
 

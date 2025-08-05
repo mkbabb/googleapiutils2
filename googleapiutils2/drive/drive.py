@@ -37,7 +37,6 @@ from googleapiutils2.utils import (
     download_large_file,
     export_mime_type,
     guess_mime_type,
-    html_to_markdown,
     mime_type_to_google_mime_type,
     parse_file_id,
     q_escape,
@@ -70,7 +69,9 @@ class Drive(DriveBase):
         throttle_time: float = THROTTLE_TIME,
         team_drives: bool = True,
     ):
-        super().__init__(creds=creds, execute_time=execute_time, throttle_time=throttle_time)
+        super().__init__(
+            creds=creds, execute_time=execute_time, throttle_time=throttle_time
+        )
 
         self.service: DriveResource = discovery.build("drive", VERSION, credentials=self.creds)  # type: ignore
         self.files: DriveResource.FilesResource = self.service.files()
@@ -145,7 +146,9 @@ class Drive(DriveBase):
             None,
         )
         if file is None:
-            raise FileNotFoundError(f"File with name {name} and parents {parents} not found.")
+            raise FileNotFoundError(
+                f"File with name {name} and parents {parents} not found."
+            )
 
         return file
 
@@ -235,7 +238,9 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[
+            GoogleMimeTypes, GoogleMimeTypes
+        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ) -> Path:
         """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
 
@@ -260,9 +265,13 @@ class Drive(DriveBase):
             if file.get("md5Checksum") == md5:
                 return filepath
 
-        mime_type = mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
+        mime_type = (
+            mime_type if mime_type is not None else GoogleMimeTypes(file["mimeType"])
+        )
         if recursive and mime_type == GoogleMimeTypes.folder:
-            return self._download_nested_filepath(filepath=filepath, file_id=file_id, overwrite=overwrite)
+            return self._download_nested_filepath(
+                filepath=filepath, file_id=file_id, overwrite=overwrite
+            )
 
         mime_type, ext = export_mime_type(mime_type, conversion_map)
 
@@ -294,7 +303,9 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[
+            GoogleMimeTypes, GoogleMimeTypes
+        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ):
         with tempfile.NamedTemporaryFile() as temp:
             out = self._download_file(
@@ -315,7 +326,9 @@ class Drive(DriveBase):
         mime_type: GoogleMimeTypes | None = None,
         recursive: bool = False,
         overwrite: bool = True,
-        conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+        conversion_map: dict[
+            GoogleMimeTypes, GoogleMimeTypes
+        ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ):
         """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
 
@@ -328,7 +341,7 @@ class Drive(DriveBase):
         """
 
         def download_file_or_data():
-            if isinstance(filepath, (str, Path)):
+            if isinstance(filepath, str | Path):
                 return self._download_file(
                     file_id=file_id,
                     filepath=filepath,
@@ -347,25 +360,12 @@ class Drive(DriveBase):
                     conversion_map=conversion_map,
                 )
             else:
-                raise TypeError(f"Expected a filepath or BytesIO, got {type(filepath)} instead.")
+                raise TypeError(
+                    f"Expected a filepath or BytesIO, got {type(filepath)} instead."
+                )
 
         downloaded_filepath = download_file_or_data()
-
-        if mime_type == GoogleMimeTypes.md:
-            # If the mimetype is, we've downloaded it as HTML and need to convert it to markdown:
-            md_filepath = downloaded_filepath.with_suffix(".md")
-
-            md = html_to_markdown(
-                downloaded_filepath.read_text(encoding="utf-8"),
-            )
-
-            md_filepath.write_text(md, encoding="utf-8")
-
-            downloaded_filepath.unlink()
-
-            return md_filepath
-        else:
-            return downloaded_filepath
+        return downloaded_filepath
 
     def copy(
         self,
@@ -399,7 +399,9 @@ class Drive(DriveBase):
         return self.execute(self.files.copy(**kwargs))  # type: ignore
 
     @staticmethod
-    def _team_drives_payload(team_drives: bool, kind: Literal["list", "update"] = "list") -> dict[str, Any]:
+    def _team_drives_payload(
+        team_drives: bool, kind: Literal["list", "update"] = "list"
+    ) -> dict[str, Any]:
         if not team_drives:
             return {}
 
@@ -473,7 +475,9 @@ class Drive(DriveBase):
         queries: list[str] = []
 
         if len(parents):
-            parents_list = " or ".join(f"{q_escape(parent)} in parents" for parent in parents)
+            parents_list = " or ".join(
+                f"{q_escape(parent)} in parents" for parent in parents
+            )
             queries.append(parents_list)
 
         if name is not None:
@@ -576,7 +580,11 @@ class Drive(DriveBase):
                 filepath=filepath, parents=parents, owners=owners, get_extant=get_extant
             )
 
-        if get_extant and (file := self.get_if_exists(name=filepath.name, parents=parents)) is not None:
+        if (
+            get_extant
+            and (file := self.get_if_exists(name=filepath.name, parents=parents))
+            is not None
+        ):
             return file
 
         kwargs |= {
@@ -676,6 +684,10 @@ class Drive(DriveBase):
 
         file = self.get_if_exists(name=name, parents=parents)
 
+        # Try to get the file by its ID
+        if file is None:
+            file = self.get_if_exists(file_id=name)
+
         # If the filepath exists, check if the file has the same md5 hash:
         if file is not None:
             md5 = hashlib.md5(filepath.read_bytes()).hexdigest()
@@ -683,12 +695,13 @@ class Drive(DriveBase):
                 return file
 
         if from_mime_type is None:
-            if file is not None:
-                from_mime_type = mime_type_to_google_mime_type(file["mimeType"])
-            else:
-                from_mime_type = guess_mime_type(filepath=filepath)
+            from_mime_type = guess_mime_type(filepath=filepath)
+        from_mime_type = (
+            from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
+        )
 
-        from_mime_type = from_mime_type if from_mime_type is not None else GoogleMimeTypes.file
+        if to_mime_type is None and file is not None:
+            to_mime_type = mime_type_to_google_mime_type(file["mimeType"])
 
         to_mime_type = to_mime_type if to_mime_type is not None else from_mime_type
 
@@ -744,7 +757,9 @@ class Drive(DriveBase):
         filepath = Path(filepath)
 
         def uploader(mime_type: GoogleMimeTypes):
-            return googleapiclient.http.MediaFileUpload(str(filepath), resumable=True, mimetype=mime_type.value)
+            return googleapiclient.http.MediaFileUpload(
+                str(filepath), resumable=True, mimetype=mime_type.value
+            )
 
         if recursive and filepath.is_dir():
             for file in filepath.glob("*"):
@@ -823,7 +838,9 @@ class Drive(DriveBase):
         with BytesIO(data) as tio:
 
             def uploader(mime_type: GoogleMimeTypes):
-                return googleapiclient.http.MediaIoBaseUpload(tio, resumable=True, mimetype=mime_type.value)
+                return googleapiclient.http.MediaIoBaseUpload(
+                    tio, resumable=True, mimetype=mime_type.value
+                )
 
             return self._upload(
                 uploader=uploader,
@@ -871,7 +888,9 @@ class Drive(DriveBase):
         export_file_type = DataFrameExportFileTypes[to_mime_type.name]
         use_index = df.index.name is not None
 
-        with tempfile.NamedTemporaryFile(suffix=f".{export_file_type.value}") as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            suffix=f".{export_file_type.value}"
+        ) as tmp_file:
             match export_file_type:
                 case DataFrameExportFileTypes.csv:
                     df.to_csv(tmp_file.name, index=use_index)
@@ -922,7 +941,7 @@ class Drive(DriveBase):
             body (File, optional): The body of the file. Defaults to None.
             update (bool, optional): Whether to update the file if it already exists. Defaults to True.
         """
-        if isinstance(filepath, (str, Path)):
+        if isinstance(filepath, str | Path):
             return self._upload_file(
                 filepath=filepath,
                 name=name,
@@ -937,7 +956,9 @@ class Drive(DriveBase):
             )
         elif isinstance(filepath, pd.DataFrame):
             if name is None or to_mime_type is None:
-                raise ValueError("If uploading a dataframe, both name and mime_type must be specified.")
+                raise ValueError(
+                    "If uploading a dataframe, both name and mime_type must be specified."
+                )
             return self._upload_frame(
                 df=filepath,
                 name=name,
@@ -951,7 +972,9 @@ class Drive(DriveBase):
             )
         elif isinstance(filepath, bytes):
             if name is None or to_mime_type is None:
-                raise ValueError("If uploading bytes, both name and mime_type must be specified.")
+                raise ValueError(
+                    "If uploading bytes, both name and mime_type must be specified."
+                )
             return self._upload_data(
                 data=filepath,
                 name=name,
@@ -1001,7 +1024,9 @@ class Drive(DriveBase):
         """
         filepath = Path(filepath)
         folder_id = parse_file_id(folder_id)
-        self.upload(filepath=filepath, parents=folder_id, recursive=recursive, update=True)
+        self.upload(
+            filepath=filepath, parents=folder_id, recursive=recursive, update=True
+        )
         self.download(
             filepath=filepath,
             file_id=folder_id,
@@ -1037,7 +1062,9 @@ class Permissions:
         file_id = parse_file_id(file_id)
         return self.drive.execute(self.permissions.get(fileId=file_id, permissionId=permission_id, **kwargs))  # type: ignore
 
-    def list(self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any) -> Iterable[Permission]:
+    def list(
+        self, file_id: str, fields: str = DEFAULT_FIELDS, **kwargs: Any
+    ) -> Iterable[Permission]:
         """Lists permissions for a file.
 
         Args:
@@ -1056,7 +1083,9 @@ class Permissions:
         for response in list_drive_items(list_func):
             yield from response.get("permissions", [])  # type: ignore
 
-    def _permission_get_if_exists(self, file_id: str, user_permission: Permission) -> Permission | None:
+    def _permission_get_if_exists(
+        self, file_id: str, user_permission: Permission
+    ) -> Permission | None:
         for p in self.list(file_id):
             if p["emailAddress"].strip().lower() == user_permission["emailAddress"]:
                 return p
@@ -1095,7 +1124,9 @@ class Permissions:
             if permission is not None:
                 user_permission.update(permission)
 
-            if (get_extant or update) and (p := self._permission_get_if_exists(file_id, user_permission)) is not None:
+            if (get_extant or update) and (
+                p := self._permission_get_if_exists(file_id, user_permission)
+            ) is not None:
                 if update:
                     return self.update(
                         file_id=file_id,
@@ -1115,7 +1146,9 @@ class Permissions:
                 )
             )  # type: ignore
 
-        email_addresses = [email_address] if isinstance(email_address, str) else email_address
+        email_addresses = (
+            [email_address] if isinstance(email_address, str) else email_address
+        )
 
         return (
             [_create(email_address) for email_address in email_addresses]
@@ -1157,7 +1190,9 @@ class Permissions:
         permission = self._sanitize_update_permission(permission)
 
         return self.drive.execute(
-            self.permissions.update(fileId=file_id, permissionId=permission_id, body=permission, **kwargs)
+            self.permissions.update(
+                fileId=file_id, permissionId=permission_id, body=permission, **kwargs
+            )
         )  # type: ignore
 
     def delete(self, file_id: str, permission_id: str, **kwargs: Any) -> Permission:

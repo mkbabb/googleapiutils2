@@ -56,7 +56,7 @@ def named_methodkey(name: str):
     """Hash key that ignores the first argument of a method, but is named for the method."""
 
     def _key(self, *args, **kwargs):
-        return tuple([name] + list(args) + list(kwargs.values()))
+        return (name, *list(args), *list(kwargs.values()))
 
     return _key
 

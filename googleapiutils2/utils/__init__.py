@@ -7,7 +7,6 @@ from .drive import (
     export_mime_type,
     get_oauth2_creds,
     guess_mime_type,
-    html_to_markdown,
     mime_type_to_google_mime_type,
     on_http_exception,
     parse_file_id,

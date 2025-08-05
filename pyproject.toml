@@ -1,6 +1,6 @@
 [project]
 name = "googleapiutils2"
-version = "0.19.0"
+version = "0.19.1"
 description = "Wrapper for Google's Python API"
 authors = [
     { name = "Mike Babb", email = "mike7400@gmail.com" }
@@ -40,9 +40,6 @@ dependencies = [
     "pandas>=2.2.3",
     "loguru>=0.7.3",
     "pydantic>=2.11.2",
-    "beautifulsoup4>=4.12.3",
-    "html2text>=2024.2.26",
-    "markdownify>=1.1.0",
 ]
 
 [project.urls]
@@ -65,7 +62,6 @@ dev = [
     "pypdf>=5.9.0",
     "pytest>=8.4.1",
     "ruff>=0.12.7",
-    "types-beautifulsoup4>=4.12.0.20250516",
     "types-cachetools>=6.1.0.20250717",
     "types-requests>=2.32.4.20250611",
 ]

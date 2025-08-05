@@ -277,12 +277,4 @@ class SheetsMonitor(ResourceMonitor):
             return True
 
         # If monitoring a specific range, check range metadata
-        if (
-            self.range_name
-            and current_state.metadata
-            and prev_state.metadata
-            and current_state.metadata != prev_state.metadata
-        ):
-            return True
-
-        return False
+        return bool(self.range_name and current_state.metadata and prev_state.metadata and current_state.metadata != prev_state.metadata)

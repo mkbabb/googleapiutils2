@@ -98,11 +98,11 @@ def get_cache_dir() -> Path:
 
 def normalize_for_hash(obj: Any) -> Any:
     """Normalize data structures for consistent hashing."""
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return [normalize_for_hash(item) for item in obj]
     elif isinstance(obj, dict):
         return {str(key): normalize_for_hash(value) for key, value in sorted(obj.items(), key=lambda x: str(x[0]))}
-    elif isinstance(obj, (set, frozenset)):
+    elif isinstance(obj, set | frozenset):
         return sorted(normalize_for_hash(item) for item in obj)
     elif isinstance(obj, datetime.datetime):
         return obj.isoformat()

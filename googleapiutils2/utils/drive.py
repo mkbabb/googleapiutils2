@@ -27,7 +27,6 @@ from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from loguru import logger
-from markdownify import markdownify  # type: ignore
 
 from googleapiutils2.utils.decorators import retry
 from googleapiutils2.utils.misc import (
@@ -50,44 +49,6 @@ P = ParamSpec("P")
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
 
-def html_to_markdown(html_content: str) -> str:
-    """Convert HTML content to Markdown format.
-
-    Args:
-        html_content: Raw HTML string
-
-    Returns:
-        Markdown formatted string
-    """
-    # Clean up CSS styles if present (common in Google Docs exports)
-    if html_content.strip().startswith('.'):
-        # Find the end of CSS styles (usually before the first HTML tag or heading)
-        lines = html_content.split('\n')
-        content_start = 0
-        for i, line in enumerate(lines):
-            if (
-                line.strip()
-                and not line.strip().startswith('.')
-                and not line.strip().startswith('ul.')
-                and not line.strip().startswith('ol.')
-            ):
-                content_start = i
-                break
-        html_content = '\n'.join(lines[content_start:])
-
-    # Use markdownify with better preservation of formatting
-    markdown_content = markdownify(
-        html_content,
-        heading_style="ATX",
-        bullets="*",
-        strip=["img", "script", "style"],
-        convert=["b", "strong", "i", "em", "u"],  # Explicitly convert formatting tags
-        default_title=True,
-        escape_misc=False,  # Don't escape special characters
-        escape_underscores=False,  # Preserve underscores for italics
-    )
-
-    return markdown_content.strip()
 
 
 def export_mime_type(
@@ -110,7 +71,6 @@ def mime_type_to_google_mime_type(mime_type: str) -> GoogleMimeTypes | None:
     for m in GoogleMimeTypes:
         if m.value == mime_type:
             return m
-
     return None
 
 
@@ -119,7 +79,6 @@ def guess_mime_type(
     filepath: FilePath,
 ) -> GoogleMimeTypes | None:
     mime_type, _ = guess_type(str(filepath))
-
     return mime_type_to_google_mime_type(mime_type)
 
 
@@ -221,7 +180,7 @@ class DriveThread:
 
                     self._worker_func(request)
 
-                    dt = time.perf_counter() - t
+                    time.perf_counter() - t
 
                     # logger.debug(f"Request completed in {dt:.2f} seconds")
 
@@ -323,7 +282,7 @@ def load_client_config(
     # If the client config is None, or it's a filepath that doesn't exist, load the environment variable
     if client_config is None:
         client_config = os.environ.get(CONFIG_ENV_VAR, None)
-    elif isinstance(client_config, (str, Path)):
+    elif isinstance(client_config, str | Path):
         client_config_path = Path(client_config)
 
         if not client_config_path.exists():
@@ -336,7 +295,7 @@ def load_client_config(
 
     if isinstance(client_config, dict):
         return client_config
-    elif isinstance(client_config, (str, Path)):
+    elif isinstance(client_config, str | Path):
         return path_or_str_to_json(client_config)
 
 

@@ -555,7 +555,7 @@ class Sheets(DriveBase):
         new_cols: list = []
         seen: dict = {}
 
-        for i, col in enumerate(cols):
+        for _i, col in enumerate(cols):
             if col in seen:
                 seen[col] += 1
                 new_cols.append(f"{col}{suffix}{seen[col]}")
@@ -774,7 +774,7 @@ class Sheets(DriveBase):
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         sheet_slices = [to_sheet_slice(range_name) for range_name in range_names]
-        sheet_names = set(sheet_slice.sheet_name for sheet_slice in sheet_slices)
+        sheet_names = {sheet_slice.sheet_name for sheet_slice in sheet_slices}
 
         # Ensure each sheet exists:
         self.add(spreadsheet_id, sheet_names=sheet_names)  # type: ignore
@@ -1688,7 +1688,7 @@ class Sheets(DriveBase):
 
             if sheets_format.column_sizes is not None:
                 # if overflow is enabled, don't resize the columns:
-                if not (cell_format.get("wrapStrategy") == WrapStrategy.OVERFLOW_CELL):
+                if cell_format.get("wrapStrategy") != WrapStrategy.OVERFLOW_CELL:
                     self.resize_dimensions(
                         spreadsheet_id=spreadsheet_id,
                         sheet_name=sheet_slice.sheet_name,
@@ -1698,7 +1698,7 @@ class Sheets(DriveBase):
 
             if sheets_format.row_sizes is not None:
                 # if wrapping is enabled, don't resize the rows
-                if not (cell_format.get("wrapStrategy") == WrapStrategy.WRAP):
+                if cell_format.get("wrapStrategy") != WrapStrategy.WRAP:
                     self.resize_dimensions(
                         spreadsheet_id=spreadsheet_id,
                         sheet_name=sheet_slice.sheet_name,
@@ -1940,7 +1940,7 @@ class Sheets(DriveBase):
             convert_dtypes(df)
             return df
 
-        mapper = {i: col for i, col in enumerate(columns)}
+        mapper = dict(enumerate(columns))
         df.rename(columns=mapper, inplace=True)
 
         df = df.convert_dtypes()

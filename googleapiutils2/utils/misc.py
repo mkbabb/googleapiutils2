@@ -172,7 +172,6 @@ DEFAULT_DOWNLOAD_CONVERSION_MAP = {
     GoogleMimeTypes.sheets: GoogleMimeTypes.xlsx,
     GoogleMimeTypes.docs: GoogleMimeTypes.docx,
     GoogleMimeTypes.slides: GoogleMimeTypes.pdf,
-    GoogleMimeTypes.md: GoogleMimeTypes.html,
 }
 
 GOOGLE_MIME_TYPES = [

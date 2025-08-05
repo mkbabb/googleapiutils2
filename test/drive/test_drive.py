@@ -33,7 +33,7 @@ def test_upload(drive: Drive):
 
 
 def test_recursive_download():
-    shodan_folder = "https://drive.google.com/drive/u/0/folders/1wCWnDb-7dmOGJltGu_zziWU4nVYwr9Rl"
+    pass
     # drive.download(
     #     out_filepath="./data/shodan_data",
     #     file_id=shodan_folder,

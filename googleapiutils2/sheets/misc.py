@@ -197,7 +197,7 @@ def format_range_name(sheet_name: str | None = None, range_name: str | None = No
 
 def int_to_A1(i: int) -> str:
     nums = to_base(i - OFFSET, base=BASE)
-    return "".join(map(lambda x: string.ascii_letters[x].upper(), nums))
+    return "".join(string.ascii_letters[x].upper() for x in nums)
 
 
 def rc_to_A1(row: int, col: int) -> str:

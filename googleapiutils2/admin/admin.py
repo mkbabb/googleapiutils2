@@ -237,8 +237,7 @@ class Admin(DriveBase):
 
         while True:
             response: Any = self.execute(self.users.list(**params))
-            for user in response.get("users", []):
-                yield user
+            yield from response.get("users", [])
 
             if not response.get("nextPageToken"):
                 break
