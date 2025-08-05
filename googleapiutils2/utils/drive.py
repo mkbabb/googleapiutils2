@@ -21,8 +21,7 @@ from typing import (
 )
 
 import googleapiclient.http
-import html2text
-from bs4 import BeautifulSoup
+from markdownify import markdownify  # type: ignore
 from cachetools import TTLCache
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -61,17 +60,15 @@ def html_to_markdown(html_content: str) -> str:
     Returns:
         Markdown formatted string
     """
-    # Parse HTML with BeautifulSoup to clean it up
-    soup = BeautifulSoup(html_content, 'html.parser')
-
-    # Configure html2text
-    converter = html2text.HTML2Text()
-    converter.body_width = 0  # Disable text wrapping
-    converter.ignore_images = True
-    converter.ignore_emphasis = False
-
-    # Convert to markdown
-    return converter.handle(str(soup))
+    # Use markdownify with sensible defaults for Google Docs
+    markdown_content = markdownify(
+        html_content,
+        heading_style="ATX",
+        bullets="*",
+        strip=['img', 'script', 'style'],
+        default_title=True
+    )
+    return markdown_content.strip()
 
 
 def export_mime_type(

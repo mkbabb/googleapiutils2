@@ -6,6 +6,7 @@
 .mypy_cache/
 .pytest_cache/
 .env
+.venv/
 __pycache__/
 
 # Project-related files and directories

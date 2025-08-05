@@ -1,10 +1,12 @@
-[tool.poetry]
+[project]
 name = "googleapiutils2"
-version = "0.17.6"
+version = "0.18.0"
 description = "Wrapper for Google's Python API"
-authors = ["Mike Babb <mike7400@gmail.com>"]
-
+authors = [
+    { name = "Mike Babb", email = "mike7400@gmail.com" }
+]
 readme = "README.md"
+license = { text = "MIT" }
 keywords = [
     "google",
     "googleapi",
@@ -14,46 +16,109 @@ keywords = [
     "google-sheets-api",
     "google-drive-api",
 ]
-license = "MIT"
-repository = "https://github.com/mkbabb/googleapiutils2"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "google-api-python-client>=2.168.0",
+    "google-api-python-client-stubs>=1.30.0",
+    "google-auth-oauthlib>=1.2.1",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth>=2.39.0",
+    "requests>=2.32.3",
+    "cachetools>=5.5.2",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "loguru>=0.7.3",
+    "pydantic>=2.11.2",
+    "beautifulsoup4>=4.12.3",
+    "html2text>=2024.2.26",
+    "markdownify>=1.1.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-mypy = "^1.15.0"
-google-api-python-client-stubs = "^1.29.0"
-google-auth-oauthlib = "^1.2.1"
-google-api-python-client = "^2.165.0"
-google-auth-httplib2 = "^0.2.0"
-requests = "^2.32.3"
-cachetools = "^5.5.2"
-google-auth = "^2.38.0"
-openpyxl = "^3.1.5"
-pandas = "^2.2.3"
-loguru = "^0.7.3"
-pydantic = "^2.10.6"
-bs4 = "^0.0.2"
-html2text = "^2024.2.26"
+[project.urls]
+Repository = "https://github.com/mkbabb/googleapiutils2"
+"Bug Tracker" = "https://github.com/mkbabb/googleapiutils2/issues"
 
+[project.optional-dependencies]
+dev = [
+    "anthropic>=0.60.0",
+    "ipinfo>=5.2.0",
+    "jinja2>=3.1.6",
+    "litellm>=1.74.15.post1",
+    "markdown2>=2.5.4",
+    "mypy>=1.17.1",
+    "openai>=1.98.0",
+    "pandas-stubs>=2.3.0.250703",
+    "pillow>=11.3.0",
+    "pyarrow>=21.0.0",
+    "pymupdf>=1.26.3",
+    "pypdf>=5.9.0",
+    "pytest>=8.4.1",
+    "ruff>=0.12.7",
+    "types-beautifulsoup4>=4.12.0.20250516",
+    "types-cachetools>=6.1.0.20250717",
+    "types-requests>=2.32.4.20250611",
+]
 
-[tool.poetry.group.dev.dependencies]
-openai = "^1.68.2"
-anthropic = "^0.49.0"
-litellm = "^1.63.14"
-types-requests = "^2.32.0.20250306"
-types-cachetools = "^5.5.0.20240820"
-pytest = "^8.3.5"
-pandas-stubs = "^2.2.3.250308"
-black = "^25.1.0"
-pypdf = "^5.4.0"
-ipinfo = "^5.1.1"
-pyarrow = "^19.0.1"
-markdown2 = "^2.5.3"
-jinja2 = "^3.1.6"
-jinja-markdown2 = "^0.4.0"
-types-beautifulsoup4 = "^4.12.0.20250204"
-pymupdf = "^1.25.4"
-pillow = "^11.1.0"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[tool.hatch.build]
+include = [
+    "googleapiutils2/**/*.py",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "COM",    # flake8-commas
+    "PIE",    # flake8-pie
+    "SIM",    # flake8-simplify
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "E731",   # lambda assignment
+    "B008",   # do not perform function calls in argument defaults
+    "COM812", # missing trailing comma (conflicts with formatter)
+    "ISC001", # single line implicit string concatenation (conflicts with formatter)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/*" = ["ARG", "S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["googleapiutils2"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.12"
@@ -61,11 +126,15 @@ warn_return_any = false
 warn_unused_configs = false
 disallow_untyped_defs = false
 check_untyped_defs = true
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "google.*,google_auth_oauthlib.*"
 ignore_missing_imports = true
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
