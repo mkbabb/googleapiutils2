@@ -667,6 +667,7 @@ class Drive(DriveBase):
         uploader: Callable[[GoogleMimeTypes], Any],
         name: str,
         filepath: FilePath,
+        file_id: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: builtins.list[str] | str | None = None,
         owners: builtins.list[str] | str | None = None,
@@ -682,11 +683,11 @@ class Drive(DriveBase):
         owners = [owners] if isinstance(owners, str) else owners
         owners = owners if owners is not None else []
 
-        file = self.get_if_exists(name=name, parents=parents)
-
-        # Try to get the file by its ID
-        if file is None:
-            file = self.get_if_exists(file_id=name)
+        # If file_id is provided, use it directly, otherwise search by name/parents
+        if file_id:
+            file = self.get(file_id=file_id)
+        else:
+            file = self.get_if_exists(name=name, parents=parents)
 
         # If the filepath exists, check if the file has the same md5 hash:
         if file is not None:
@@ -730,6 +731,7 @@ class Drive(DriveBase):
         self,
         filepath: FilePath,
         name: str | None = None,
+        file_id: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: builtins.list[str] | str | None = None,
         owners: builtins.list[str] | str | None = None,
@@ -747,6 +749,7 @@ class Drive(DriveBase):
         Args:
             filepath (FilePath): The path to the file to upload.
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
+            file_id (str, optional): The ID of the file to update. If provided, will update this specific file. Defaults to None.
             to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             owners (List[str], optional): The list of owner IDs. Defaults to None.
@@ -785,6 +788,7 @@ class Drive(DriveBase):
                 self._upload_file(
                     filepath=file,
                     name=t_file.name,
+                    file_id=None,  # Don't pass file_id for recursive uploads
                     to_mime_type=to_mime_type,
                     parents=t_parents,
                     owners=owners,
@@ -804,6 +808,7 @@ class Drive(DriveBase):
             uploader=uploader,
             name=name if name is not None else filepath.name,
             filepath=filepath,
+            file_id=file_id,
             to_mime_type=to_mime_type,
             parents=parents,
             owners=owners,
@@ -818,6 +823,7 @@ class Drive(DriveBase):
         data: bytes,
         name: str,
         to_mime_type: GoogleMimeTypes,
+        file_id: str | None = None,
         parents: builtins.list[str] | str | None = None,
         owners: builtins.list[str] | str | None = None,
         body: File | None = None,
@@ -831,6 +837,7 @@ class Drive(DriveBase):
             data (bytes): Data to upload.
             name (str): Name of the file.
             to_mime_type (GoogleMimeTypes): Mime type of the file.
+            file_id (str, optional): The ID of the file to update. If provided, will update this specific file. Defaults to None.
             parents (List[str], optional): List of parent IDs. Defaults to None.
             body (File, optional): File body. Defaults to None.
             update (bool, optional): Whether to update the file if it exists. Defaults to True.
@@ -846,6 +853,7 @@ class Drive(DriveBase):
                 uploader=uploader,
                 name=name,
                 filepath=tio.name,
+                file_id=file_id,
                 to_mime_type=to_mime_type,
                 parents=parents,
                 owners=owners,
@@ -860,6 +868,7 @@ class Drive(DriveBase):
         df: pd.DataFrame,
         name: str,
         to_mime_type: GoogleMimeTypes,
+        file_id: str | None = None,
         parents: builtins.list[str] | str | None = None,
         owners: builtins.list[str] | str | None = None,
         body: File | None = None,
@@ -874,6 +883,7 @@ class Drive(DriveBase):
             df (DataFrame): The DataFrame to upload.
             name (str): The name of the file.
             to_mime_type (GoogleMimeTypes): The mime type of the file.
+            file_id (str, optional): The ID of the file to update. If provided, will update this specific file. Defaults to None.
             file_format (str, optional): The file format ("csv", "xlsx", etc.). Defaults to "csv".
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             owners (List[str], optional): The list of owner IDs. Defaults to None.
@@ -906,6 +916,7 @@ class Drive(DriveBase):
             return self._upload_file(
                 filepath=tmp_file.name,
                 name=name,
+                file_id=file_id,
                 to_mime_type=to_mime_type,
                 parents=parents,
                 owners=owners,
@@ -919,6 +930,7 @@ class Drive(DriveBase):
         self,
         filepath: FilePath | pd.DataFrame | BytesIO,
         name: str | None = None,
+        file_id: str | None = None,
         to_mime_type: GoogleMimeTypes | None = None,
         parents: builtins.list[str] | str | None = None,
         owners: builtins.list[str] | str | None = None,
@@ -934,6 +946,7 @@ class Drive(DriveBase):
         Args:
             filepath (FilePath | DataFrame | BytesIO): The file to upload.
             name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
+            file_id (str, optional): The ID of the file to update. If provided, will update this specific file. Defaults to None.
             to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
             parents (List[str], optional): The list of parent IDs. Defaults to None.
             owners (List[str], optional): The list of owner IDs. Defaults to None.
@@ -945,6 +958,7 @@ class Drive(DriveBase):
             return self._upload_file(
                 filepath=filepath,
                 name=name,
+                file_id=file_id,
                 to_mime_type=to_mime_type,
                 parents=parents,
                 owners=owners,
@@ -963,6 +977,7 @@ class Drive(DriveBase):
                 df=filepath,
                 name=name,
                 to_mime_type=to_mime_type,
+                file_id=file_id,
                 parents=parents,
                 owners=owners,
                 body=body,
@@ -979,6 +994,7 @@ class Drive(DriveBase):
                 data=filepath,
                 name=name,
                 to_mime_type=to_mime_type,
+                file_id=file_id,
                 parents=parents,
                 owners=owners,
                 body=body,
