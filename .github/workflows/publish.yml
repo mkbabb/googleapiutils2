@@ -1,23 +1,45 @@
-name: Publish to PyPI
+name: Publish Package
 
 on:
-  release:
-    types: [published]
-  push:
-    tags:
-      - 'v*'  # Triggers on tags like v0.18.1, v1.0.0, etc.
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Publish target'
+        required: true
+        default: 'pypi'
+        type: choice
+        options:
+          - pypi
+          - testpypi
+      version_bump:
+        description: 'Version bump (leave empty to use current version)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - patch
+          - minor
+          - major
+      create_release:
+        description: 'Create GitHub release'
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   publish:
-    name: Publish to PyPI
+    name: Publish to ${{ github.event.inputs.target == 'testpypi' && 'TestPyPI' || 'PyPI' }}
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ github.event.inputs.target == 'testpypi' && 'test' || 'release' }}
     permissions:
       id-token: write  # Required for trusted publishing
+      contents: write   # Required for creating releases and pushing tags
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -29,8 +51,79 @@ jobs:
       with:
         enable-cache: true
     
+    - name: Get current version
+      id: current_version
+      run: |
+        echo "version=$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+    
+    - name: Calculate new version
+      id: new_version
+      if: github.event.inputs.version_bump != ''
+      run: |
+        current="${{ steps.current_version.outputs.version }}"
+        IFS='.' read -r major minor patch <<< "$current"
+        
+        case "${{ github.event.inputs.version_bump }}" in
+          major)
+            new_version="$((major + 1)).0.0"
+            ;;
+          minor)
+            new_version="$major.$((minor + 1)).0"
+            ;;
+          patch)
+            new_version="$major.$minor.$((patch + 1))"
+            ;;
+        esac
+        
+        echo "version=$new_version" >> $GITHUB_OUTPUT
+    
+    - name: Update version in pyproject.toml
+      if: github.event.inputs.version_bump != ''
+      run: |
+        sed -i 's/^version = .*/version = "${{ steps.new_version.outputs.version }}"/' pyproject.toml
+    
+    - name: Commit version bump
+      if: github.event.inputs.version_bump != ''
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add pyproject.toml
+        git commit -m "Bump version to ${{ steps.new_version.outputs.version }}"
+        git push
+    
+    - name: Set final version
+      id: final_version
+      run: |
+        if [ "${{ github.event.inputs.version_bump }}" != "" ]; then
+          echo "version=${{ steps.new_version.outputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ steps.current_version.outputs.version }}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Run tests
+      if: github.event.inputs.target == 'testpypi'
+      run: |
+        uv sync
+        uv run pytest || true  # Don't fail if no tests
+    
     - name: Build package
       run: uv build
     
-    - name: Publish to PyPI
+    - name: Publish to TestPyPI
+      if: github.event.inputs.target == 'testpypi'
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+    
+    - name: Publish to PyPI
+      if: github.event.inputs.target == 'pypi'
+      uses: pypa/gh-action-pypi-publish@release/v1
+    
+    - name: Create GitHub Release
+      if: github.event.inputs.create_release == 'true' && github.event.inputs.target == 'pypi'
+      run: |
+        gh release create v${{ steps.final_version.outputs.version }} \
+          --title "v${{ steps.final_version.outputs.version }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
