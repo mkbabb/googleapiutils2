@@ -125,9 +125,23 @@ def raise_for_status(status: str) -> None:
 
 
 def on_http_exception(e: Exception) -> bool:
+    # Retry rate limiting errors
     if isinstance(e, googleapiclient.errors.HttpError):  # type: ignore
         status = e.resp.status  # type: ignore
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
+
+    # Retry transient network/socket errors
+    if isinstance(e, OSError):
+        # Errno 49 (EADDRNOTAVAIL): Can't assign requested address - port exhaustion
+        # Errno 48 (EADDRINUSE): Address already in use
+        # Errno 54 (ECONNRESET): Connection reset by peer
+        # Errno 61 (ECONNREFUSED): Connection refused
+        if e.errno in (48, 49, 54, 61):
+            return True
+
+    # Retry connection and timeout errors
+    if isinstance(e, (ConnectionError, TimeoutError, socket.timeout)):
+        return True
 
     return False
 

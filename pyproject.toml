@@ -1,6 +1,6 @@
 [project]
 name = "googleapiutils2"
-version = "0.19.3"
+version = "0.19.4"
 description = "Wrapper for Google's Python API"
 authors = [
     { name = "Mike Babb", email = "mike7400@gmail.com" }
