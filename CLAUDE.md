@@ -4,20 +4,59 @@ Python wrapper for Google APIs (Drive, Sheets, Gmail, Admin, Groups, Geocoding).
 
 ## Authentication
 
-```python
-from googleapiutils2 import Drive, Sheets, get_oauth2_creds
+Two authentication methods are supported:
 
+### 1. Service Account (Recommended for automation)
+
+**Use cases:** Automated scripts, server applications, domain-wide delegation
+
+**Setup:**
+1. Enable APIs: https://console.cloud.google.com/apis/library
+2. Create Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts
+3. Download JSON key file
+
+```python
+from googleapiutils2 import Drive, get_oauth2_creds
+
+# Basic service account
+creds = get_oauth2_creds(client_config="auth/service-account.json")
+drive = Drive(creds=creds)
+
+# With domain-wide delegation (Workspace only)
+creds = get_oauth2_creds(client_config="auth/service-account.json")
+creds = creds.with_subject("user@domain.com")  # Impersonate user
+drive = Drive(creds=creds)
+```
+
+### 2. OAuth2 Client (For user authorization)
+
+**Use cases:** Desktop apps, user consent required, personal Google accounts
+
+**Setup:**
+1. Enable APIs: https://console.cloud.google.com/apis/library
+2. Create OAuth Client: https://console.cloud.google.com/apis/credentials/oauthclient
+   - Application type: Desktop app
+3. Configure consent screen: https://console.cloud.google.com/apis/credentials/consent
+4. Download JSON file (NOT a service account key)
+
+```python
+from googleapiutils2 import Drive, get_oauth2_creds
+
+# First run: opens browser for user to authorize
+# Token saved to auth/token.pickle for reuse
+creds = get_oauth2_creds(
+    client_config="auth/oauth2_credentials.json",
+    token_path="auth/token.pickle"  # Auto-created after authorization
+)
+drive = Drive(creds=creds)
+```
+
+### Auto-discovery
+
+```python
 # Auto-discovery (checks ./auth/credentials.json or GOOGLE_API_CREDENTIALS env)
 drive = Drive()
 sheets = Sheets()
-
-# Explicit credentials
-creds = get_oauth2_creds(client_config="path/to/credentials.json")
-drive = Drive(creds=creds)
-
-# Service account with domain delegation
-creds = get_oauth2_creds(client_config="auth/service-account.json")
-creds = creds.with_subject("user@domain.com")
 ```
 
 ## Drive

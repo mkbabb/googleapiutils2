@@ -43,35 +43,87 @@ use.
 
 ## Authentication 🔑
 
-Before using a `Drive` or `Sheets` object, one must first authenticate. This is done via
-the `google.oauth2` library, creating a `Credentials` object.
+Two authentication methods are supported. Choose based on your use case:
 
-### Custom Credentials
+### 1. Service Account (Recommended for automation)
 
-The library supports two methods of authentication:
+**When to use:**
+- Automated scripts and server applications
+- No user interaction needed
+- Domain-wide delegation (Workspace only)
 
--   via a Google service account (recommended, see more
-    [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts))
--   via OAuth2 (see more
-    [here](https://developers.google.com/identity/protocols/oauth2/native-app))
+**Setup:**
+1. **Enable APIs**: https://console.cloud.google.com/apis/library
+   - Enable Google Drive API, Sheets API, etc.
+2. **Create Service Account**: https://console.cloud.google.com/iam-admin/serviceaccounts
+   - Click "Create Service Account"
+   - Grant necessary roles (e.g., "Editor" for testing)
+3. **Download JSON key file**
+   - Click on the service account → Keys → Add Key → JSON
+   - Save as `auth/service-account.json`
 
-With a service account, one can programmatically access resources without user input.
-This is by far the easiest route, but requires a bit of setup.
+**Usage:**
+```python
+from googleapiutils2 import Drive, get_oauth2_creds
 
-If one's not using a service account, the library will attempt to open a browser window
-to authenticate using the provided credentials. This authentication is cached for future
-usage (though it does expire on some interval) - so an valid token path is required.
+# Basic service account
+creds = get_oauth2_creds(client_config="auth/service-account.json")
+drive = Drive(creds=creds)
 
-See the [`get_oauth2_creds`](googleapiutils2/utils.py) function for more information.
+# With domain-wide delegation (Workspace only - requires admin setup)
+creds = get_oauth2_creds(client_config="auth/service-account.json")
+creds = creds.with_subject("user@domain.com")  # Impersonate user
+drive = Drive(creds=creds)
+```
 
-### Default Credentials
+### 2. OAuth2 Client (For user authorization)
 
-To expedite development, all credentials-based objects will default to using a service
-account by way of the following discovery scheme:
+**When to use:**
+- Desktop applications
+- User consent required
+- Personal Google accounts (non-Workspace)
 
--   If `./auth/credentials.json` exists, use that credentials file.
--   If the `GOOGLE_API_CREDENTIALS` environment variable is set, use the credentials
-    file pointed to by the variable. - This can either be a path to a file, or a JSON object.
+**Setup:**
+1. **Enable APIs**: https://console.cloud.google.com/apis/library
+   - Enable Google Drive API, Sheets API, etc.
+2. **Create OAuth 2.0 Client ID**: https://console.cloud.google.com/apis/credentials/oauthclient
+   - Application type: **Desktop app**
+   - Click "CREATE" and download JSON
+   - Save as `auth/oauth2_credentials.json`
+3. **Configure OAuth Consent Screen**: https://console.cloud.google.com/apis/credentials/consent
+   - User type: External (personal) or Internal (Workspace)
+   - Add test users if needed
+
+**Usage:**
+```python
+from googleapiutils2 import Drive, get_oauth2_creds
+
+# First run: opens browser for user to sign in and authorize
+# Token is saved to auth/token.pickle for future use
+creds = get_oauth2_creds(
+    client_config="auth/oauth2_credentials.json",  # OAuth2 client (NOT service account)
+    token_path="auth/token.pickle"  # Auto-created after authorization
+)
+drive = Drive(creds=creds)
+
+# Subsequent runs: uses saved token (no browser needed)
+```
+
+**Important:** OAuth2 client credentials (`oauth2_credentials.json`) are different from service account credentials. They enable user authorization, not service account impersonation.
+
+### Auto-discovery
+
+For quick development, credentials can be auto-discovered:
+
+```python
+# Auto-discovery checks:
+# 1. ./auth/credentials.json
+# 2. GOOGLE_API_CREDENTIALS environment variable
+drive = Drive()
+sheets = Sheets()
+```
+
+**See also:** [`get_oauth2_creds`](googleapiutils2/utils/drive.py) function documentation for detailed API reference.
 
 ## Drive 📁
 

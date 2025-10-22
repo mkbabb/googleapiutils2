@@ -320,21 +320,62 @@ def get_oauth2_creds(
     *args: Any,
     **kwargs: Any,
 ) -> Credentials | ServiceAccountCredentials | Any:
-    """Get OAuth2 credentials for Google API.
+    """Get OAuth2 or Service Account credentials for Google API.
 
-    If the client config provided is for a service account, we return the credentials.
-    Otherwise, we return the credentials from the token file if it exists, or we
-    authenticate the user and save the credentials to the token file.
+    This function supports two authentication flows:
 
-    If the client config is a path to a file, we first check if the file exists.
-    If it doesn't, we check if the GOOGLE_API_CREDENTIALS environment variable is set.
-    If it is, we use the path provided by the environment variable.
+    1. SERVICE ACCOUNT (Recommended for programmatic access):
+       - For automated scripts, server applications, and domain-wide delegation
+       - No user interaction required
+       - Setup: https://cloud.google.com/iam/docs/service-accounts-create
+       - Enable APIs: https://console.cloud.google.com/apis/library
+       - Create Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts
+       - Download JSON key file
+       - For domain-wide delegation: use creds.with_subject("user@domain.com")
+
+       Example:
+           creds = get_oauth2_creds(client_config="auth/service-account.json")
+           drive = Drive(creds=creds)
+
+           # With domain-wide delegation (Workspace only)
+           creds = creds.with_subject("user@domain.com")
+           drive = Drive(creds=creds)
+
+    2. OAUTH2 CLIENT (For user authorization):
+       - For applications that need user consent
+       - Opens browser for user to sign in and authorize
+       - Token saved for reuse (no browser needed on subsequent runs)
+       - Setup: https://console.cloud.google.com/apis/credentials/oauthclient
+       - Enable APIs: https://console.cloud.google.com/apis/library
+       - Create OAuth 2.0 Client ID: Application type "Desktop app"
+       - Configure consent screen: https://console.cloud.google.com/apis/credentials/consent
+       - Download JSON file (NOT a service account key)
+
+       Example:
+           creds = get_oauth2_creds(
+               client_config="auth/oauth2_credentials.json",  # OAuth Client JSON
+               token_path="auth/token.pickle"  # Auto-created after authorization
+           )
+           drive = Drive(creds=creds)
+
+    Auto-discovery:
+        If client_config is not provided or doesn't exist:
+        1. Checks ./auth/credentials.json
+        2. Checks GOOGLE_API_CREDENTIALS environment variable
 
     Args:
-        client_config: Path to client config file or dict with client config.
-        token_path: Path to token file.
-        scopes: List of scopes. For more information on scopes, see:
-            https://developers.google.com/identity/protocols/oauth2/scopes
+        client_config: Path to client config file (service account or OAuth2 client) or dict.
+        token_path: Path to save/load OAuth2 token (ignored for service accounts).
+        scopes: List of OAuth scopes. See: https://developers.google.com/identity/protocols/oauth2/scopes
+        *args: Additional arguments for credential creation.
+        **kwargs: Additional keyword arguments for credential creation.
+
+    Returns:
+        ServiceAccountCredentials if service account JSON provided.
+        Credentials (OAuth2) if OAuth2 client JSON provided.
+
+    Raises:
+        Exception: If OAuth2 flow used but no token_path provided.
     """
 
     client_config = load_client_config(client_config=client_config)
@@ -352,9 +393,13 @@ def get_oauth2_creds(
 
         if creds is not None and not creds.valid:
             if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    creds = None
+                    print(f"Error refreshing credentials: {e}")
 
-        elif creds is None:
+        if creds is None:
             flow = InstalledAppFlow.from_client_config(
                 client_config, scopes=scopes, *args, **kwargs
             )
