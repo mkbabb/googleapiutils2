@@ -330,14 +330,74 @@ class Drive(DriveBase):
             GoogleMimeTypes, GoogleMimeTypes
         ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
     ):
-        """Download a file from Google Drive. If the file is larger than 10MB, it's downloaded in chunks.
+        """Download a file from Google Drive with automatic format conversion.
+
+        Google Workspace native formats (Docs, Sheets, Slides) are automatically converted
+        to standard exportable formats using the conversion_map. File extensions are
+        automatically assigned based on the export format.
+
+        MIME Type Conversion Flow:
+            1. File's MIME type is determined from Google Drive metadata or mime_type parameter
+            2. If MIME type is in conversion_map, file is exported to mapped format
+            3. File extension is automatically added/updated based on export format
+            4. For files >10MB, uses chunked download or export links
+
+        Default Conversions (DEFAULT_DOWNLOAD_CONVERSION_MAP):
+            GoogleMimeTypes.sheets → xlsx: Google Sheets exported as Excel 2007+ (.xlsx)
+            GoogleMimeTypes.docs → docx: Google Docs exported as Word 2007+ (.docx)
+            GoogleMimeTypes.slides → pdf: Google Slides exported as PDF (.pdf)
+
+        Custom Conversion Examples:
+            # Download Google Sheet as CSV instead of Excel
+            custom_map = {GoogleMimeTypes.sheets: GoogleMimeTypes.csv}
+            drive.download(file_id, "data.csv", conversion_map=custom_map)
+
+            # Download Google Doc as PDF
+            custom_map = {GoogleMimeTypes.docs: GoogleMimeTypes.pdf}
+            drive.download(file_id, "document.pdf", conversion_map=custom_map)
+
+            # Download Google Slides as PowerPoint
+            custom_map = {GoogleMimeTypes.slides: GoogleMimeTypes.pptx}
+            drive.download(file_id, "presentation.pptx", conversion_map=custom_map)
+
+            # No conversion (standard files download as-is)
+            drive.download(file_id, "image.png")  # PNG downloaded directly
+            drive.download(file_id, "data.csv")   # CSV downloaded directly
+
+        Available Export Formats:
+            Google Sheets → xlsx, ods, csv, pdf, html
+            Google Docs → docx, pdf, html, txt
+            Google Slides → pdf, pptx, txt
 
         Args:
-            filepath (FilePath | BytesIO): The path to the file to download to, or a BytesIO to write to.
-            file_id (str): The ID of the file to download.
-            mime_type (GoogleMimeTypes, optional): The mime type of the file to download. Defaults to None, which will use the mime type of the file.
-            recursive (bool, optional): If the file is a folder, download its contents recursively. Defaults to False.
-            conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional): A dictionary mapping mime types to their corresponding file extensions. Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
+            filepath (FilePath | BytesIO): Download destination. Can be:
+                - File path (str/Path): Local file path to save to
+                - BytesIO: In-memory buffer to write to
+                File extension is auto-added/updated based on export format.
+            file_id (str): ID or URL of the file to download.
+            mime_type (GoogleMimeTypes, optional): Force specific export MIME type.
+                Defaults to None (uses file's MIME type from Google Drive).
+            recursive (bool, optional): If file is a folder, download contents recursively.
+                Defaults to False.
+            overwrite (bool, optional): Whether to overwrite existing file.
+                If False and file exists with same MD5, skips download.
+                Defaults to True.
+            conversion_map (dict[GoogleMimeTypes, GoogleMimeTypes], optional):
+                Maps source MIME types to export formats.
+                Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP.
+                Pass custom map to export to different formats.
+
+        Returns:
+            Path: Path to downloaded file (with auto-assigned extension).
+
+        Raises:
+            ValueError: If file is too large and has no export links.
+
+        See also:
+            DEFAULT_DOWNLOAD_CONVERSION_MAP in utils/misc.py: Default export format mappings
+            GoogleMimeTypes: Enum with conversion documentation
+            export_mime_type() in utils/drive.py: Determines export format and file extension
+            Google Drive Export Formats: https://developers.google.com/drive/api/v3/ref-export-formats
         """
 
         def download_file_or_data():
@@ -940,19 +1000,71 @@ class Drive(DriveBase):
         from_mime_type: GoogleMimeTypes | None = None,
         **kwargs: Any,
     ):
-        """Uploads a file to Google Drive.
-        A file can be either a filepath, a DataFrame, or bytes.
+        """Uploads a file to Google Drive with optional format conversion.
+
+        This method supports uploading files, DataFrames, or raw bytes. It can convert
+        files to Google Workspace native formats (Docs, Sheets, Slides) during upload.
+
+        MIME Type Conversion Flow:
+            1. from_mime_type: Source file's MIME type
+               - Inferred from file extension if not specified (see MIME_EXTENSIONS in utils/misc.py)
+               - Falls back to GoogleMimeTypes.file if unknown
+               - Used for the upload media body
+
+            2. to_mime_type: Target MIME type in Google Drive
+               - If specified: File is converted to this format (e.g., csv → sheets)
+               - If None and updating: Uses existing file's MIME type
+               - If None and creating: Uses from_mime_type (no conversion)
+
+        Common Upload Conversions:
+            # Convert to Google Sheets
+            drive.upload("data.csv", to_mime_type=GoogleMimeTypes.sheets)
+            drive.upload("report.xlsx", to_mime_type=GoogleMimeTypes.sheets)
+
+            # Convert to Google Docs
+            drive.upload("document.docx", to_mime_type=GoogleMimeTypes.docs)
+            drive.upload("notes.txt", to_mime_type=GoogleMimeTypes.docs)
+
+            # Upload without conversion (standard file storage)
+            drive.upload("data.csv")  # Stored as CSV
+            drive.upload("image.png")  # Stored as PNG
 
         Args:
-            filepath (FilePath | DataFrame | BytesIO): The file to upload.
-            name (str, optional): The name of the file. Defaults to None, which will use the name of the file at the filepath.
-            file_id (str, optional): The ID of the file to update. If provided, will update this specific file. Defaults to None.
-            to_mime_type (GoogleMimeTypes, optional): The mime type of the file. Defaults to None, which will use the mime type of the file at the filepath.
-            parents (List[str], optional): The list of parent IDs. Defaults to None.
-            owners (List[str], optional): The list of owner IDs. Defaults to None.
-            recursive (bool, optional): If the file is a folder, upload its contents recursively. Defaults to False.
-            body (File, optional): The body of the file. Defaults to None.
-            update (bool, optional): Whether to update the file if it already exists. Defaults to True.
+            filepath (FilePath | DataFrame | BytesIO): File to upload. Can be:
+                - File path (str/Path): Local file to upload
+                - DataFrame: Pandas DataFrame to export and upload
+                - bytes: Raw bytes to upload
+            name (str, optional): Name of the file in Google Drive.
+                Defaults to filename from filepath.
+            file_id (str, optional): ID of existing file to update.
+                If provided, updates this specific file instead of creating new.
+            to_mime_type (GoogleMimeTypes, optional): Target MIME type in Google Drive.
+                Use this to convert files to Google Workspace formats.
+                Defaults to None (no conversion, or existing file's type if updating).
+            parents (List[str] | str, optional): Parent folder ID(s).
+                Accepts file IDs or URLs. Defaults to root folder.
+            owners (List[str] | str, optional): Owner email address(es).
+                Defaults to None (authenticated user owns file).
+            recursive (bool, optional): If filepath is a folder, upload contents recursively.
+                Defaults to False.
+            body (File, optional): Additional file metadata.
+                Merged with generated metadata. Defaults to None.
+            update (bool, optional): Whether to update if file exists with same name/parents.
+                If False, creates duplicate. Defaults to True.
+            from_mime_type (GoogleMimeTypes, optional): Source file's MIME type.
+                Overrides automatic inference from file extension.
+            **kwargs: Additional arguments passed to Google Drive API files.create/update.
+
+        Returns:
+            File: Google Drive file resource with metadata (id, name, mimeType, etc.)
+
+        Raises:
+            ValueError: If DataFrame/bytes upload missing required name or to_mime_type.
+
+        See also:
+            GoogleMimeTypes: Enum of all supported MIME types with conversion documentation
+            MIME_EXTENSIONS in utils/misc.py: Extension to MIME type mappings
+            guess_mime_type() in utils/drive.py: MIME type inference logic
         """
         if isinstance(filepath, str | Path):
             return self._upload_file(

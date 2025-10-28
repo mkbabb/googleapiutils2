@@ -57,7 +57,52 @@ def export_mime_type(
         GoogleMimeTypes, GoogleMimeTypes
     ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
 ) -> tuple[GoogleMimeTypes, str]:
-    """Get the MIME type to export a file to and the corresponding file extension."""
+    """Determine export MIME type and file extension for download operations.
+
+    This function is used during download to convert Google Workspace native formats
+    (which can't be downloaded directly) to standard exportable formats. It also
+    assigns the appropriate file extension based on the export format.
+
+    Conversion Logic:
+        1. Check if mime_type exists in conversion_map
+        2. If found: Return mapped export format and its extension (e.g., ".xlsx")
+        3. If not found: Return original mime_type and empty extension
+
+    The extension is derived from the MIME type's enum name. For example:
+        GoogleMimeTypes.xlsx → ".xlsx"
+        GoogleMimeTypes.pdf → ".pdf"
+
+    Args:
+        mime_type: Source MIME type from Google Drive file
+        conversion_map: Maps native formats to export formats.
+            Defaults to DEFAULT_DOWNLOAD_CONVERSION_MAP which converts:
+            - sheets → xlsx
+            - docs → docx
+            - slides → pdf
+
+    Returns:
+        Tuple of (export_mime_type, file_extension):
+            - export_mime_type: MIME type to use for export
+            - file_extension: Extension with leading dot (e.g., ".xlsx") or empty string
+
+    Examples:
+        >>> export_mime_type(GoogleMimeTypes.sheets)
+        (GoogleMimeTypes.xlsx, ".xlsx")
+
+        >>> export_mime_type(GoogleMimeTypes.docs)
+        (GoogleMimeTypes.docx, ".docx")
+
+        >>> export_mime_type(GoogleMimeTypes.png)
+        (GoogleMimeTypes.png, "")  # No conversion needed
+
+        >>> custom_map = {GoogleMimeTypes.sheets: GoogleMimeTypes.csv}
+        >>> export_mime_type(GoogleMimeTypes.sheets, custom_map)
+        (GoogleMimeTypes.csv, ".csv")
+
+    See also:
+        DEFAULT_DOWNLOAD_CONVERSION_MAP in utils/misc.py: Default conversion mappings
+        Drive.download(): Uses this function to determine export format
+    """
     t_mime_type = conversion_map.get(mime_type)
 
     if t_mime_type is None:
@@ -68,6 +113,33 @@ def export_mime_type(
 
 @cache
 def mime_type_to_google_mime_type(mime_type: str) -> GoogleMimeTypes | None:
+    """Convert MIME type string to GoogleMimeTypes enum.
+
+    Performs reverse lookup from MIME type value (e.g., "text/csv") to the
+    corresponding GoogleMimeTypes enum member (e.g., GoogleMimeTypes.csv).
+
+    This is used when Google Drive API returns MIME type strings in file metadata,
+    and we need to work with the GoogleMimeTypes enum.
+
+    Args:
+        mime_type: MIME type string (e.g., "text/csv", "application/pdf")
+
+    Returns:
+        GoogleMimeTypes enum member if found, None otherwise
+
+    Examples:
+        >>> mime_type_to_google_mime_type("text/csv")
+        GoogleMimeTypes.csv
+
+        >>> mime_type_to_google_mime_type("application/vnd.google-apps.spreadsheet")
+        GoogleMimeTypes.sheets
+
+        >>> mime_type_to_google_mime_type("unknown/type")
+        None
+
+    Note:
+        Result is cached for performance since this is called frequently.
+    """
     for m in GoogleMimeTypes:
         if m.value == mime_type:
             return m
@@ -78,6 +150,46 @@ def mime_type_to_google_mime_type(mime_type: str) -> GoogleMimeTypes | None:
 def guess_mime_type(
     filepath: FilePath,
 ) -> GoogleMimeTypes | None:
+    """Infer GoogleMimeTypes from file path extension.
+
+    Uses Python's mimetypes module to guess MIME type from file extension,
+    then converts to GoogleMimeTypes enum. This is the primary method for
+    inferring from_mime_type during upload when not explicitly specified.
+
+    Inference Process:
+        1. Extract file extension from filepath (e.g., "data.csv" → ".csv")
+        2. Use Python's guess_type() to get standard MIME type string
+        3. Convert MIME type string to GoogleMimeTypes enum
+        4. Return None if extension is unknown or not in GoogleMimeTypes
+
+    Args:
+        filepath: File path (str or Path) to infer MIME type from
+
+    Returns:
+        GoogleMimeTypes enum member if extension recognized, None otherwise
+
+    Examples:
+        >>> guess_mime_type("report.xlsx")
+        GoogleMimeTypes.xlsx
+
+        >>> guess_mime_type("/path/to/data.csv")
+        GoogleMimeTypes.csv
+
+        >>> guess_mime_type("document.docx")
+        GoogleMimeTypes.docx
+
+        >>> guess_mime_type("file.unknown")
+        None
+
+    Note:
+        - Result is cached for performance
+        - Used by Drive._upload() when from_mime_type is not specified
+        - Falls back to GoogleMimeTypes.file in upload flow if this returns None
+
+    See also:
+        MIME_EXTENSIONS in utils/misc.py: Complete extension to MIME type mappings
+        Drive._upload(): Uses this function for MIME type inference
+    """
     mime_type, _ = guess_type(str(filepath))
     return mime_type_to_google_mime_type(mime_type)
 
