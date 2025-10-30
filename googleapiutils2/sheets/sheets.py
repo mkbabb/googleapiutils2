@@ -1686,25 +1686,26 @@ class Sheets(DriveBase):
         def resize_and_create_request(sheet_id: int, sheet_slice: SheetSliceT):
             rows, cols = sheet_slice.rows, sheet_slice.columns
 
-            if sheets_format.column_sizes is not None:
-                # if overflow is enabled, don't resize the columns:
-                if cell_format.get("wrapStrategy") != WrapStrategy.OVERFLOW_CELL:
-                    self.resize_dimensions(
-                        spreadsheet_id=spreadsheet_id,
-                        sheet_name=sheet_slice.sheet_name,
-                        sizes=sheets_format.column_sizes,
-                        dimension=SheetsDimension.columns,
-                    )
+            # if overflow is enabled, don't resize the columns:
+            if (
+                sheets_format.column_sizes is not None
+                and cell_format.get("wrapStrategy") != WrapStrategy.OVERFLOW_CELL
+            ):
+                self.resize_dimensions(
+                    spreadsheet_id=spreadsheet_id,
+                    sheet_name=sheet_slice.sheet_name,
+                    sizes=sheets_format.column_sizes,
+                    dimension=SheetsDimension.columns,
+                )
 
-            if sheets_format.row_sizes is not None:
-                # if wrapping is enabled, don't resize the rows
-                if cell_format.get("wrapStrategy") != WrapStrategy.WRAP:
-                    self.resize_dimensions(
-                        spreadsheet_id=spreadsheet_id,
-                        sheet_name=sheet_slice.sheet_name,
-                        sizes=sheets_format.row_sizes,
-                        dimension=SheetsDimension.rows,
-                    )
+            # if wrapping is enabled, don't resize the rows
+            if sheets_format.row_sizes is not None and cell_format.get("wrapStrategy") != WrapStrategy.WRAP:
+                self.resize_dimensions(
+                    spreadsheet_id=spreadsheet_id,
+                    sheet_name=sheet_slice.sheet_name,
+                    sizes=sheets_format.row_sizes,
+                    dimension=SheetsDimension.rows,
+                )
 
             formats = [
                 self._create_format_body(

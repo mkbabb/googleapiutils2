@@ -126,7 +126,7 @@ def consistent_hash(obj: Any) -> str:
         json_str = json.dumps(normalized, sort_keys=True, default=str)
         return hashlib.md5(json_str.encode()).hexdigest()
     except (TypeError, ValueError) as e:
-        raise ValueError(f"Unable to hash object: {e}")
+        raise ValueError(f"Unable to hash object: {e}") from e
 
 
 def get_cached_result(
@@ -152,7 +152,7 @@ def get_cached_result(
     try:
         input_hash = consistent_hash(input_data)
     except ValueError as e:
-        raise ValueError(f"Failed to hash function inputs: {e}")
+        raise ValueError(f"Failed to hash function inputs: {e}") from e
 
     cache_dir = get_cache_dir()
     output_path = cache_dir / f"{input_hash}_output.json"

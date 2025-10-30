@@ -453,8 +453,6 @@ class Drive(DriveBase):
 
         if kind == "list":
             payload["includeItemsFromAllDrives"] = team_drives
-        elif kind == "update":
-            payload["supportsTeamDrives"] = team_drives
 
         return payload
 
@@ -491,15 +489,17 @@ class Drive(DriveBase):
             query = "trashed = false"
 
         kwargs = self._team_drives_payload(self.team_drives)
-        list_func = lambda x: self.execute(
-            self.files.list(
-                q=query,
-                pageToken=x,
-                fields=create_listing_fields(fields),
-                orderBy=order_by,
-                **kwargs,
+
+        def list_func(page_token):
+            return self.execute(
+                self.files.list(
+                    q=query,
+                    pageToken=page_token,
+                    fields=create_listing_fields(fields),
+                    orderBy=order_by,
+                    **kwargs,
+                )
             )
-        )
 
         for response in list_drive_items(list_func):
             yield from response.get("files", [])  # type: ignore
@@ -720,10 +720,9 @@ class Drive(DriveBase):
         owners = owners if owners is not None else []
 
         # If file_id is provided, use it directly, otherwise search by name/parents
-        if file_id:
-            file = self.get(file_id=file_id)
-        else:
-            file = self.get_if_exists(name=name, parents=parents)
+        file: File | None = (
+            self.get(file_id=file_id) if file_id else self.get_if_exists(name=name, parents=parents)
+        )
 
         # If the filepath exists, check if the file has the same md5 hash:
         if file is not None:

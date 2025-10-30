@@ -239,19 +239,15 @@ def on_http_exception(e: Exception) -> bool:
         return status == http.HTTPStatus.TOO_MANY_REQUESTS
 
     # Retry transient network/socket errors
-    if isinstance(e, OSError):
-        # Errno 49 (EADDRNOTAVAIL): Can't assign requested address - port exhaustion
-        # Errno 48 (EADDRINUSE): Address already in use
-        # Errno 54 (ECONNRESET): Connection reset by peer
-        # Errno 61 (ECONNREFUSED): Connection refused
-        if e.errno in (48, 49, 54, 61):
-            return True
-
-    # Retry connection and timeout errors
-    if isinstance(e, (ConnectionError, TimeoutError, socket.timeout)):
+    # Errno 49 (EADDRNOTAVAIL): Can't assign requested address - port exhaustion
+    # Errno 48 (EADDRINUSE): Address already in use
+    # Errno 54 (ECONNRESET): Connection reset by peer
+    # Errno 61 (ECONNREFUSED): Connection refused
+    if isinstance(e, OSError) and e.errno in (48, 49, 54, 61):
         return True
 
-    return False
+    # Retry connection and timeout errors
+    return isinstance(e, (ConnectionError, TimeoutError, socket.timeout))
 
 
 class DriveThread:
@@ -499,13 +495,12 @@ def get_oauth2_creds(
         if token_path.exists():
             creds = pickle.loads(token_path.read_bytes())
 
-        if creds is not None and not creds.valid:
-            if creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(Request())
-                except Exception as e:
-                    creds = None
-                    print(f"Error refreshing credentials: {e}")
+        if creds is not None and not creds.valid and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                creds = None
+                print(f"Error refreshing credentials: {e}")
 
         if creds is None:
             flow = InstalledAppFlow.from_client_config(client_config, scopes=scopes, *args, **kwargs)
@@ -548,7 +543,12 @@ def get_id_from_url(url: str) -> str:
     path = url_obj.path
     paths = path.split("/")
 
-    get_adjacent = lambda x: (paths[t_ix] if x in paths and (t_ix := paths.index(x) + 1) < len(paths) else None)
+    def get_adjacent(x):
+        if x in paths:
+            t_ix = paths.index(x) + 1
+            if t_ix < len(paths):
+                return paths[t_ix]
+        return None
 
     id = get_adjacent("folders") or get_adjacent("d")
 

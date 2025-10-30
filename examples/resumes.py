@@ -45,7 +45,7 @@ def chat_completion(prompt: str, system_msg: str, model: str = "gpt-3.5-turbo") 
     try:
         content = response.choices[0].message.content
         return content if content is not None else ""
-    except:
+    except (IndexError, AttributeError):
         return ""
 
 

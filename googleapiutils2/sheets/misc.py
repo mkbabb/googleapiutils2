@@ -298,8 +298,10 @@ def normalize_slice(slc: slice, max_dim: int | EllipsisType) -> slice:
 
     # handle negative indices
     if isinstance(start, int) and start < 0 and not max_dim_is_ellipsis:
+        assert isinstance(max_dim, int)
         start = max_dim + start + 1
     if isinstance(stop, int) and stop < 0 and not max_dim_is_ellipsis:
+        assert isinstance(max_dim, int)
         stop = max_dim + stop + 1
 
     return slice(start, stop, step)
