@@ -22,7 +22,7 @@ print("Adding emoji to content...")
 modified_content = content
 
 print("Uploading modified content back to document...")
-with NamedTemporaryFile(mode='w', suffix=".md", delete=False) as temp_file:
+with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as temp_file:
     temp_file.write(modified_content)
     temp_file.flush()
 

@@ -49,13 +49,9 @@ P = ParamSpec("P")
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
 
-
-
 def export_mime_type(
     mime_type: GoogleMimeTypes,
-    conversion_map: dict[
-        GoogleMimeTypes, GoogleMimeTypes
-    ] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
+    conversion_map: dict[GoogleMimeTypes, GoogleMimeTypes] = DEFAULT_DOWNLOAD_CONVERSION_MAP,
 ) -> tuple[GoogleMimeTypes, str]:
     """Determine export MIME type and file extension for download operations.
 
@@ -512,9 +508,7 @@ def get_oauth2_creds(
                     print(f"Error refreshing credentials: {e}")
 
         if creds is None:
-            flow = InstalledAppFlow.from_client_config(
-                client_config, scopes=scopes, *args, **kwargs
-            )
+            flow = InstalledAppFlow.from_client_config(client_config, scopes=scopes, *args, **kwargs)
             creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))
@@ -554,11 +548,7 @@ def get_id_from_url(url: str) -> str:
     path = url_obj.path
     paths = path.split("/")
 
-    get_adjacent = lambda x: (
-        paths[t_ix]
-        if x in paths and (t_ix := paths.index(x) + 1) < len(paths)
-        else None
-    )
+    get_adjacent = lambda x: (paths[t_ix] if x in paths and (t_ix := paths.index(x) + 1) < len(paths) else None)
 
     id = get_adjacent("folders") or get_adjacent("d")
 
