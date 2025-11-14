@@ -487,7 +487,7 @@ def get_oauth2_creds(
     is_service_account = client_config is not None and client_config.get("type", "") == "service_account"  # type: ignore
 
     if is_service_account:
-        return service_account.Credentials.from_service_account_info(client_config, scopes=scopes, *args, **kwargs)  # type: ignore
+        return service_account.Credentials.from_service_account_info(client_config, *args, scopes=scopes, **kwargs)  # type: ignore
     elif token_path is not None:
         token_path = Path(token_path)  # type: ignore
         creds: Credentials | None = None
@@ -503,7 +503,7 @@ def get_oauth2_creds(
                 print(f"Error refreshing credentials: {e}")
 
         if creds is None:
-            flow = InstalledAppFlow.from_client_config(client_config, scopes=scopes, *args, **kwargs)
+            flow = InstalledAppFlow.from_client_config(client_config, *args, scopes=scopes, **kwargs)
             creds = flow.run_local_server(port=0)  # type: ignore
 
             token_path.write_bytes(pickle.dumps(creds))
@@ -566,27 +566,49 @@ def get_id_from_url(url: str) -> str:
 def parse_file_id(
     file_id: str,
 ) -> str:
-    """
-    Parse the given file_id which could be an ID string, URL string or a dictionary object.
+    """Parse a Google Drive/Sheets/Docs file identifier from multiple input formats.
 
-    This function supports the following formats:
-    - Direct ID string: '123456789'
-    - URL formats supported by 'get_id_from_url' function.
-    - Dictionary object with 'id' or 'spreadsheetId' as keys.
+    This function accepts flexible input formats and normalizes them to a plain ID string.
+    It's used throughout googleapiutils2 to allow methods to accept URLs, direct IDs, or
+    API response objects interchangeably. Results are cached for performance.
+
+    Supported Input Formats:
+        - **Direct ID string**: Plain file/spreadsheet/document ID
+        - **Google Drive URLs**: URLs containing `/d/{id}/` or `/folders/{id}/`
+        - **Google Sheets URLs**: `https://docs.google.com/spreadsheets/d/{id}/edit`
+        - **Query parameter URLs**: Any URL with `?id={id}` parameter
+        - **Dictionary objects**: API responses with `id` or `spreadsheetId` keys
 
     Args:
-        file_id (str): The ID string or URL or dictionary from which to extract the ID.
+        file_id: Can be a direct ID string, a Google Drive/Sheets/Docs URL, or a
+            dictionary object (e.g., from API responses).
+
+    Returns:
+        The extracted ID string (e.g., '1a2b3c4d5e6f7g8h9i0j').
+
+    Raises:
+        ValueError: If the input is a URL that cannot be parsed to extract an ID.
 
     Examples:
-    --------
-    >>> parse_file_id('123456789')
-    '123456789'
+        Direct ID string:
+            >>> parse_file_id('1a2b3c4d5e6f7g8h9i0j')
+            '1a2b3c4d5e6f7g8h9i0j'
 
-    >>> parse_file_id('https://example.com/d/123456789')
-    '123456789'
+        Google Sheets URL:
+            >>> parse_file_id('https://docs.google.com/spreadsheets/d/1a2b3c4d5e6f7g8h9i0j/edit')
+            '1a2b3c4d5e6f7g8h9i0j'
 
-    >>> parse_file_id({'id': '123456789'})
-    '123456789'
+        Google Drive folder URL:
+            >>> parse_file_id('https://drive.google.com/drive/folders/1a2b3c4d5e6f7g8h9i0j')
+            '1a2b3c4d5e6f7g8h9i0j'
+
+        API response dictionary:
+            >>> parse_file_id({'spreadsheetId': '1a2b3c4d5e6f7g8h9i0j', 'properties': {...}})
+            '1a2b3c4d5e6f7g8h9i0j'
+
+    Note:
+        This function is decorated with `@cache` for performance optimization.
+        Repeated calls with the same input will return cached results.
     """
 
     def parse(file_id: str) -> str:

@@ -147,8 +147,9 @@ class Sheets(DriveBase):
         """Executes a batch update spreadsheet request.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            body (BatchUpdateSpreadsheetRequest): The request body.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            body: The batch update request body.
             **kwargs: Additional arguments to pass to self.sheets.batchUpdate.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -209,12 +210,32 @@ class Sheets(DriveBase):
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("header"))
     def header(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        """Get the header row (first row) of a sheet.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet. Defaults to 'Sheet1'.
+
+        Returns:
+            list: The header row values.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         range_name = str(SheetSlice[sheet_name, 1, ...])
         return self.values(spreadsheet_id=spreadsheet_id, range_name=range_name).get("values", [[]])[0]
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("shape"))
     def shape(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME):
+        """Get the dimensions (rows, columns) of a sheet.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet. Defaults to 'Sheet1'.
+
+        Returns:
+            tuple[int, int]: A tuple of (row_count, column_count).
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         properties = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)["properties"]
         shape = (
@@ -225,6 +246,16 @@ class Sheets(DriveBase):
 
     @cachedmethod(operator.attrgetter("_cache"), key=named_methodkey("id"))
     def id(self, spreadsheet_id: str, sheet_name: str = DEFAULT_SHEET_NAME) -> int:
+        """Get the sheet ID (integer) for a given sheet name.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet. Defaults to 'Sheet1'.
+
+        Returns:
+            int: The sheet's numeric ID.
+        """
         sheet = self.get(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
         return sheet["properties"]["sheetId"]
 
@@ -243,6 +274,17 @@ class Sheets(DriveBase):
         include_grid_data: bool = False,
         range_names: SheetsRange | list[SheetsRange] | None = None,
     ) -> Spreadsheet:
+        """Get spreadsheet metadata and optionally grid data.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            include_grid_data: Whether to include cell data in the response.
+            range_names: Optional range(s) to limit the data returned.
+
+        Returns:
+            Spreadsheet: The spreadsheet resource object.
+        """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
         range_names = range_names if range_names is not None else []
@@ -313,9 +355,10 @@ class Sheets(DriveBase):
         Either the name or the ID of the sheet must be provided.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to check.
-            name (str, optional): The name of the sheet to check. Defaults to None.
-            sheet_id (int, optional): The ID of the sheet to check. Defaults to None.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to check. Defaults to None.
+            sheet_id: The ID of the sheet to check. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -336,9 +379,12 @@ class Sheets(DriveBase):
         """Get a sheet from a spreadsheet. Either the name or the ID of the sheet must be provided.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to get.
-            name (str, optional): The name of the sheet to get. Defaults to None.
-            sheet_id (int, optional): The ID of the sheet to get. Defaults to None.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to get. Defaults to None.
+            sheet_id: The ID of the sheet to get. Defaults to None.
+            include_grid_data: Whether to include cell data in the response.
+            range_names: Optional range(s) to limit the data returned.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         spreadsheet = self.get_spreadsheet(
@@ -364,10 +410,11 @@ class Sheets(DriveBase):
         """Rename a sheet in a spreadsheet.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet containing the sheet to rename.
-            new_sheet_name (str): The new name for the sheet.
-            old_sheet_name (str, optional): The current name of the sheet to rename. Defaults to None.
-            sheet_id (int, optional): The ID of the sheet to rename. Defaults to None.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            new_sheet_name: The new name for the sheet.
+            old_sheet_name: The current name of the sheet to rename. Defaults to None.
+            sheet_id: The ID of the sheet to rename. Defaults to None.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name=old_sheet_name, sheet_id=sheet_id)
@@ -396,12 +443,13 @@ class Sheets(DriveBase):
         """Add one or more sheets to a spreadsheet.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet to add sheets to.
-            names (str | list[str]): The name(s) of the sheet(s) to add.
-            row_count (int, optional): The number of rows in the new sheet(s). Defaults to DEFAULT_SHEET_SHAPE[0].
-            col_count (int, optional): The number of columns in the new sheet(s). Defaults to DEFAULT_SHEET_SHAPE[1].
-            index (int, optional): The index at which to insert the sheet(s). Defaults to None.
-            ignore_existing (bool, optional): Whether to ignore sheets that already exist. Defaults to True.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_names: The name(s) of the sheet(s) to add.
+            row_count: The number of rows in the new sheet(s). Defaults to 1000.
+            col_count: The number of columns in the new sheet(s). Defaults to 26.
+            index: The index at which to insert the sheet(s). Defaults to None.
+            ignore_existing: Whether to ignore sheets that already exist. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -415,8 +463,13 @@ class Sheets(DriveBase):
             return
 
         def make_body(name: str):
+            # Strip quotes from sheet names for API requests.
+            # Sheet names are quoted for A1 notation parsing ('Sheet Name'!A1:B2),
+            # but the actual sheet title should not include quotes.
+            title = name.strip("'") if name.startswith("'") and name.endswith("'") else name
+
             body: SheetProperties = {
-                "title": name,
+                "title": title,
                 "gridProperties": {
                     "rowCount": row_count,
                     "columnCount": col_count,
@@ -453,9 +506,10 @@ class Sheets(DriveBase):
         """Deletes a sheet from a spreadsheet.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet to delete the sheet from.
-            name (str, optional): The name of the sheet to delete. Defaults to None.
-            sheet_id (int, optional): The ID of the sheet to delete. Defaults to None.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_names: The name(s) of the sheet(s) to delete.
+            ignore_not_existing: Whether to ignore sheets that don't exist. Defaults to True.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -507,9 +561,11 @@ class Sheets(DriveBase):
         """Get values from a spreadsheet within a range.
 
         Args:
-            spreadsheet_id (str): The spreadsheet ID.
-            range_name (SheetsRange, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
-            value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to get values from. Defaults to 'Sheet1'.
+            value_render_option: The value render option. Defaults to unformatted.
+            **kwargs: Additional arguments to pass to the API.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
@@ -533,9 +589,11 @@ class Sheets(DriveBase):
         """Get a single value from a spreadsheet within a range.
 
         Args:
-            spreadsheet_id (str): The spreadsheet ID.
-            range_name (SheetsRange, optional): The range to get values from. Defaults to DEFAULT_SHEET_NAME.
-            value_render_option (ValueRenderOption, optional): The value render option. Defaults to ValueRenderOption.unformatted.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to get values from. Defaults to 'Sheet1'.
+            value_render_option: The value render option. Defaults to unformatted.
+            **kwargs: Additional arguments to pass to the API.
         """
         return self.values(spreadsheet_id, range_name, value_render_option, **kwargs).get("values", [[]])[0][0]
 
@@ -928,7 +986,7 @@ class Sheets(DriveBase):
         values: SheetsValues,
         value_input_option: ValueInputOption = ValueInputOption.user_entered,
         align_columns: bool = True,
-        ensure_shape: bool = True,
+        _ensure_shape: bool = True,
         chunk_size_bytes: int | None = DEFAULT_CHUNK_SIZE_BYTES,
         update: bool = True,
     ) -> UpdateValuesResponse | None:
@@ -982,7 +1040,7 @@ class Sheets(DriveBase):
         current_chunk: list[list[Any]] = []
         current_size = 0
 
-        def chunk_size_pred(start_row, i):
+        def chunk_size_pred(_start_row, i):
             nonlocal current_size, current_chunk
 
             current_size += self._get_row_size(processed_values[i])
@@ -1031,14 +1089,15 @@ class Sheets(DriveBase):
         Large updates are automatically chunked to avoid API timeouts.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            range_name (SheetsRange): The range to update.
-            values (SheetsValues): The values to update.
-            value_input_option (ValueInputOption, optional): How the input data should be interpreted.
-            align_columns (bool, optional): Whether to align the columns with the keys of the first row.
-            ensure_shape (bool, optional): Whether to ensure the sheet has enough rows/columns.
-            chunk_size_bytes (int, optional): Maximum size in bytes for each chunk. If None, no chunking is done.
-            keep_values (bool, optional): Whether to keep the current sheets' values and dynamically update in-place.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to update.
+            values: The values to update.
+            value_input_option: How the input data should be interpreted.
+            align_columns: Whether to align the columns with the keys of the first row.
+            ensure_shape: Whether to ensure the sheet has enough rows/columns.
+            chunk_size_bytes: Maximum size in bytes for each chunk. If None, no chunking is done.
+            keep_values: Whether to keep the current sheets' values and dynamically update in-place.
 
         Returns:
             UpdateValuesResponse | None: Response from the update, or None if no updates made
@@ -1055,7 +1114,7 @@ class Sheets(DriveBase):
             values=values,
             value_input_option=value_input_option,
             align_columns=align_columns,
-            ensure_shape=ensure_shape,
+            _ensure_shape=ensure_shape,
             chunk_size_bytes=chunk_size_bytes,
             update=keep_values,
         )
@@ -1128,7 +1187,7 @@ class Sheets(DriveBase):
                     values=value_range["values"],
                     value_input_option=value_input_option,
                     align_columns=align_columns,
-                    ensure_shape=ensure_shape,
+                    _ensure_shape=ensure_shape,
                     chunk_size_bytes=chunk_size_bytes,
                     update=update,
                 )
@@ -1166,14 +1225,15 @@ class Sheets(DriveBase):
         -   If the time between the first update and the last update is greater than `THROTTLE_TIME`.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            data (dict[SheetsRange, SheetsValues]): The data to update.
-            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
-            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
-            batch_size (int | None, optional): The number of updates to batch together. If None, all updates will be batched together. Defaults to None.
-            ensure_shape (bool, optional): Whether to ensure the sheet has enough rows/columns. Defaults to False.
-            chunk_size_bytes (int, optional): Maximum size in bytes for each chunk. If None, no chunking is done. Defaults to None.
-            keep_values (bool, optional): Whether to keep the current sheets' values and dynamically update in-place. Defaults to True.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            data: The data to update as a dict mapping ranges to values.
+            value_input_option: How the input data should be interpreted.
+            align_columns: Whether to align the columns with the keys of the first row.
+            batch_size: The number of updates to batch together. If None, all updates are batched.
+            ensure_shape: Whether to ensure the sheet has enough rows/columns.
+            chunk_size_bytes: Maximum size in bytes for each chunk. If None, no chunking is done.
+            keep_values: Whether to keep the current sheets' values and update in-place.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -1248,12 +1308,13 @@ class Sheets(DriveBase):
         number of existing rows. See: https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            range_name (SheetsRange): The range to update.
-            values (list[list[Any]]): The values to append.
-            insert_data_option (InsertDataOption, optional): How the input data should be inserted. Defaults to InsertDataOption.overwrite.
-            value_input_option (ValueInputOption, optional): How the input data should be interpreted. Defaults to ValueInputOption.user_entered.
-            align_columns (bool, optional): Whether to align the columns of the spreadsheet with the keys of the first row of the values. Defaults to True.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to append to.
+            values: The values to append.
+            insert_data_option: How the input data should be inserted.
+            value_input_option: How the input data should be interpreted.
+            align_columns: Whether to align the columns with the keys of the first row.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
@@ -1327,8 +1388,9 @@ class Sheets(DriveBase):
         """Clears a range of values in a spreadsheet.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            range_name (SheetsRange): The range to clear.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to clear.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(range_name)
@@ -1347,9 +1409,10 @@ class Sheets(DriveBase):
         """Resizes a sheet to the given number of rows and columns.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (str): The name of the sheet to resize.
-            rows (int, optional): The number of rows to resize to. Defaults to DEFAULT_SHEET_SHAPE[0].
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to resize.
+            rows: The number of rows to resize to.
             cols (int, optional): The number of columns to resize to. Defaults to DEFAULT_SHEET_SHAPE[1].
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
@@ -1386,8 +1449,9 @@ class Sheets(DriveBase):
         """Clears all formatting from a sheet.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (str): The name of the sheet to clear formatting from.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to clear formatting from.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
@@ -1426,10 +1490,11 @@ class Sheets(DriveBase):
         If `preserve_header` is True, the first row of the sheet will be *mostly* preserved.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            sheet_name (str): The name of the sheet to reset.
-            resize (bool, optional): Whether to resize the sheet back to its default column and row counts. Defaults to True.
-            preserve_header (bool, optional): Whether to preserve the first row of the sheet. Defaults to False.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to reset.
+            resize: Whether to resize the sheet back to its default column and row counts.
+            preserve_header: Whether to preserve the first row of the sheet.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_slice = to_sheet_slice(sheet_name)
@@ -1642,10 +1707,27 @@ class Sheets(DriveBase):
         See the formatting API for more details: https://developers.google.com/sheets/api/guides/formats
 
         Args:
-            spreadsheet_id (str): The spreadsheet to update.
-            range_names (list[SheetsRange] | SheetsRange): The ranges to update.
-            ...
-            sheets_format (SheetsFormat, optional): A SheetsFormat object containing the formatting to apply. Defaults to None.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_names: The range(s) to format.
+            update: Whether to update existing formatting or replace it.
+            bold: Whether to make text bold.
+            italic: Whether to make text italic.
+            underline: Whether to underline text.
+            strikethrough: Whether to strikethrough text.
+            font_size: Font size in points.
+            font_family: Font family name.
+            text_color: Text color (Color dict or hex string).
+            background_color: Background color (Color dict or hex string).
+            padding: Cell padding.
+            horizontal_alignment: Horizontal alignment.
+            vertical_alignment: Vertical alignment.
+            wrap_strategy: Text wrap strategy.
+            text_direction: Text direction.
+            hyperlink_display_type: How to display hyperlinks.
+            number_format: Number format.
+            cell_format: Complete CellFormat object (overrides individual settings).
+            sheets_format: Complete SheetsFormat object (takes precedence over all other args).
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
@@ -1831,8 +1913,10 @@ class Sheets(DriveBase):
         See "CellFormat" in the Sheets API for more details.
 
         Args:
-            spreadsheet_id (str): The spreadsheet to get.
-            range_name (str): The range to get formatting from."""
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            range_name: The range to get formatting from.
+        """
         sheet_slice = to_sheet_slice(range_name)
         response = self.get(
             spreadsheet_id=spreadsheet_id,
@@ -2055,8 +2139,9 @@ class Sheets(DriveBase):
         """Resizes the dimensions of a sheet.
 
         Args:
-            spreadsheet_id: The spreadsheet to update
-            sheet_name: The name of the sheet to resize
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: The name of the sheet to resize.
             sizes: The sizes to resize to:
                 - If None, auto-resize all columns/rows
                 - If int, set all columns/rows to that size
@@ -2092,10 +2177,11 @@ class Sheets(DriveBase):
         """Freezes rows and/or columns in a sheet.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet
-            sheet_name (str, optional): Name of the sheet to freeze. Defaults to DEFAULT_SHEET_NAME.
-            rows (int, optional): Number of rows to freeze from top. Defaults to 0.
-            columns (int, optional): Number of columns to freeze from left. Defaults to 0.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: Name of the sheet to freeze. Defaults to 'Sheet1'.
+            rows: Number of rows to freeze from top. Defaults to 0.
+            columns: Number of columns to freeze from left. Defaults to 0.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
         sheet_id = self.id(spreadsheet_id, sheet_name)
@@ -2131,9 +2217,10 @@ class Sheets(DriveBase):
         """Formats the header row of a sheet by freezing and bolding it, with optional column auto-resizing.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet to format
-            sheet_name (str, optional): Name of the sheet to format. Defaults to DEFAULT_SHEET_NAME.
-            auto_resize (bool, optional): Whether to auto-resize columns. Defaults to True.
+            spreadsheet_id: Spreadsheet ID or URL. Accepts direct IDs, Google Sheets URLs,
+                or API response dicts (auto-parsed via `parse_file_id()`).
+            sheet_name: Name of the sheet to format. Defaults to 'Sheet1'.
+            auto_resize: Whether to auto-resize columns. Defaults to False.
         """
         spreadsheet_id = parse_file_id(spreadsheet_id)
 
